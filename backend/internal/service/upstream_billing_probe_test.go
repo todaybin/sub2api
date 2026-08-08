@@ -126,6 +126,10 @@ func (r *upstreamBillingProbeAccountRepo) UpdateUpstreamBillingProbeSnapshot(
 		account.Extra = make(map[string]any)
 	}
 	account.Extra[UpstreamBillingProbeExtraKey] = snapshot
+	if snapshot.AutoDisableZeroBalance && account.Schedulable && upstreamBillingProbeEnabled(account) {
+		account.Schedulable = false
+		account.Extra[UpstreamBillingBalanceAutoDisabledAtExtraKey] = snapshot.LastAttemptAt.UTC().Format(time.RFC3339Nano)
+	}
 	if snapshot.Status == UpstreamBillingProbeStatusOK &&
 		rateMultiplier != nil &&
 		upstreamBillingRateSyncEnabled(account) {
@@ -180,6 +184,16 @@ func (u *upstreamBillingProbeHTTPStub) Do(req *http.Request, proxyURL string, ac
 			"object":"sub2api.key_billing",
 			"schema_version":1,
 			"billing_scope":"token",
+			"billing_mode":"balance",
+			"balance":12.5,
+			"usage":{
+				"scope":"api_key",
+				"period":"current_billing_period",
+				"period_start":"2026-07-01T00:00:00Z",
+				"period_end":"2026-07-13T01:00:00Z",
+				"requests":42,
+				"total_tokens":12345
+			},
 			"group_rate_multiplier":0.8,
 			"resolved_rate_multiplier":0.8,
 			"peak_rate_enabled":false,
@@ -234,6 +248,7 @@ func TestUpstreamBillingProbeSettingsDefaultsAndValidation(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, settings.Enabled)
 	require.Equal(t, 30, settings.IntervalMinutes)
+	require.False(t, settings.AutoDisableZeroBalance)
 
 	err = settingsService.SetUpstreamBillingProbeSettings(context.Background(), &UpstreamBillingProbeSettings{
 		Enabled:         false,
@@ -243,20 +258,23 @@ func TestUpstreamBillingProbeSettingsDefaultsAndValidation(t *testing.T) {
 	require.Contains(t, err.Error(), "interval_minutes must be between 5 and 1440")
 
 	err = settingsService.SetUpstreamBillingProbeSettings(context.Background(), &UpstreamBillingProbeSettings{
-		Enabled:         false,
-		IntervalMinutes: 60,
+		Enabled:                false,
+		IntervalMinutes:        60,
+		AutoDisableZeroBalance: true,
 	})
 	require.NoError(t, err)
 	settings, err = settingsService.GetUpstreamBillingProbeSettings(context.Background())
 	require.NoError(t, err)
 	require.False(t, settings.Enabled)
 	require.Equal(t, 60, settings.IntervalMinutes)
+	require.True(t, settings.AutoDisableZeroBalance)
 
 	repo.values[SettingKeyUpstreamBillingProbeSettings] = `{"interval_minutes":45}`
 	settings, err = settingsService.GetUpstreamBillingProbeSettings(context.Background())
 	require.NoError(t, err)
 	require.True(t, settings.Enabled)
 	require.Equal(t, 45, settings.IntervalMinutes)
+	require.False(t, settings.AutoDisableZeroBalance)
 	repo.values[SettingKeyUpstreamBillingProbeSettings] = `{"enabled":false}`
 	settings, err = settingsService.GetUpstreamBillingProbeSettings(context.Background())
 	require.NoError(t, err)
@@ -295,6 +313,16 @@ func TestUpstreamBillingProbeSuccessPersistsSanitizedSnapshot(t *testing.T) {
 			"object":"sub2api.key_billing",
 			"schema_version":1,
 			"billing_scope":"token",
+			"billing_mode":"balance",
+			"balance":12.5,
+			"usage":{
+				"scope":"api_key",
+				"period":"current_billing_period",
+				"period_start":"2026-07-01T00:00:00Z",
+				"period_end":"2026-07-13T01:00:00Z",
+				"requests":42,
+				"total_tokens":12345
+			},
 			"group_rate_multiplier":0.8,
 			"user_rate_multiplier":0.6,
 			"resolved_rate_multiplier":0.6,
@@ -317,6 +345,10 @@ func TestUpstreamBillingProbeSuccessPersistsSanitizedSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, UpstreamBillingProbeStatusOK, snapshot.Status)
 	require.Equal(t, 0.9, snapshot.Data["effective_rate_multiplier"])
+	require.Equal(t, "balance", snapshot.Data["billing_mode"])
+	require.Equal(t, 12.5, snapshot.Data["balance"])
+	require.Equal(t, int64(42), snapshot.Data["usage"].(map[string]any)["requests"])
+	require.Equal(t, int64(12345), snapshot.Data["usage"].(map[string]any)["total_tokens"])
 	require.NotContains(t, snapshot.Data, "unexpected_secret")
 	require.NotNil(t, snapshot.ReceivedAt)
 	require.Equal(t, fixedNow, *snapshot.ReceivedAt)
@@ -338,6 +370,67 @@ func TestUpstreamBillingProbeSuccessPersistsSanitizedSnapshot(t *testing.T) {
 	persisted := decodeUpstreamBillingProbeSnapshot(account.Extra)
 	require.NotNil(t, persisted)
 	require.Equal(t, snapshot.Status, persisted.Status)
+}
+
+func TestUpstreamBillingProbeAutoDisablesOnlyScheduledBalanceAccounts(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		scheduled   bool
+		autoDisable bool
+		billingMode string
+		wantEnabled bool
+	}{
+		{name: "scheduled balance with switch", scheduled: true, autoDisable: true, billingMode: "balance", wantEnabled: false},
+		{name: "scheduled balance without switch", scheduled: true, autoDisable: false, billingMode: "balance", wantEnabled: true},
+		{name: "manual balance probe", scheduled: false, autoDisable: true, billingMode: "balance", wantEnabled: true},
+		{name: "subscription account", scheduled: true, autoDisable: true, billingMode: "subscription", wantEnabled: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			account := &Account{
+				ID:          71,
+				Platform:    PlatformOpenAI,
+				Type:        AccountTypeAPIKey,
+				Status:      StatusActive,
+				Schedulable: true,
+				Concurrency: 1,
+				Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://upstream.example"},
+				Extra:       map[string]any{UpstreamBillingProbeEnabledExtraKey: true},
+			}
+			repo := &upstreamBillingProbeAccountRepo{accounts: map[int64]*Account{account.ID: account}}
+			upstream := &httpUpstreamRecorder{resp: &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{
+					"object":"sub2api.key_billing",
+					"schema_version":1,
+					"billing_scope":"token",
+					"billing_mode":%q,
+					"balance":0,
+					"group_rate_multiplier":1,
+					"resolved_rate_multiplier":1,
+					"peak_rate_enabled":false,
+					"effective_rate_multiplier":1,
+					"observed_at":"2026-07-13T01:00:00Z"
+				}`, tt.billingMode))),
+			}}
+			settingsRepo := &upstreamBillingProbeSettingRepo{values: map[string]string{
+				SettingKeyUpstreamBillingProbeSettings: fmt.Sprintf(`{"enabled":true,"interval_minutes":30,"auto_disable_zero_balance":%t}`, tt.autoDisable),
+			}}
+			svc := newUpstreamBillingProbeTestService(repo, upstream, settingsRepo)
+			svc.now = func() time.Time { return time.Date(2026, time.July, 13, 2, 0, 0, 0, time.UTC) }
+
+			var err error
+			if tt.scheduled {
+				_, err = svc.probeScheduledAccount(context.Background(), account.ID, 30, tt.autoDisable)
+			} else {
+				_, err = svc.ProbeAccount(context.Background(), account.ID)
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.wantEnabled, account.Schedulable)
+			_, marked := account.Extra[UpstreamBillingBalanceAutoDisabledAtExtraKey]
+			require.Equal(t, !tt.wantEnabled, marked)
+		})
+	}
 }
 
 func TestUpstreamBillingProbeSyncsResolvedRateForAllAPIKeyPlatforms(t *testing.T) {
@@ -1184,7 +1277,7 @@ func TestUpstreamBillingProbeManualAndScheduledRequestsShareOneNetworkProbe(t *t
 
 	errs := make(chan error, 2)
 	go func() {
-		_, err := svc.probeScheduledAccount(context.Background(), account.ID, 30)
+		_, err := svc.probeScheduledAccount(context.Background(), account.ID, 30, false)
 		errs <- err
 	}()
 	select {
@@ -1224,7 +1317,7 @@ func TestUpstreamBillingProbeScheduledRechecksAfterWaitingForSlot(t *testing.T) 
 	}
 	result := make(chan error, 1)
 	go func() {
-		_, err := svc.probeScheduledAccount(context.Background(), account.ID, 30)
+		_, err := svc.probeScheduledAccount(context.Background(), account.ID, 30, false)
 		result <- err
 	}()
 	time.Sleep(20 * time.Millisecond)

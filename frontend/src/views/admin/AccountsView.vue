@@ -368,6 +368,7 @@
             <UpstreamBillingRateCell
               :account="row"
               :global-probe-enabled="upstreamBillingProbeGloballyEnabled"
+              :global-auto-disable-enabled="upstreamBillingAutoDisableEnabled"
               :now="upstreamBillingNow"
               :probing="probingUpstreamBilling.has(row.id)"
               @probe="handleProbeUpstreamBilling(row)"
@@ -607,6 +608,7 @@ const menu = reactive<{show:boolean, acc:Account|null, pos:{top:number, left:num
 const exportingData = ref(false)
 const probingUpstreamBilling = reactive(new Set<number>())
 const upstreamBillingProbeGloballyEnabled = ref<boolean | undefined>(undefined)
+const upstreamBillingAutoDisableEnabled = ref<boolean | undefined>(undefined)
 const upstreamBillingNow = ref(Date.now())
 let lastUpstreamBillingSortRefreshMinute = -1
 useIntervalFn(() => { upstreamBillingNow.value = Date.now() }, 60_000)
@@ -1223,6 +1225,7 @@ const loadUpstreamBillingProbeGlobalState = async () => {
   try {
     const settings = await adminAPI.accounts.getUpstreamBillingProbeSettings()
     upstreamBillingProbeGloballyEnabled.value = settings.enabled
+    upstreamBillingAutoDisableEnabled.value = settings.auto_disable_zero_balance
   } catch (error) {
     console.error('Failed to load upstream billing probe settings:', error)
   }

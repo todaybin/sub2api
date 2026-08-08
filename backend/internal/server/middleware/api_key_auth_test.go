@@ -1279,7 +1279,7 @@ func TestAPIKeyAuthBillingInfoSkipsBillingAndSideEffects(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Zero(t, subscriptionCalls)
+	require.Equal(t, 1, subscriptionCalls)
 	require.Zero(t, touchCalls)
 }
 

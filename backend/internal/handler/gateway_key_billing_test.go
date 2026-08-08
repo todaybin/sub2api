@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
@@ -23,6 +24,22 @@ type keyBillingUserGroupRateRepo struct {
 	gotUserID   int64
 	gotGroupID  int64
 	lookupCalls int
+}
+
+type keyBillingUsageRepo struct {
+	service.UsageLogRepository
+	stats     *usagestats.UsageStats
+	apiKeyID  int64
+	startTime time.Time
+	endTime   time.Time
+	err       error
+}
+
+func (r *keyBillingUsageRepo) GetAPIKeyStatsAggregated(_ context.Context, apiKeyID int64, startTime, endTime time.Time) (*usagestats.UsageStats, error) {
+	r.apiKeyID = apiKeyID
+	r.startTime = startTime
+	r.endTime = endTime
+	return r.stats, r.err
 }
 
 func (r *keyBillingUserGroupRateRepo) GetByUserAndGroup(_ context.Context, userID, groupID int64) (*float64, error) {
@@ -108,6 +125,80 @@ func TestGatewayHandlerKeyBillingInfoUsesGroupRate(t *testing.T) {
 	require.NotContains(t, fields, "timezone")
 	require.NotContains(t, w.Body.String(), apiKey.Key)
 	require.NotContains(t, w.Body.String(), apiKey.Group.Name)
+}
+
+func TestGatewayHandlerKeyBillingInfoIncludesBalanceSubscriptionAndUsage(t *testing.T) {
+	groupID := int64(7)
+	now := timezone.Now()
+
+	t.Run("balance billing", func(t *testing.T) {
+		usageRepo := &keyBillingUsageRepo{stats: &usagestats.UsageStats{TotalRequests: 12, TotalTokens: 3456}}
+		h := newKeyBillingHandler(nil)
+		h.usageService = service.NewUsageService(usageRepo, nil, nil, nil)
+		apiKey := &service.APIKey{
+			ID:      91,
+			UserID:  11,
+			GroupID: &groupID,
+			User:    &service.User{ID: 11, Balance: 18.75},
+			Group: &service.Group{
+				ID:               groupID,
+				RateMultiplier:   0.75,
+				SubscriptionType: service.SubscriptionTypeStandard,
+			},
+		}
+		c, w := newKeyBillingContext(apiKey)
+
+		h.KeyBillingInfo(c)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		var got keyBillingInfoResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+		require.Equal(t, "balance", got.BillingMode)
+		require.NotNil(t, got.Balance)
+		require.Equal(t, 18.75, *got.Balance)
+		require.Nil(t, got.SubscriptionID)
+		require.NotNil(t, got.Usage)
+		require.Equal(t, int64(12), got.Usage.Requests)
+		require.Equal(t, int64(3456), got.Usage.TotalTokens)
+		require.Equal(t, apiKey.ID, usageRepo.apiKeyID)
+		localStart := usageRepo.startTime.In(timezone.Location())
+		require.Equal(t, 1, localStart.Day())
+		require.Equal(t, 0, localStart.Hour())
+		require.WithinDuration(t, now, usageRepo.endTime, time.Second)
+	})
+
+	t.Run("subscription billing", func(t *testing.T) {
+		usageRepo := &keyBillingUsageRepo{stats: &usagestats.UsageStats{TotalRequests: 8, TotalTokens: 2048}}
+		h := newKeyBillingHandler(nil)
+		h.usageService = service.NewUsageService(usageRepo, nil, nil, nil)
+		apiKey := &service.APIKey{
+			ID:      92,
+			UserID:  11,
+			GroupID: &groupID,
+			User:    &service.User{ID: 11, Balance: 0},
+			Group: &service.Group{
+				ID:               groupID,
+				RateMultiplier:   1,
+				SubscriptionType: service.SubscriptionTypeSubscription,
+			},
+		}
+		startsAt := time.Date(2026, time.July, 1, 8, 0, 0, 0, time.UTC)
+		subscription := &service.UserSubscription{ID: 123, UserID: 11, GroupID: groupID, StartsAt: startsAt}
+		c, w := newKeyBillingContext(apiKey)
+		c.Set(string(middleware2.ContextKeySubscription), subscription)
+
+		h.KeyBillingInfo(c)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		var got keyBillingInfoResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+		require.Equal(t, "subscription", got.BillingMode)
+		require.Nil(t, got.Balance)
+		require.NotNil(t, got.SubscriptionID)
+		require.Equal(t, int64(123), *got.SubscriptionID)
+		require.NotNil(t, got.Usage)
+		require.Equal(t, startsAt, usageRepo.startTime)
+	})
 }
 
 func TestGatewayHandlerKeyBillingInfoUsesUserOverride(t *testing.T) {

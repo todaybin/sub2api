@@ -1,17 +1,52 @@
 <template>
-  <div v-if="eligible" class="flex h-6 min-w-[7rem] items-center gap-1">
+  <div v-if="eligible" class="flex min-h-10 min-w-[11rem] items-center gap-1">
     <HelpTooltip class="-ml-1" width-class="w-max max-w-[calc(100vw-2rem)]" data-testid="upstream-billing-details">
       <template #trigger>
-        <span
-          class="cursor-help border-b border-dotted border-gray-300 text-sm font-medium dark:border-dark-600"
-          :class="hasEffectiveRate ? 'font-mono text-gray-800 dark:text-gray-200' : statusClass || 'text-gray-400 dark:text-gray-500'"
-          data-testid="upstream-billing-rate"
-        >
-          {{ primaryValue }}
-        </span>
+        <div class="cursor-help border-b border-dotted border-gray-300 py-0.5 dark:border-dark-600">
+          <div
+            v-if="billingIdentity"
+            class="whitespace-nowrap text-xs font-medium text-gray-800 dark:text-gray-200"
+            data-testid="upstream-billing-identity"
+          >
+            {{ billingIdentity }}
+          </div>
+          <div class="flex items-center gap-1.5 whitespace-nowrap">
+            <span
+              class="text-sm font-medium"
+              :class="hasEffectiveRate ? 'font-mono text-gray-800 dark:text-gray-200' : statusClass || 'text-gray-400 dark:text-gray-500'"
+              data-testid="upstream-billing-rate"
+            >
+              {{ primaryValue }}
+            </span>
+            <span v-if="usageSummary" class="text-[10px] text-gray-500 dark:text-gray-400" data-testid="upstream-billing-usage">
+              {{ usageSummary }}
+            </span>
+          </div>
+        </div>
       </template>
       <div class="space-y-1">
         <template v-if="hasEffectiveRate && data">
+          <p v-if="validBalance != null">
+            {{ t('admin.accounts.upstreamBilling.balance', { value: formatCurrency(validBalance) }) }}
+          </p>
+          <p v-else-if="data.billing_mode === 'balance'">
+            {{ t('admin.accounts.upstreamBilling.balanceUnknown') }}
+          </p>
+          <p v-if="validSubscriptionID != null">
+            {{ t('admin.accounts.upstreamBilling.subscription', { id: validSubscriptionID }) }}
+          </p>
+          <p v-if="validUsage">
+            {{ t('admin.accounts.upstreamBilling.upstreamUsage', {
+              requests: formatCompactNumber(validUsage.requests, { allowBillions: false }),
+              tokens: formatCompactNumber(validUsage.total_tokens)
+            }) }}
+          </p>
+          <p v-if="validUsage">
+            {{ t('admin.accounts.upstreamBilling.usagePeriod', {
+              start: formatDate(validUsage.period_start),
+              end: formatDate(validUsage.period_end)
+            }) }}
+          </p>
           <p>{{ t('admin.accounts.upstreamBilling.groupRate', { value: data.group_rate_multiplier }) }}</p>
           <p v-if="data.user_rate_multiplier != null">
             {{ t('admin.accounts.upstreamBilling.userRate', { value: data.user_rate_multiplier }) }}
@@ -63,6 +98,15 @@
           {{ t('admin.accounts.upstreamBilling.globalProbeState') }}
           <span class="text-red-400">{{ t('admin.accounts.upstreamBilling.disabled') }}</span>
         </p>
+        <p data-testid="upstream-billing-auto-disable-state">
+          {{ t('admin.accounts.upstreamBilling.autoDisableState') }}
+          <span :class="globalAutoDisableEnabled ? 'text-emerald-400' : 'text-red-400'">
+            {{ globalAutoDisableEnabled ? t('admin.accounts.upstreamBilling.enabled') : t('admin.accounts.upstreamBilling.disabled') }}
+          </span>
+        </p>
+        <p v-if="autoDisabledAt" class="text-amber-300" data-testid="upstream-billing-auto-disabled-at">
+          {{ t('admin.accounts.upstreamBilling.autoDisabledAt', { value: formatDate(autoDisabledAt) }) }}
+        </p>
       </div>
     </HelpTooltip>
     <span v-if="hasEffectiveRate && statusLabel" :class="statusClass" class="whitespace-nowrap text-[10px] font-medium">
@@ -88,6 +132,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import Icon from '@/components/icons/Icon.vue'
+import { formatCompactNumber, formatCurrency } from '@/utils/format'
 import { formatMultiplier } from '@/utils/formatters'
 import type { Account, UpstreamBillingProbeSnapshot } from '@/types'
 
@@ -96,8 +141,10 @@ const props = withDefaults(defineProps<{
   now: number
   probing?: boolean
   globalProbeEnabled?: boolean
+  globalAutoDisableEnabled?: boolean
 }>(), {
-  globalProbeEnabled: true
+  globalProbeEnabled: true,
+  globalAutoDisableEnabled: false
 })
 
 defineEmits<{
@@ -110,6 +157,10 @@ const CLOCK_SKEW_TOLERANCE_MS = 5 * 60 * 1000
 const eligible = computed(() => props.account.type === 'apikey')
 const snapshot = computed<UpstreamBillingProbeSnapshot | undefined>(() => props.account.extra?.upstream_billing_probe)
 const data = computed(() => snapshot.value?.data)
+const autoDisabledAt = computed(() => {
+  const value = props.account.extra?.upstream_billing_balance_auto_disabled_at
+  return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : ''
+})
 const probeEnabled = computed(() => props.account.extra?.upstream_billing_probe_enabled === true)
 const nextProbeAt = computed(() => {
   const value = snapshot.value?.next_probe_at
@@ -209,6 +260,40 @@ const statusClass = computed(() => {
   return ''
 })
 const hasEffectiveRate = computed(() => effectiveRate.value !== '-')
+const billingDataUsable = computed(() => validTimestamps.value && !stale.value && ['ok', 'failed'].includes(snapshot.value?.status ?? ''))
+const validBalance = computed(() => {
+  if (!billingDataUsable.value || data.value?.billing_mode !== 'balance') return null
+  const value = data.value.balance
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+})
+const validSubscriptionID = computed(() => {
+  if (!billingDataUsable.value || data.value?.billing_mode !== 'subscription') return null
+  const value = data.value.subscription_id
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null
+})
+const validUsage = computed(() => {
+  if (!billingDataUsable.value) return null
+  const usage = data.value?.usage
+  if (!usage || usage.scope !== 'api_key' || usage.period !== 'current_billing_period') return null
+  if (!Number.isFinite(usage.requests) || usage.requests < 0 || !Number.isFinite(usage.total_tokens) || usage.total_tokens < 0) return null
+  if (!Number.isFinite(Date.parse(usage.period_start)) || !Number.isFinite(Date.parse(usage.period_end))) return null
+  return usage
+})
+const billingIdentity = computed(() => {
+  if (validBalance.value != null) {
+    return t('admin.accounts.upstreamBilling.balanceShort', { value: formatCurrency(validBalance.value) })
+  }
+  if (validSubscriptionID.value != null) {
+    return t('admin.accounts.upstreamBilling.subscriptionShort', { id: validSubscriptionID.value })
+  }
+  if (billingDataUsable.value && data.value?.billing_mode === 'balance') {
+    return t('admin.accounts.upstreamBilling.balanceUnknown')
+  }
+  return ''
+})
+const usageSummary = computed(() => validUsage.value
+  ? `${t('admin.accounts.upstreamBilling.requestsShort', { value: formatCompactNumber(validUsage.value.requests, { allowBillions: false }) })} · ${t('admin.accounts.upstreamBilling.tokensShort', { value: formatCompactNumber(validUsage.value.total_tokens) })}`
+  : '')
 const primaryValue = computed(() => hasEffectiveRate.value ? effectiveRate.value : statusLabel.value || '-')
 const formatDate = (value?: string) => value
   ? new Date(value).toLocaleString(undefined, {

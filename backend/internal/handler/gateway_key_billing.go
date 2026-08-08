@@ -14,20 +14,33 @@ import (
 const keyBillingInfoSchemaVersion = 1
 
 type keyBillingInfoResponse struct {
-	Object                  string    `json:"object"`
-	SchemaVersion           int       `json:"schema_version"`
-	BillingScope            string    `json:"billing_scope"`
-	GroupRateMultiplier     float64   `json:"group_rate_multiplier"`
-	UserRateMultiplier      *float64  `json:"user_rate_multiplier,omitempty"`
-	ResolvedRateMultiplier  float64   `json:"resolved_rate_multiplier"`
-	PeakRateEnabled         bool      `json:"peak_rate_enabled"`
-	PeakStart               *string   `json:"peak_start,omitempty"`
-	PeakEnd                 *string   `json:"peak_end,omitempty"`
-	PeakRateMultiplier      *float64  `json:"peak_rate_multiplier,omitempty"`
-	AppliedPeakMultiplier   *float64  `json:"applied_peak_multiplier,omitempty"`
-	EffectiveRateMultiplier float64   `json:"effective_rate_multiplier"`
-	Timezone                *string   `json:"timezone,omitempty"`
-	ObservedAt              time.Time `json:"observed_at"`
+	Object                  string                   `json:"object"`
+	SchemaVersion           int                      `json:"schema_version"`
+	BillingScope            string                   `json:"billing_scope"`
+	BillingMode             string                   `json:"billing_mode"`
+	Balance                 *float64                 `json:"balance,omitempty"`
+	SubscriptionID          *int64                   `json:"subscription_id,omitempty"`
+	Usage                   *keyBillingUsageResponse `json:"usage,omitempty"`
+	GroupRateMultiplier     float64                  `json:"group_rate_multiplier"`
+	UserRateMultiplier      *float64                 `json:"user_rate_multiplier,omitempty"`
+	ResolvedRateMultiplier  float64                  `json:"resolved_rate_multiplier"`
+	PeakRateEnabled         bool                     `json:"peak_rate_enabled"`
+	PeakStart               *string                  `json:"peak_start,omitempty"`
+	PeakEnd                 *string                  `json:"peak_end,omitempty"`
+	PeakRateMultiplier      *float64                 `json:"peak_rate_multiplier,omitempty"`
+	AppliedPeakMultiplier   *float64                 `json:"applied_peak_multiplier,omitempty"`
+	EffectiveRateMultiplier float64                  `json:"effective_rate_multiplier"`
+	Timezone                *string                  `json:"timezone,omitempty"`
+	ObservedAt              time.Time                `json:"observed_at"`
+}
+
+type keyBillingUsageResponse struct {
+	Scope       string    `json:"scope"`
+	Period      string    `json:"period"`
+	PeriodStart time.Time `json:"period_start"`
+	PeriodEnd   time.Time `json:"period_end"`
+	Requests    int64     `json:"requests"`
+	TotalTokens int64     `json:"total_tokens"`
 }
 
 // KeyBillingInfo returns the token billing multiplier effective for the authenticated API key.
@@ -57,8 +70,60 @@ func (h *GatewayHandler) KeyBillingInfo(c *gin.Context) {
 		return
 	}
 
+	now := timezone.Now()
+	result := buildKeyBillingInfo(apiKey, resolvedRate, now)
+	if err := h.populateKeyBillingAccountInfo(c, apiKey, &result, now); err != nil {
+		h.errorResponse(c, http.StatusInternalServerError, "api_error", "Billing information is unavailable")
+		return
+	}
+
 	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, buildKeyBillingInfo(apiKey, resolvedRate, timezone.Now()))
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *GatewayHandler) populateKeyBillingAccountInfo(c *gin.Context, apiKey *service.APIKey, result *keyBillingInfoResponse, now time.Time) error {
+	if apiKey == nil || apiKey.Group == nil || result == nil {
+		return nil
+	}
+
+	periodStart := now
+	if apiKey.Group.IsSubscriptionType() {
+		result.BillingMode = "subscription"
+		subscription, ok := middleware2.GetSubscriptionFromContext(c)
+		if !ok || subscription == nil {
+			return nil
+		}
+		result.SubscriptionID = &subscription.ID
+		periodStart = subscription.StartsAt
+	} else {
+		result.BillingMode = "balance"
+		if apiKey.User != nil {
+			balance := apiKey.User.Balance
+			result.Balance = &balance
+		}
+		localNow := now.In(timezone.Location())
+		periodStart = time.Date(localNow.Year(), localNow.Month(), 1, 0, 0, 0, 0, timezone.Location())
+	}
+
+	if h.usageService == nil || apiKey.ID <= 0 {
+		return nil
+	}
+	if periodStart.After(now) {
+		periodStart = now
+	}
+	stats, err := h.usageService.GetStatsByAPIKey(c.Request.Context(), apiKey.ID, periodStart, now)
+	if err != nil {
+		return err
+	}
+	result.Usage = &keyBillingUsageResponse{
+		Scope:       "api_key",
+		Period:      "current_billing_period",
+		PeriodStart: periodStart.UTC(),
+		PeriodEnd:   now.UTC(),
+		Requests:    stats.TotalRequests,
+		TotalTokens: stats.TotalTokens,
+	}
+	return nil
 }
 
 func (h *GatewayHandler) resolveKeyBillingRate(c *gin.Context, apiKey *service.APIKey) (float64, bool) {
@@ -89,6 +154,7 @@ func buildKeyBillingInfo(apiKey *service.APIKey, resolvedRate float64, now time.
 		Object:                  "sub2api.key_billing",
 		SchemaVersion:           keyBillingInfoSchemaVersion,
 		BillingScope:            "token",
+		BillingMode:             "balance",
 		GroupRateMultiplier:     groupRate,
 		UserRateMultiplier:      userRate,
 		ResolvedRateMultiplier:  resolvedRate,

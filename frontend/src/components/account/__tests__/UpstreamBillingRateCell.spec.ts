@@ -100,6 +100,75 @@ describe('UpstreamBillingRateCell', () => {
     )
   })
 
+  it('shows upstream balance, subscription id, usage, and the auto-disable reason', async () => {
+    const wrapper = mount(UpstreamBillingRateCell, {
+      attachTo: document.body,
+      props: {
+        account: makeAccount({
+          schedulable: false,
+          extra: {
+            upstream_billing_probe_enabled: true,
+            upstream_billing_balance_auto_disabled_at: '2026-07-13T00:10:00Z',
+            upstream_billing_probe: {
+              status: 'ok',
+              data: {
+                ...billingData,
+                billing_mode: 'balance',
+                balance: 12.5,
+                usage: {
+                  scope: 'api_key',
+                  period: 'current_billing_period',
+                  period_start: '2026-07-01T00:00:00Z',
+                  period_end: '2026-07-13T00:00:00Z',
+                  requests: 1234,
+                  total_tokens: 2_500_000
+                }
+              },
+              received_at: '2026-07-13T00:00:00Z',
+              fresh_until: '2026-07-14T00:00:00Z',
+              last_attempt_at: '2026-07-13T00:00:00Z',
+              next_probe_at: '2026-07-13T00:30:00Z'
+            }
+          }
+        }),
+        globalAutoDisableEnabled: true,
+        now: Date.now()
+      }
+    })
+
+    expect(wrapper.get('[data-testid="upstream-billing-identity"]').text()).toContain('12.50')
+    expect(wrapper.get('[data-testid="upstream-billing-usage"]').text()).toContain('1.2K')
+    expect(wrapper.get('[data-testid="upstream-billing-usage"]').text()).toContain('2.5M')
+
+    await wrapper.get('[data-testid="upstream-billing-details"]').trigger('mouseenter')
+    await flushPromises()
+    const tooltips = document.body.querySelectorAll('[role="tooltip"]')
+    const tooltip = tooltips[tooltips.length - 1] as HTMLElement
+    expect(tooltip.querySelector('[data-testid="upstream-billing-auto-disable-state"] span')?.className).toContain('text-emerald-400')
+    expect(tooltip.querySelector('[data-testid="upstream-billing-auto-disabled-at"]')).not.toBeNull()
+
+    await wrapper.setProps({
+      account: makeAccount({
+        extra: {
+          upstream_billing_probe: {
+            status: 'ok',
+            data: {
+              ...billingData,
+              billing_mode: 'subscription',
+              subscription_id: 987
+            },
+            received_at: '2026-07-13T00:00:00Z',
+            fresh_until: '2026-07-14T00:00:00Z',
+            last_attempt_at: '2026-07-13T00:00:00Z',
+            next_probe_at: '2026-07-13T00:30:00Z'
+          }
+        }
+      })
+    })
+    expect(wrapper.get('[data-testid="upstream-billing-identity"]').text()).toContain('987')
+    wrapper.unmount()
+  })
+
   it('uses retained failed data only while it is still fresh', async () => {
     const account = makeAccount({
       extra: {

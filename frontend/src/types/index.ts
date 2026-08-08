@@ -983,6 +983,10 @@ export interface UpstreamBillingData {
   object: 'sub2api.key_billing'
   schema_version: 1
   billing_scope: 'token'
+  billing_mode?: 'balance' | 'subscription'
+  balance?: number
+  subscription_id?: number
+  usage?: UpstreamBillingUsage
   group_rate_multiplier: number
   user_rate_multiplier?: number
   resolved_rate_multiplier: number
@@ -994,6 +998,15 @@ export interface UpstreamBillingData {
   effective_rate_multiplier: number
   timezone?: string
   observed_at: string
+}
+
+export interface UpstreamBillingUsage {
+  scope: 'api_key'
+  period: 'current_billing_period'
+  period_start: string
+  period_end: string
+  requests: number
+  total_tokens: number
 }
 
 export type UpstreamBillingProbeStatus = 'ok' | 'unsupported' | 'failed'
@@ -1016,6 +1029,7 @@ export interface UpstreamBillingProbeSnapshot {
 export interface UpstreamBillingProbeSettings {
   enabled: boolean
   interval_minutes: number
+  auto_disable_zero_balance?: boolean
 }
 
 export interface UpstreamBillingProbeResult {
@@ -1093,6 +1107,7 @@ export interface Account {
     antigravity_credits_overages?: Record<string, { activated_at: string; active_until: string }>
     upstream_billing_probe_enabled?: boolean
     upstream_billing_rate_sync_enabled?: boolean
+    upstream_billing_balance_auto_disabled_at?: string
     upstream_billing_probe?: UpstreamBillingProbeSnapshot
     codex_reset_credit_snapshot?: {
       available_count?: number

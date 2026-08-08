@@ -29,9 +29,10 @@ import (
 
 const (
 	// These values live in accounts.extra so PR2 does not require a schema migration.
-	UpstreamBillingProbeExtraKey           = "upstream_billing_probe"
-	UpstreamBillingProbeEnabledExtraKey    = "upstream_billing_probe_enabled"
-	UpstreamBillingRateSyncEnabledExtraKey = "upstream_billing_rate_sync_enabled"
+	UpstreamBillingProbeExtraKey                 = "upstream_billing_probe"
+	UpstreamBillingProbeEnabledExtraKey          = "upstream_billing_probe_enabled"
+	UpstreamBillingRateSyncEnabledExtraKey       = "upstream_billing_rate_sync_enabled"
+	UpstreamBillingBalanceAutoDisabledAtExtraKey = "upstream_billing_balance_auto_disabled_at"
 
 	upstreamBillingProbeDefaultIntervalMinutes = 30
 	upstreamBillingProbeMinIntervalMinutes     = 5
@@ -97,8 +98,9 @@ const (
 
 // UpstreamBillingProbeSettings controls the periodic probe runner.
 type UpstreamBillingProbeSettings struct {
-	Enabled         bool `json:"enabled"`
-	IntervalMinutes int  `json:"interval_minutes"`
+	Enabled                bool `json:"enabled"`
+	IntervalMinutes        int  `json:"interval_minutes"`
+	AutoDisableZeroBalance bool `json:"auto_disable_zero_balance"`
 }
 
 // UpstreamBillingProbeSnapshot is persisted in accounts.extra. Data is kept as
@@ -119,6 +121,9 @@ type UpstreamBillingProbeSnapshot struct {
 	// stored snapshot always answers "did this probe move the account rate, and
 	// to what" without a separate history table.
 	SyncedRateMultiplier *float64 `json:"synced_rate_multiplier,omitempty"`
+	// AutoDisableZeroBalance is an internal persistence instruction. It is not
+	// stored in accounts.extra or exposed by the admin API.
+	AutoDisableZeroBalance bool `json:"-"`
 }
 
 // UpstreamBillingProbeResult is returned by manual probe endpoints.
@@ -129,20 +134,33 @@ type UpstreamBillingProbeResult struct {
 }
 
 type upstreamBillingProbeResponse struct {
-	Object                  string   `json:"object"`
-	SchemaVersion           int      `json:"schema_version"`
-	BillingScope            string   `json:"billing_scope"`
-	GroupRateMultiplier     *float64 `json:"group_rate_multiplier"`
-	UserRateMultiplier      *float64 `json:"user_rate_multiplier"`
-	ResolvedRateMultiplier  *float64 `json:"resolved_rate_multiplier"`
-	PeakRateEnabled         *bool    `json:"peak_rate_enabled"`
-	PeakStart               *string  `json:"peak_start"`
-	PeakEnd                 *string  `json:"peak_end"`
-	PeakRateMultiplier      *float64 `json:"peak_rate_multiplier"`
-	AppliedPeakMultiplier   *float64 `json:"applied_peak_multiplier"`
-	EffectiveRateMultiplier *float64 `json:"effective_rate_multiplier"`
-	Timezone                *string  `json:"timezone"`
-	ObservedAt              string   `json:"observed_at"`
+	Object                  string                             `json:"object"`
+	SchemaVersion           int                                `json:"schema_version"`
+	BillingScope            string                             `json:"billing_scope"`
+	BillingMode             string                             `json:"billing_mode"`
+	Balance                 *float64                           `json:"balance"`
+	SubscriptionID          *int64                             `json:"subscription_id"`
+	Usage                   *upstreamBillingProbeUsageResponse `json:"usage"`
+	GroupRateMultiplier     *float64                           `json:"group_rate_multiplier"`
+	UserRateMultiplier      *float64                           `json:"user_rate_multiplier"`
+	ResolvedRateMultiplier  *float64                           `json:"resolved_rate_multiplier"`
+	PeakRateEnabled         *bool                              `json:"peak_rate_enabled"`
+	PeakStart               *string                            `json:"peak_start"`
+	PeakEnd                 *string                            `json:"peak_end"`
+	PeakRateMultiplier      *float64                           `json:"peak_rate_multiplier"`
+	AppliedPeakMultiplier   *float64                           `json:"applied_peak_multiplier"`
+	EffectiveRateMultiplier *float64                           `json:"effective_rate_multiplier"`
+	Timezone                *string                            `json:"timezone"`
+	ObservedAt              string                             `json:"observed_at"`
+}
+
+type upstreamBillingProbeUsageResponse struct {
+	Scope       string `json:"scope"`
+	Period      string `json:"period"`
+	PeriodStart string `json:"period_start"`
+	PeriodEnd   string `json:"period_end"`
+	Requests    int64  `json:"requests"`
+	TotalTokens int64  `json:"total_tokens"`
 }
 
 // GetUpstreamBillingProbeSettings returns defaults when the setting is absent.
@@ -398,7 +416,7 @@ func (s *UpstreamBillingProbeService) RunDue(ctx context.Context) error {
 	for i := range due {
 		accountID := due[i].ID
 		group.Go(func() error {
-			if _, probeErr := s.probeScheduledAccount(ctx, accountID, settings.IntervalMinutes); probeErr != nil {
+			if _, probeErr := s.probeScheduledAccount(ctx, accountID, settings.IntervalMinutes, settings.AutoDisableZeroBalance); probeErr != nil {
 				logger.LegacyPrintf("service.upstream_billing_probe", "probe_due_failed: account_id=%d err=%v", accountID, probeErr)
 			}
 			return nil
@@ -447,14 +465,14 @@ func (s *UpstreamBillingProbeService) ProbeAccount(ctx context.Context, accountI
 }
 
 func (s *UpstreamBillingProbeService) probeAccount(ctx context.Context, accountID int64, intervalMinutes int) (*UpstreamBillingProbeSnapshot, error) {
-	return s.probeAccountWithMode(ctx, accountID, intervalMinutes, false)
+	return s.probeAccountWithMode(ctx, accountID, intervalMinutes, false, false)
 }
 
-func (s *UpstreamBillingProbeService) probeScheduledAccount(ctx context.Context, accountID int64, intervalMinutes int) (*UpstreamBillingProbeSnapshot, error) {
-	return s.probeAccountWithMode(ctx, accountID, intervalMinutes, true)
+func (s *UpstreamBillingProbeService) probeScheduledAccount(ctx context.Context, accountID int64, intervalMinutes int, autoDisableZeroBalance bool) (*UpstreamBillingProbeSnapshot, error) {
+	return s.probeAccountWithMode(ctx, accountID, intervalMinutes, true, autoDisableZeroBalance)
 }
 
-func (s *UpstreamBillingProbeService) probeAccountWithMode(ctx context.Context, accountID int64, intervalMinutes int, requireEnabled bool) (*UpstreamBillingProbeSnapshot, error) {
+func (s *UpstreamBillingProbeService) probeAccountWithMode(ctx context.Context, accountID int64, intervalMinutes int, requireEnabled bool, autoDisableZeroBalance bool) (*UpstreamBillingProbeSnapshot, error) {
 	key := strconv.FormatInt(accountID, 10)
 	value, err, _ := s.probeGroup.Do(key, func() (any, error) {
 		select {
@@ -479,7 +497,7 @@ func (s *UpstreamBillingProbeService) probeAccountWithMode(ctx context.Context, 
 				return nil, nil
 			}
 		}
-		return s.probeLoadedAccount(ctx, account, intervalMinutes)
+		return s.probeLoadedAccount(ctx, account, intervalMinutes, autoDisableZeroBalance)
 	})
 	if err != nil {
 		return nil, err
@@ -585,7 +603,7 @@ func (s *UpstreamBillingProbeService) SetAccountEnabled(ctx context.Context, acc
 	return s.accountRepo.UpdateExtra(ctx, accountID, updates)
 }
 
-func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, account *Account, intervalMinutes int) (*UpstreamBillingProbeSnapshot, error) {
+func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, account *Account, intervalMinutes int, autoDisableZeroBalance bool) (*UpstreamBillingProbeSnapshot, error) {
 	now := s.currentTime().UTC()
 	if s.accountTestService == nil || s.accountTestService.httpUpstream == nil {
 		return s.persistProbeFailure(ctx, account, intervalMinutes, now, 0, "transport_unavailable", 0)
@@ -677,6 +695,12 @@ func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, ac
 		LastAttemptAt: now,
 		NextProbeAt:   now.Add(nextProbeDelay(intervalMinutes, 0)),
 		HTTPStatus:    resp.StatusCode,
+	}
+	if autoDisableZeroBalance && upstreamBillingBalanceExhausted(data) {
+		latestSettings, settingsErr := s.getSettings(ctx)
+		if settingsErr == nil && latestSettings.Enabled && latestSettings.AutoDisableZeroBalance {
+			snapshot.AutoDisableZeroBalance = true
+		}
 	}
 	// 账号级值域与精度只在真要写回时才有影响：只观察上游声明、未开启同步的
 	// 账号不因声明值不适配 accounts.rate_multiplier 而被记成探测失败并进入
@@ -814,6 +838,43 @@ func parseUpstreamBillingProbeResponse(body []byte) (map[string]any, error) {
 		"effective_rate_multiplier": *response.EffectiveRateMultiplier,
 		"observed_at":               observedAt.UTC().Format(time.RFC3339Nano),
 	}
+	if response.BillingMode != "" {
+		if response.BillingMode != "balance" && response.BillingMode != "subscription" {
+			return nil, fmt.Errorf("invalid billing mode")
+		}
+		data["billing_mode"] = response.BillingMode
+	}
+	if response.Balance != nil {
+		if math.IsNaN(*response.Balance) || math.IsInf(*response.Balance, 0) {
+			return nil, fmt.Errorf("invalid balance")
+		}
+		data["balance"] = *response.Balance
+	}
+	if response.SubscriptionID != nil {
+		if *response.SubscriptionID <= 0 {
+			return nil, fmt.Errorf("invalid subscription id")
+		}
+		data["subscription_id"] = *response.SubscriptionID
+	}
+	if response.Usage != nil {
+		usage := response.Usage
+		if usage.Scope != "api_key" || usage.Period != "current_billing_period" || usage.Requests < 0 || usage.TotalTokens < 0 {
+			return nil, fmt.Errorf("invalid billing usage")
+		}
+		periodStart, startErr := time.Parse(time.RFC3339Nano, usage.PeriodStart)
+		periodEnd, endErr := time.Parse(time.RFC3339Nano, usage.PeriodEnd)
+		if startErr != nil || endErr != nil || periodStart.IsZero() || periodEnd.IsZero() || periodEnd.Before(periodStart) {
+			return nil, fmt.Errorf("invalid billing usage period")
+		}
+		data["usage"] = map[string]any{
+			"scope":        usage.Scope,
+			"period":       usage.Period,
+			"period_start": periodStart.UTC().Format(time.RFC3339Nano),
+			"period_end":   periodEnd.UTC().Format(time.RFC3339Nano),
+			"requests":     usage.Requests,
+			"total_tokens": usage.TotalTokens,
+		}
+	}
 	if response.UserRateMultiplier != nil {
 		data["user_rate_multiplier"] = *response.UserRateMultiplier
 	}
@@ -847,6 +908,14 @@ func parseUpstreamBillingProbeResponse(body []byte) (map[string]any, error) {
 		return nil, fmt.Errorf("inconsistent effective billing multiplier")
 	}
 	return data, nil
+}
+
+func upstreamBillingBalanceExhausted(data map[string]any) bool {
+	if mode, _ := data["billing_mode"].(string); mode != "balance" {
+		return false
+	}
+	balance, ok := resolveAccountExtraNumber(data, "balance")
+	return ok && !math.IsNaN(balance) && !math.IsInf(balance, 0) && balance <= 0
 }
 
 func upstreamBillingRateAt(data map[string]any, now time.Time) (float64, bool) {

@@ -1237,6 +1237,7 @@ describe("admin SettingsView payment visible method controls", () => {
     getUpstreamBillingProbeSettings.mockResolvedValueOnce({
       enabled: false,
       interval_minutes: 45,
+      auto_disable_zero_balance: false,
     });
 
     const wrapper = mountView();
@@ -1255,12 +1256,14 @@ describe("admin SettingsView payment visible method controls", () => {
 
     await card.get('[data-testid="upstream-billing-probe-enabled"]').setValue(true);
     await card.get('[data-testid="upstream-billing-probe-interval"]').setValue(60);
+    await card.get('[data-testid="upstream-billing-auto-disable-zero-balance"]').setValue(true);
     await card.get('[data-testid="upstream-billing-probe-save"]').trigger("click");
     await flushPromises();
 
     expect(updateUpstreamBillingProbeSettings).toHaveBeenCalledWith({
       enabled: true,
       interval_minutes: 60,
+      auto_disable_zero_balance: true,
     });
     expect(showSuccess).toHaveBeenCalledWith("上游倍率自动探测设置已保存");
   });

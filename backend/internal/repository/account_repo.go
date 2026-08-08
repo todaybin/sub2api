@@ -2462,14 +2462,18 @@ func (r *accountRepository) UpdateSessionWindowEnd(ctx context.Context, id int64
 }
 
 func (r *accountRepository) SetSchedulable(ctx context.Context, id int64, schedulable bool) error {
-	_, err := r.client.Account.Update().
-		Where(dbaccount.IDEQ(id)).
-		SetSchedulable(schedulable).
-		Save(ctx)
+	client := clientFromContext(ctx, r.client)
+	_, err := client.ExecContext(ctx, `
+		UPDATE accounts
+		SET schedulable = $2,
+			extra = COALESCE(extra, '{}'::jsonb) - $3,
+			updated_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL
+	`, id, schedulable, service.UpstreamBillingBalanceAutoDisabledAtExtraKey)
 	if err != nil {
 		return err
 	}
-	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventAccountChanged, &id, nil, nil); err != nil {
+	if err := enqueueSchedulerOutbox(ctx, client, service.SchedulerOutboxEventAccountChanged, &id, nil, nil); err != nil {
 		logger.LegacyPrintf("repository.account", "[SchedulerOutbox] enqueue schedulable change failed: account=%d err=%v", id, err)
 	}
 	if !schedulable {
@@ -2605,6 +2609,7 @@ func (r *accountRepository) UpdateUpstreamBillingProbeSnapshot(
 	}
 	if snapshot.Status != service.UpstreamBillingProbeStatusOK {
 		rateMultiplier = nil
+		snapshot.AutoDisableZeroBalance = false
 	}
 	if dbent.TxFromContext(ctx) == nil {
 		tx, err := r.client.Tx(ctx)
@@ -2637,6 +2642,12 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
 	rateMultiplier *float64,
 ) error {
 	payload, err := json.Marshal(map[string]any{service.UpstreamBillingProbeExtraKey: snapshot})
+	if err != nil {
+		return err
+	}
+	autoDisablePayload, err := json.Marshal(map[string]any{
+		service.UpstreamBillingBalanceAutoDisabledAtExtraKey: snapshot.LastAttemptAt.UTC(),
+	})
 	if err != nil {
 		return err
 	}
@@ -2683,13 +2694,26 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
 	result, err := client.ExecContext(ctx, `
 		UPDATE accounts
 		SET
-			extra = COALESCE(extra, '{}'::jsonb) || $1::jsonb,
+			extra = (COALESCE(extra, '{}'::jsonb) || $1::jsonb) || CASE
+				WHEN $11::boolean
+					AND schedulable IS TRUE
+					AND extra @> '{"upstream_billing_probe_enabled": true}'::jsonb
+				THEN $12::jsonb
+				ELSE '{}'::jsonb
+			END,
 			rate_multiplier = CASE
 				WHEN $10::numeric IS NOT NULL
 					AND extra @> '{"upstream_billing_probe_enabled": true}'::jsonb
 					AND extra @> '{"upstream_billing_rate_sync_enabled": true}'::jsonb
 				THEN $10::numeric
 				ELSE rate_multiplier
+			END,
+			schedulable = CASE
+				WHEN $11::boolean
+					AND schedulable IS TRUE
+					AND extra @> '{"upstream_billing_probe_enabled": true}'::jsonb
+				THEN FALSE
+				ELSE schedulable
 			END,
 			updated_at = NOW()
 		WHERE id = $2
@@ -2700,8 +2724,9 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
 			AND COALESCE(extra -> 'upstream_billing_probe', 'null'::jsonb) = $7::jsonb
 			AND COALESCE(extra -> 'upstream_billing_probe_enabled', 'null'::jsonb) = $8::jsonb
 			AND COALESCE(extra -> 'upstream_billing_rate_sync_enabled', 'null'::jsonb) = $9::jsonb
+			AND schedulable = $13
 			AND deleted_at IS NULL
-	`, string(payload), account.ID, account.Platform, account.Type, string(credentials), proxyID, string(expectedSnapshotJSON), string(expectedEnabledJSON), string(expectedRateSyncEnabledJSON), rateMultiplier)
+	`, string(payload), account.ID, account.Platform, account.Type, string(credentials), proxyID, string(expectedSnapshotJSON), string(expectedEnabledJSON), string(expectedRateSyncEnabledJSON), rateMultiplier, snapshot.AutoDisableZeroBalance, string(autoDisablePayload), account.Schedulable)
 	if err != nil {
 		return err
 	}
