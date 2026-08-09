@@ -831,6 +831,15 @@ func TestLoadDefaultDatabaseSSLMode(t *testing.T) {
 	}
 }
 
+func TestLoadDatabaseClientBinFromEnvironment(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("DATABASE_CLIENT_BIN", `C:\portable\postgresql\bin`)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, `C:\portable\postgresql\bin`, cfg.Database.ClientBin)
+}
+
 func TestValidateLinuxDoFrontendRedirectURL(t *testing.T) {
 	resetViperWithJWTSecret(t)
 

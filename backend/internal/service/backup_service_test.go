@@ -8,6 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -277,6 +280,95 @@ func TestBackupService_S3ConfigEncryption(t *testing.T) {
 	internal, err := svc.loadS3Config(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, "my-secret", internal.SecretAccessKey)
+}
+
+func TestLocalBackupStoreUploadDownloadDelete(t *testing.T) {
+	root := t.TempDir()
+	store, err := newLocalBackupStore(root)
+	require.NoError(t, err)
+
+	size, err := store.Upload(context.Background(), "2026/08/08/test.sql.gz", strings.NewReader("backup-data"), "application/gzip")
+	require.NoError(t, err)
+	require.Equal(t, int64(len("backup-data")), size)
+
+	body, err := store.Download(context.Background(), "2026/08/08/test.sql.gz")
+	require.NoError(t, err)
+	data, err := io.ReadAll(body)
+	require.NoError(t, err)
+	require.NoError(t, body.Close())
+	require.Equal(t, "backup-data", string(data))
+
+	info, err := os.Stat(filepath.Join(root, "2026", "08", "08", "test.sql.gz"))
+	require.NoError(t, err)
+	if runtime.GOOS != "windows" {
+		require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	}
+	require.NoError(t, store.Delete(context.Background(), "2026/08/08/test.sql.gz"))
+	_, err = store.Download(context.Background(), "2026/08/08/test.sql.gz")
+	require.Error(t, err)
+}
+
+func TestResolveDefaultLocalBackupDirectory(t *testing.T) {
+	root := resolveDefaultLocalBackupDirectory()
+	require.True(t, filepath.IsAbs(root))
+	require.True(t, strings.HasSuffix(filepath.ToSlash(root), "/data/backups/database"))
+}
+
+func TestBackupService_LocalStorageConfig(t *testing.T) {
+	repo := newMockSettingRepo()
+	svc := newTestBackupService(repo, &mockDumper{}, newMockObjectStore())
+	root := filepath.Join(t.TempDir(), "backups")
+	svc.localBackupDirectory = root
+
+	cfg, err := svc.UpdateStorageConfig(context.Background(), BackupStorageConfig{
+		StorageType: BackupStorageTypeLocal,
+		// Client-supplied paths are ignored; local backups always use the server default.
+		LocalDirectory: filepath.Join(t.TempDir(), "ignored"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, BackupStorageTypeLocal, cfg.StorageType)
+	require.Equal(t, root, cfg.LocalDirectory)
+	_, err = os.Stat(root)
+	require.NoError(t, err)
+
+	loaded, err := svc.GetStorageConfig(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, root, loaded.LocalDirectory)
+}
+
+func TestBackupService_CreateAndRestoreLocalBackup(t *testing.T) {
+	repo := newMockSettingRepo()
+	dumper := &mockDumper{dumpData: []byte("local database dump")}
+	svc := newTestBackupService(repo, dumper, newMockObjectStore())
+	root := t.TempDir()
+	svc.localBackupDirectory = root
+	_, err := svc.UpdateStorageConfig(context.Background(), BackupStorageConfig{
+		StorageType: BackupStorageTypeLocal,
+	})
+	require.NoError(t, err)
+
+	record, err := svc.CreateBackup(context.Background(), "manual", 14)
+	require.NoError(t, err)
+	require.Equal(t, BackupStorageTypeLocal, record.StorageType)
+	require.Equal(t, root, record.StorageRoot)
+	require.NotEmpty(t, record.StorageKey)
+	_, err = os.Stat(filepath.Join(root, filepath.FromSlash(record.StorageKey)))
+	require.NoError(t, err)
+
+	require.NoError(t, svc.RestoreBackup(context.Background(), record.ID))
+	require.Equal(t, "local database dump", string(dumper.restored))
+}
+
+func TestNormalizeTencentCOSConfig(t *testing.T) {
+	cfg := BackupS3Config{Provider: "tencent_cos", Region: "ap-guangzhou"}
+	require.NoError(t, normalizeBackupCloudConfig(&cfg))
+	require.Equal(t, "https://cos.ap-guangzhou.myqcloud.com", cfg.Endpoint)
+	cfg.Endpoint = "https://custom.example.com"
+	require.NoError(t, normalizeBackupCloudConfig(&cfg))
+	require.Equal(t, "https://cos.ap-guangzhou.myqcloud.com", cfg.Endpoint)
+
+	cfg = BackupS3Config{Provider: "tencent_cos", Region: "auto"}
+	require.Error(t, normalizeBackupCloudConfig(&cfg))
 }
 
 func TestBackupService_S3ConfigKeepExistingSecret(t *testing.T) {

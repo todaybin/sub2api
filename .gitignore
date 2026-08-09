@@ -144,3 +144,7 @@ docs/*
 frontend/coverage/
 aicodex
 output/
+
+# Local portable PostgreSQL clients used for backup/restore
+tools/postgresql/*
+!tools/postgresql/README.md

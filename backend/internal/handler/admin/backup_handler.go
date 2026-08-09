@@ -1,6 +1,9 @@
 package admin
 
 import (
+	"mime"
+	"path"
+
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -11,6 +14,37 @@ type BackupHandler struct {
 	backupService *service.BackupService
 	userService   *service.UserService
 	imageStorage  *service.ImageStorageSettingService
+}
+
+func (h *BackupHandler) GetStorageConfig(c *gin.Context) {
+	cfg, err := h.backupService.GetStorageConfig(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, cfg)
+}
+
+func (h *BackupHandler) UpdateStorageConfig(c *gin.Context) {
+	var req service.BackupStorageConfig
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	cfg, err := h.backupService.UpdateStorageConfig(c.Request.Context(), req)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, cfg)
+}
+
+func (h *BackupHandler) TestLocalStorage(c *gin.Context) {
+	if err := h.backupService.TestLocalStorage(c.Request.Context()); err != nil {
+		response.Success(c, gin.H{"ok": false, "message": err.Error()})
+		return
+	}
+	response.Success(c, gin.H{"ok": true, "message": "local directory is writable"})
 }
 
 func NewBackupHandler(backupService *service.BackupService, userService *service.UserService, imageStorage *service.ImageStorageSettingService) *BackupHandler {
@@ -159,6 +193,24 @@ func (h *BackupHandler) GetDownloadURL(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"url": url})
+}
+
+func (h *BackupHandler) Download(c *gin.Context) {
+	backupID := c.Param("id")
+	if backupID == "" {
+		response.BadRequest(c, "backup ID is required")
+		return
+	}
+	record, body, err := h.backupService.OpenBackup(c.Request.Context(), backupID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	defer func() { _ = body.Close() }()
+	filename := path.Base(record.FileName)
+	disposition := mime.FormatMediaType("attachment", map[string]string{"filename": filename})
+	c.Header("Content-Disposition", disposition)
+	c.DataFromReader(200, record.SizeBytes, "application/gzip", body, map[string]string{"Cache-Control": "no-store"})
 }
 
 // ─── 恢复操作（需要重新输入管理员密码） ───

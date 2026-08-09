@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -23,19 +25,22 @@ import (
 
 const (
 	settingKeyBackupS3Config = "backup_s3_config"
+	settingKeyBackupStorage  = "backup_storage_config"
 	settingKeyBackupSchedule = "backup_schedule"
 	settingKeyBackupRecords  = "backup_records"
+	defaultLocalBackupPath   = "data/backups/database"
 
 	maxBackupRecords = 100
 )
 
 var (
-	ErrBackupS3NotConfigured = infraerrors.BadRequest("BACKUP_S3_NOT_CONFIGURED", "backup S3 storage is not configured")
-	ErrBackupNotFound        = infraerrors.NotFound("BACKUP_NOT_FOUND", "backup record not found")
-	ErrBackupInProgress      = infraerrors.Conflict("BACKUP_IN_PROGRESS", "a backup is already in progress")
-	ErrRestoreInProgress     = infraerrors.Conflict("RESTORE_IN_PROGRESS", "a restore is already in progress")
-	ErrBackupRecordsCorrupt  = infraerrors.InternalServer("BACKUP_RECORDS_CORRUPT", "backup records data is corrupted")
-	ErrBackupS3ConfigCorrupt = infraerrors.InternalServer("BACKUP_S3_CONFIG_CORRUPT", "backup S3 config data is corrupted")
+	ErrBackupS3NotConfigured    = infraerrors.BadRequest("BACKUP_S3_NOT_CONFIGURED", "backup S3 storage is not configured")
+	ErrBackupLocalNotConfigured = infraerrors.BadRequest("BACKUP_LOCAL_NOT_CONFIGURED", "backup local storage is not configured")
+	ErrBackupNotFound           = infraerrors.NotFound("BACKUP_NOT_FOUND", "backup record not found")
+	ErrBackupInProgress         = infraerrors.Conflict("BACKUP_IN_PROGRESS", "a backup is already in progress")
+	ErrRestoreInProgress        = infraerrors.Conflict("RESTORE_IN_PROGRESS", "a restore is already in progress")
+	ErrBackupRecordsCorrupt     = infraerrors.InternalServer("BACKUP_RECORDS_CORRUPT", "backup records data is corrupted")
+	ErrBackupS3ConfigCorrupt    = infraerrors.InternalServer("BACKUP_S3_CONFIG_CORRUPT", "backup S3 config data is corrupted")
 
 	// ErrSecretEncryptionKeyNotConfigured is returned when an S3 SecretAccessKey
 	// would be encrypted with an auto-generated (ephemeral) key. That key is
@@ -48,6 +53,11 @@ var (
 		"SECRET_ENCRYPTION_KEY_NOT_CONFIGURED",
 		"cannot store the S3 secret access key: no fixed secret encryption key is configured, so the auto-generated key would change on every restart and make the stored secret undecryptable after a restart or upgrade. Set a fixed TOTP_ENCRYPTION_KEY (e.g. generate one with `openssl rand -hex 32`) and try again",
 	)
+)
+
+const (
+	BackupStorageTypeS3    = "s3"
+	BackupStorageTypeLocal = "local"
 )
 
 // ─── 接口定义 ───
@@ -70,17 +80,174 @@ type BackupObjectStore interface {
 // BackupObjectStoreFactory creates an object store from S3 config
 type BackupObjectStoreFactory func(ctx context.Context, cfg *BackupS3Config) (BackupObjectStore, error)
 
+type localBackupStore struct {
+	root string
+}
+
+func newLocalBackupStore(root string) (*localBackupStore, error) {
+	cleaned := filepath.Clean(strings.TrimSpace(root))
+	if cleaned == "." || !filepath.IsAbs(cleaned) {
+		return nil, ErrBackupLocalNotConfigured
+	}
+	return &localBackupStore{root: cleaned}, nil
+}
+
+func (s *localBackupStore) resolve(key string) (string, error) {
+	if key == "" || filepath.IsAbs(key) || filepath.VolumeName(key) != "" {
+		return "", infraerrors.BadRequest("INVALID_BACKUP_PATH", "invalid local backup path")
+	}
+	cleanedRoot := filepath.Clean(s.root)
+	target := filepath.Clean(filepath.Join(cleanedRoot, filepath.FromSlash(key)))
+	rel, err := filepath.Rel(cleanedRoot, target)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", infraerrors.BadRequest("INVALID_BACKUP_PATH", "local backup path escapes the configured directory")
+	}
+	return target, nil
+}
+
+func (s *localBackupStore) Upload(ctx context.Context, key string, body io.Reader, _ string) (sizeBytes int64, err error) {
+	target, err := s.resolve(key)
+	if err != nil {
+		return 0, err
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+		return 0, fmt.Errorf("create local backup directory: %w", err)
+	}
+
+	tmp, err := os.CreateTemp(filepath.Dir(target), ".sub2api-backup-*")
+	if err != nil {
+		return 0, fmt.Errorf("create local backup temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer func() {
+		_ = tmp.Close()
+		if err != nil {
+			_ = os.Remove(tmpName)
+		}
+	}()
+	if err = tmp.Chmod(0o600); err != nil {
+		return 0, fmt.Errorf("set local backup permissions: %w", err)
+	}
+	sizeBytes, err = io.Copy(tmp, &contextReader{ctx: ctx, reader: body})
+	if err != nil {
+		return 0, fmt.Errorf("write local backup: %w", err)
+	}
+	if err = tmp.Sync(); err != nil {
+		return 0, fmt.Errorf("sync local backup: %w", err)
+	}
+	if err = tmp.Close(); err != nil {
+		return 0, fmt.Errorf("close local backup: %w", err)
+	}
+	if err = os.Rename(tmpName, target); err != nil {
+		return 0, fmt.Errorf("commit local backup: %w", err)
+	}
+	return sizeBytes, nil
+}
+
+func (s *localBackupStore) Download(_ context.Context, key string) (io.ReadCloser, error) {
+	target, err := s.resolve(key)
+	if err != nil {
+		return nil, err
+	}
+	file, err := os.Open(target)
+	if err != nil {
+		return nil, fmt.Errorf("open local backup: %w", err)
+	}
+	return file, nil
+}
+
+func (s *localBackupStore) Delete(_ context.Context, key string) error {
+	target, err := s.resolve(key)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(target); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("delete local backup: %w", err)
+	}
+	return nil
+}
+
+func (s *localBackupStore) PresignURL(context.Context, string, time.Duration) (string, error) {
+	return "", infraerrors.BadRequest("LOCAL_BACKUP_URL_UNAVAILABLE", "local backups must use the authenticated download endpoint")
+}
+
+func (s *localBackupStore) HeadBucket(ctx context.Context) error {
+	if err := os.MkdirAll(s.root, 0o750); err != nil {
+		return fmt.Errorf("create local backup directory: %w", err)
+	}
+	probe, err := os.CreateTemp(s.root, ".sub2api-write-test-*")
+	if err != nil {
+		return fmt.Errorf("local backup directory is not writable: %w", err)
+	}
+	name := probe.Name()
+	defer func() { _ = os.Remove(name) }()
+	if err := probe.Chmod(0o600); err != nil {
+		_ = probe.Close()
+		return fmt.Errorf("set local backup test permissions: %w", err)
+	}
+	if _, err := probe.WriteString("ok"); err != nil {
+		_ = probe.Close()
+		return fmt.Errorf("write local backup test file: %w", err)
+	}
+	if err := probe.Close(); err != nil {
+		return fmt.Errorf("close local backup test file: %w", err)
+	}
+	return ctx.Err()
+}
+
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r *contextReader) Read(p []byte) (int, error) {
+	select {
+	case <-r.ctx.Done():
+		return 0, r.ctx.Err()
+	default:
+		return r.reader.Read(p)
+	}
+}
+
+// BackupStorageConfig selects the destination shared by manual and scheduled backups.
+type BackupStorageConfig struct {
+	StorageType    string `json:"storage_type"`
+	LocalDirectory string `json:"local_directory"`
+}
+
 // ─── 数据模型 ───
 
 // BackupS3Config S3 兼容存储配置（支持 Cloudflare R2）
 type BackupS3Config struct {
-	Endpoint        string `json:"endpoint"` // e.g. https://<account_id>.r2.cloudflarestorage.com
-	Region          string `json:"region"`   // R2 用 "auto"
+	Provider        string `json:"provider,omitempty"` // s3 or tencent_cos
+	Endpoint        string `json:"endpoint"`           // e.g. https://<account_id>.r2.cloudflarestorage.com
+	Region          string `json:"region"`             // R2 用 "auto"
 	Bucket          string `json:"bucket"`
 	AccessKeyID     string `json:"access_key_id"`
 	SecretAccessKey string `json:"secret_access_key,omitempty"` //nolint:revive // field name follows AWS convention
 	Prefix          string `json:"prefix"`                      // S3 key 前缀，如 "backups/"
 	ForcePathStyle  bool   `json:"force_path_style"`
+}
+
+func normalizeBackupCloudConfig(cfg *BackupS3Config) error {
+	cfg.Provider = strings.TrimSpace(cfg.Provider)
+	if cfg.Provider == "" {
+		cfg.Provider = "s3"
+	}
+	if cfg.Provider != "s3" && cfg.Provider != "tencent_cos" {
+		return infraerrors.BadRequest("INVALID_BACKUP_CLOUD_PROVIDER", "provider must be s3 or tencent_cos")
+	}
+	cfg.Region = strings.TrimSpace(cfg.Region)
+	cfg.Endpoint = strings.TrimRight(strings.TrimSpace(cfg.Endpoint), "/")
+	if cfg.Provider == "tencent_cos" {
+		if cfg.Region == "" || cfg.Region == "auto" {
+			return infraerrors.BadRequest("TENCENT_COS_REGION_REQUIRED", "Tencent COS region is required")
+		}
+		// COS endpoint is derived from the selected region; custom endpoints are
+		// intentionally ignored so the UI never needs to expose this setting.
+		cfg.Endpoint = fmt.Sprintf("https://cos.%s.myqcloud.com", cfg.Region)
+	}
+	return nil
 }
 
 // IsConfigured 检查必要字段是否已配置
@@ -98,28 +265,33 @@ type BackupScheduleConfig struct {
 
 // BackupRecord 备份记录
 type BackupRecord struct {
-	ID            string `json:"id"`
-	Status        string `json:"status"`      // pending, running, completed, failed
-	BackupType    string `json:"backup_type"` // postgres
-	FileName      string `json:"file_name"`
-	S3Key         string `json:"s3_key"`
-	SizeBytes     int64  `json:"size_bytes"`
-	TriggeredBy   string `json:"triggered_by"` // manual, scheduled
-	ErrorMsg      string `json:"error_message,omitempty"`
-	StartedAt     string `json:"started_at"`
-	FinishedAt    string `json:"finished_at,omitempty"`
-	ExpiresAt     string `json:"expires_at,omitempty"`     // 过期时间
-	Progress      string `json:"progress,omitempty"`       // "dumping", "uploading", ""
-	RestoreStatus string `json:"restore_status,omitempty"` // "", "running", "completed", "failed"
-	RestoreError  string `json:"restore_error,omitempty"`
-	RestoredAt    string `json:"restored_at,omitempty"`
+	ID              string `json:"id"`
+	Status          string `json:"status"`      // pending, running, completed, failed
+	BackupType      string `json:"backup_type"` // postgres
+	FileName        string `json:"file_name"`
+	S3Key           string `json:"s3_key"`
+	StorageType     string `json:"storage_type,omitempty"`
+	StorageProvider string `json:"storage_provider,omitempty"`
+	StorageKey      string `json:"storage_key,omitempty"`
+	StorageRoot     string `json:"storage_root,omitempty"`
+	SizeBytes       int64  `json:"size_bytes"`
+	TriggeredBy     string `json:"triggered_by"` // manual, scheduled
+	ErrorMsg        string `json:"error_message,omitempty"`
+	StartedAt       string `json:"started_at"`
+	FinishedAt      string `json:"finished_at,omitempty"`
+	ExpiresAt       string `json:"expires_at,omitempty"`     // 过期时间
+	Progress        string `json:"progress,omitempty"`       // "dumping", "uploading", ""
+	RestoreStatus   string `json:"restore_status,omitempty"` // "", "running", "completed", "failed"
+	RestoreError    string `json:"restore_error,omitempty"`
+	RestoredAt      string `json:"restored_at,omitempty"`
 }
 
 // BackupService 数据库备份恢复服务
 type BackupService struct {
-	settingRepo SettingRepository
-	dbCfg       *config.DatabaseConfig
-	encryptor   SecretEncryptor
+	settingRepo          SettingRepository
+	dbCfg                *config.DatabaseConfig
+	encryptor            SecretEncryptor
+	localBackupDirectory string
 	// encryptionKeyConfigured mirrors cfg.Totp.EncryptionKeyConfigured: false
 	// means the secret encryption key was auto-generated and does not survive a
 	// restart. Durable-secret writers must refuse to persist new secrets in that
@@ -160,12 +332,21 @@ func NewBackupService(
 		settingRepo:             settingRepo,
 		dbCfg:                   &cfg.Database,
 		encryptor:               encryptor,
+		localBackupDirectory:    resolveDefaultLocalBackupDirectory(),
 		encryptionKeyConfigured: cfg.Totp.EncryptionKeyConfigured,
 		storeFactory:            storeFactory,
 		dumper:                  dumper,
 		bgCtx:                   bgCtx,
 		bgCancel:                bgCancel,
 	}
+}
+
+func resolveDefaultLocalBackupDirectory() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return filepath.Join(os.TempDir(), "sub2api", filepath.FromSlash(defaultLocalBackupPath))
+	}
+	return filepath.Join(cwd, filepath.FromSlash(defaultLocalBackupPath))
 }
 
 // Start 启动定时备份调度器并清理孤立记录
@@ -254,6 +435,65 @@ func (s *BackupService) Stop() {
 
 // ─── S3 配置管理 ───
 
+// GetStorageConfig returns the shared destination for manual and scheduled backups.
+// Missing configuration defaults to S3 for compatibility with existing installs.
+func (s *BackupService) GetStorageConfig(ctx context.Context) (*BackupStorageConfig, error) {
+	raw, err := s.settingRepo.GetValue(ctx, settingKeyBackupStorage)
+	if err != nil || raw == "" {
+		return &BackupStorageConfig{StorageType: BackupStorageTypeS3}, nil
+	}
+	var cfg BackupStorageConfig
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		return nil, infraerrors.InternalServer("BACKUP_STORAGE_CONFIG_CORRUPT", "backup storage config data is corrupted")
+	}
+	if cfg.StorageType == "" {
+		cfg.StorageType = BackupStorageTypeS3
+	}
+	if cfg.StorageType == BackupStorageTypeLocal {
+		cfg.LocalDirectory = s.localBackupDirectory
+	} else {
+		cfg.LocalDirectory = ""
+	}
+	return &cfg, nil
+}
+
+func (s *BackupService) UpdateStorageConfig(ctx context.Context, cfg BackupStorageConfig) (*BackupStorageConfig, error) {
+	if cfg.StorageType == "" {
+		cfg.StorageType = BackupStorageTypeS3
+	}
+	if cfg.StorageType != BackupStorageTypeS3 && cfg.StorageType != BackupStorageTypeLocal {
+		return nil, infraerrors.BadRequest("INVALID_BACKUP_STORAGE_TYPE", "backup storage_type must be s3 or local")
+	}
+	if cfg.StorageType == BackupStorageTypeLocal {
+		cfg.LocalDirectory = s.localBackupDirectory
+		store, err := newLocalBackupStore(cfg.LocalDirectory)
+		if err != nil {
+			return nil, err
+		}
+		if err := store.HeadBucket(ctx); err != nil {
+			return nil, err
+		}
+	} else {
+		cfg.LocalDirectory = ""
+	}
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("marshal backup storage config: %w", err)
+	}
+	if err := s.settingRepo.Set(ctx, settingKeyBackupStorage, string(data)); err != nil {
+		return nil, fmt.Errorf("save backup storage config: %w", err)
+	}
+	return &cfg, nil
+}
+
+func (s *BackupService) TestLocalStorage(ctx context.Context) error {
+	store, err := newLocalBackupStore(s.localBackupDirectory)
+	if err != nil {
+		return err
+	}
+	return store.HeadBucket(ctx)
+}
+
 // EncryptionKeyConfigured reports whether a fixed (explicitly configured) secret
 // encryption key is in use. When false the key is auto-generated on every start
 // and secrets encrypted with it cannot be recovered after a restart, so callers
@@ -270,12 +510,18 @@ func (s *BackupService) GetS3Config(ctx context.Context) (*BackupS3Config, error
 	if cfg == nil {
 		return &BackupS3Config{}, nil
 	}
+	if cfg.Provider == "" {
+		cfg.Provider = "s3"
+	}
 	// 脱敏返回
 	cfg.SecretAccessKey = ""
 	return cfg, nil
 }
 
 func (s *BackupService) UpdateS3Config(ctx context.Context, cfg BackupS3Config) (*BackupS3Config, error) {
+	if err := normalizeBackupCloudConfig(&cfg); err != nil {
+		return nil, err
+	}
 	// 如果没提供 secret，保留原有值
 	if cfg.SecretAccessKey == "" {
 		old, _ := s.loadS3Config(ctx)
@@ -315,6 +561,9 @@ func (s *BackupService) UpdateS3Config(ctx context.Context, cfg BackupS3Config) 
 }
 
 func (s *BackupService) TestS3Connection(ctx context.Context, cfg BackupS3Config) error {
+	if err := normalizeBackupCloudConfig(&cfg); err != nil {
+		return err
+	}
 	// 如果没提供 secret，用已保存的
 	if cfg.SecretAccessKey == "" {
 		old, _ := s.loadS3Config(ctx)
@@ -452,8 +701,64 @@ func (s *BackupService) runScheduledBackup() {
 
 // ─── 备份/恢复核心 ───
 
-// CreateBackup 创建全量数据库备份并上传到 S3（流式处理）
+// CreateBackup 创建全量数据库备份并写入当前备份存储（流式处理）
 // expireDays: 备份过期天数，0=永不过期，默认14天
+func (s *BackupService) prepareBackupStore(ctx context.Context, fileName string) (BackupObjectStore, string, string, string, string, error) {
+	storageCfg, err := s.GetStorageConfig(ctx)
+	if err != nil {
+		return nil, "", "", "", "", err
+	}
+	dateKey := fmt.Sprintf("%s/%s", time.Now().Format("2006/01/02"), fileName)
+	if storageCfg.StorageType == BackupStorageTypeLocal {
+		store, err := newLocalBackupStore(storageCfg.LocalDirectory)
+		if err != nil {
+			return nil, "", "", "", "", err
+		}
+		return store, BackupStorageTypeLocal, dateKey, store.root, "", nil
+	}
+
+	s3Cfg, err := s.loadS3Config(ctx)
+	if err != nil {
+		return nil, "", "", "", "", err
+	}
+	if s3Cfg == nil || !s3Cfg.IsConfigured() {
+		return nil, "", "", "", "", ErrBackupS3NotConfigured
+	}
+	store, err := s.getOrCreateStore(ctx, s3Cfg)
+	if err != nil {
+		return nil, "", "", "", "", fmt.Errorf("init object store: %w", err)
+	}
+	provider := s3Cfg.Provider
+	if provider == "" {
+		provider = "s3"
+	}
+	return store, BackupStorageTypeS3, s.buildS3Key(s3Cfg, fileName), "", provider, nil
+}
+
+func (s *BackupService) storeForRecord(ctx context.Context, record *BackupRecord) (BackupObjectStore, string, error) {
+	storageType := record.StorageType
+	if storageType == "" {
+		storageType = BackupStorageTypeS3
+	}
+	key := record.StorageKey
+	if key == "" {
+		key = record.S3Key
+	}
+	if storageType == BackupStorageTypeLocal {
+		store, err := newLocalBackupStore(record.StorageRoot)
+		return store, key, err
+	}
+	if storageType != BackupStorageTypeS3 {
+		return nil, "", infraerrors.BadRequest("INVALID_BACKUP_STORAGE_TYPE", "backup record has an invalid storage type")
+	}
+	s3Cfg, err := s.loadS3Config(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	store, err := s.getOrCreateStore(ctx, s3Cfg)
+	return store, key, err
+}
+
 func (s *BackupService) CreateBackup(ctx context.Context, triggeredBy string, expireDays int) (*BackupRecord, error) {
 	if s.shuttingDown.Load() {
 		return nil, infraerrors.ServiceUnavailable("SERVER_SHUTTING_DOWN", "server is shutting down")
@@ -472,23 +777,13 @@ func (s *BackupService) CreateBackup(ctx context.Context, triggeredBy string, ex
 		s.opMu.Unlock()
 	}()
 
-	s3Cfg, err := s.loadS3Config(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if s3Cfg == nil || !s3Cfg.IsConfigured() {
-		return nil, ErrBackupS3NotConfigured
-	}
-
-	objectStore, err := s.getOrCreateStore(ctx, s3Cfg)
-	if err != nil {
-		return nil, fmt.Errorf("init object store: %w", err)
-	}
-
 	now := time.Now()
 	backupID := uuid.New().String()[:8]
 	fileName := fmt.Sprintf("%s_%s.sql.gz", s.dbCfg.DBName, now.Format("20060102_150405"))
-	s3Key := s.buildS3Key(s3Cfg, fileName)
+	objectStore, storageType, storageKey, storageRoot, storageProvider, err := s.prepareBackupStore(ctx, fileName)
+	if err != nil {
+		return nil, err
+	}
 
 	var expiresAt string
 	if expireDays > 0 {
@@ -496,14 +791,18 @@ func (s *BackupService) CreateBackup(ctx context.Context, triggeredBy string, ex
 	}
 
 	record := &BackupRecord{
-		ID:          backupID,
-		Status:      "running",
-		BackupType:  "postgres",
-		FileName:    fileName,
-		S3Key:       s3Key,
-		TriggeredBy: triggeredBy,
-		StartedAt:   now.Format(time.RFC3339),
-		ExpiresAt:   expiresAt,
+		ID:              backupID,
+		Status:          "running",
+		BackupType:      "postgres",
+		FileName:        fileName,
+		S3Key:           storageKey,
+		StorageType:     storageType,
+		StorageProvider: storageProvider,
+		StorageKey:      storageKey,
+		StorageRoot:     storageRoot,
+		TriggeredBy:     triggeredBy,
+		StartedAt:       now.Format(time.RFC3339),
+		ExpiresAt:       expiresAt,
 	}
 
 	// 流式执行: pg_dump -> gzip -> S3 upload
@@ -544,12 +843,12 @@ func (s *BackupService) CreateBackup(ctx context.Context, triggeredBy string, ex
 	}()
 
 	contentType := "application/gzip"
-	sizeBytes, err := objectStore.Upload(ctx, s3Key, pr, contentType)
+	sizeBytes, err := objectStore.Upload(ctx, storageKey, pr, contentType)
 	if err != nil {
 		_ = pr.CloseWithError(err) // 确保 gzip goroutine 不会悬挂
 		gzErr := <-gzipDone        // 安全等待 gzip goroutine 完成
 		record.Status = "failed"
-		errMsg := fmt.Sprintf("S3 upload failed: %v", err)
+		errMsg := fmt.Sprintf("backup storage write failed: %v", err)
 		if gzErr != nil {
 			errMsg = fmt.Sprintf("gzip/dump failed: %v", gzErr)
 		}
@@ -594,24 +893,15 @@ func (s *BackupService) StartBackup(ctx context.Context, triggeredBy string, exp
 		}
 	}()
 
-	// 在返回前加载 S3 配置和创建 store，避免 goroutine 中配置被修改
-	s3Cfg, err := s.loadS3Config(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if s3Cfg == nil || !s3Cfg.IsConfigured() {
-		return nil, ErrBackupS3NotConfigured
-	}
-
-	objectStore, err := s.getOrCreateStore(ctx, s3Cfg)
-	if err != nil {
-		return nil, fmt.Errorf("init object store: %w", err)
-	}
-
 	now := time.Now()
 	backupID := uuid.New().String()[:8]
 	fileName := fmt.Sprintf("%s_%s.sql.gz", s.dbCfg.DBName, now.Format("20060102_150405"))
-	s3Key := s.buildS3Key(s3Cfg, fileName)
+	// Resolve the destination before launching the worker so configuration changes
+	// cannot race with an in-flight backup.
+	objectStore, storageType, storageKey, storageRoot, storageProvider, err := s.prepareBackupStore(ctx, fileName)
+	if err != nil {
+		return nil, err
+	}
 
 	var expiresAt string
 	if expireDays > 0 {
@@ -619,15 +909,19 @@ func (s *BackupService) StartBackup(ctx context.Context, triggeredBy string, exp
 	}
 
 	record := &BackupRecord{
-		ID:          backupID,
-		Status:      "running",
-		BackupType:  "postgres",
-		FileName:    fileName,
-		S3Key:       s3Key,
-		TriggeredBy: triggeredBy,
-		StartedAt:   now.Format(time.RFC3339),
-		ExpiresAt:   expiresAt,
-		Progress:    "pending",
+		ID:              backupID,
+		Status:          "running",
+		BackupType:      "postgres",
+		FileName:        fileName,
+		S3Key:           storageKey,
+		StorageType:     storageType,
+		StorageProvider: storageProvider,
+		StorageKey:      storageKey,
+		StorageRoot:     storageRoot,
+		TriggeredBy:     triggeredBy,
+		StartedAt:       now.Format(time.RFC3339),
+		ExpiresAt:       expiresAt,
+		Progress:        "pending",
 	}
 
 	if err := s.saveRecord(ctx, record); err != nil {
@@ -712,12 +1006,16 @@ func (s *BackupService) executeBackup(record *BackupRecord, objectStore BackupOb
 	}()
 
 	contentType := "application/gzip"
-	sizeBytes, err := objectStore.Upload(ctx, record.S3Key, pr, contentType)
+	key := record.StorageKey
+	if key == "" {
+		key = record.S3Key
+	}
+	sizeBytes, err := objectStore.Upload(ctx, key, pr, contentType)
 	if err != nil {
 		_ = pr.CloseWithError(err) // 确保 gzip goroutine 不会悬挂
 		gzErr := <-gzipDone        // 安全等待 gzip goroutine 完成
 		record.Status = "failed"
-		errMsg := fmt.Sprintf("S3 upload failed: %v", err)
+		errMsg := fmt.Sprintf("backup storage write failed: %v", err)
 		if gzErr != nil {
 			errMsg = fmt.Sprintf("gzip/dump failed: %v", gzErr)
 		}
@@ -738,7 +1036,7 @@ func (s *BackupService) executeBackup(record *BackupRecord, objectStore BackupOb
 	}
 }
 
-// RestoreBackup 从 S3 下载备份并流式恢复到数据库
+// RestoreBackup 从记录对应的备份存储下载并流式恢复到数据库
 func (s *BackupService) RestoreBackup(ctx context.Context, backupID string) error {
 	s.opMu.Lock()
 	if s.restoring {
@@ -761,19 +1059,15 @@ func (s *BackupService) RestoreBackup(ctx context.Context, backupID string) erro
 		return infraerrors.BadRequest("BACKUP_NOT_COMPLETED", "can only restore from a completed backup")
 	}
 
-	s3Cfg, err := s.loadS3Config(ctx)
+	objectStore, key, err := s.storeForRecord(ctx, record)
 	if err != nil {
-		return err
-	}
-	objectStore, err := s.getOrCreateStore(ctx, s3Cfg)
-	if err != nil {
-		return fmt.Errorf("init object store: %w", err)
+		return fmt.Errorf("init backup store: %w", err)
 	}
 
-	// 从 S3 流式下载
-	body, err := objectStore.Download(ctx, record.S3Key)
+	// Stream from the configured backup store.
+	body, err := objectStore.Download(ctx, key)
 	if err != nil {
-		return fmt.Errorf("S3 download failed: %w", err)
+		return fmt.Errorf("backup download failed: %w", err)
 	}
 	defer func() { _ = body.Close() }()
 
@@ -824,13 +1118,9 @@ func (s *BackupService) StartRestore(ctx context.Context, backupID string) (*Bac
 		return nil, infraerrors.BadRequest("BACKUP_NOT_COMPLETED", "can only restore from a completed backup")
 	}
 
-	s3Cfg, err := s.loadS3Config(ctx)
+	objectStore, _, err := s.storeForRecord(ctx, record)
 	if err != nil {
-		return nil, err
-	}
-	objectStore, err := s.getOrCreateStore(ctx, s3Cfg)
-	if err != nil {
-		return nil, fmt.Errorf("init object store: %w", err)
+		return nil, fmt.Errorf("init backup store: %w", err)
 	}
 
 	record.RestoreStatus = "running"
@@ -866,10 +1156,14 @@ func (s *BackupService) executeRestore(record *BackupRecord, objectStore BackupO
 	ctx, cancel := context.WithTimeout(s.bgCtx, 30*time.Minute)
 	defer cancel()
 
-	body, err := objectStore.Download(ctx, record.S3Key)
+	key := record.StorageKey
+	if key == "" {
+		key = record.S3Key
+	}
+	body, err := objectStore.Download(ctx, key)
 	if err != nil {
 		record.RestoreStatus = "failed"
-		record.RestoreError = fmt.Sprintf("S3 download failed: %v", err)
+		record.RestoreError = fmt.Sprintf("backup download failed: %v", err)
 		_ = s.saveRecord(context.Background(), record)
 		return
 	}
@@ -947,14 +1241,10 @@ func (s *BackupService) DeleteBackup(ctx context.Context, backupID string) error
 		return ErrBackupNotFound
 	}
 
-	// 从 S3 删除
-	if found.S3Key != "" && found.Status == "completed" {
-		s3Cfg, err := s.loadS3Config(ctx)
-		if err == nil && s3Cfg != nil && s3Cfg.IsConfigured() {
-			objectStore, err := s.getOrCreateStore(ctx, s3Cfg)
-			if err == nil {
-				_ = objectStore.Delete(ctx, found.S3Key)
-			}
+	if (found.StorageKey != "" || found.S3Key != "") && found.Status == "completed" {
+		objectStore, key, storeErr := s.storeForRecord(ctx, found)
+		if storeErr == nil {
+			_ = objectStore.Delete(ctx, key)
 		}
 	}
 
@@ -971,20 +1261,39 @@ func (s *BackupService) GetBackupDownloadURL(ctx context.Context, backupID strin
 		return "", infraerrors.BadRequest("BACKUP_NOT_COMPLETED", "backup is not completed")
 	}
 
-	s3Cfg, err := s.loadS3Config(ctx)
-	if err != nil {
-		return "", err
+	if record.StorageType == BackupStorageTypeLocal {
+		return "", infraerrors.BadRequest("LOCAL_BACKUP_DOWNLOAD_REQUIRED", "local backups must use the authenticated download endpoint")
 	}
-	objectStore, err := s.getOrCreateStore(ctx, s3Cfg)
+	objectStore, key, err := s.storeForRecord(ctx, record)
 	if err != nil {
 		return "", err
 	}
 
-	url, err := objectStore.PresignURL(ctx, record.S3Key, 1*time.Hour)
+	url, err := objectStore.PresignURL(ctx, key, 1*time.Hour)
 	if err != nil {
 		return "", fmt.Errorf("presign url: %w", err)
 	}
 	return url, nil
+}
+
+// OpenBackup returns a completed backup stream for the authenticated download endpoint.
+func (s *BackupService) OpenBackup(ctx context.Context, backupID string) (*BackupRecord, io.ReadCloser, error) {
+	record, err := s.GetBackupRecord(ctx, backupID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if record.Status != "completed" {
+		return nil, nil, infraerrors.BadRequest("BACKUP_NOT_COMPLETED", "backup is not completed")
+	}
+	store, key, err := s.storeForRecord(ctx, record)
+	if err != nil {
+		return nil, nil, err
+	}
+	body, err := store.Download(ctx, key)
+	if err != nil {
+		return nil, nil, fmt.Errorf("backup download failed: %w", err)
+	}
+	return record, body, nil
 }
 
 // ─── 内部方法 ───
@@ -997,6 +1306,9 @@ func (s *BackupService) loadS3Config(ctx context.Context) (*BackupS3Config, erro
 	var cfg BackupS3Config
 	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
 		return nil, ErrBackupS3ConfigCorrupt
+	}
+	if err := normalizeBackupCloudConfig(&cfg); err != nil {
+		return nil, err
 	}
 	// 解密 SecretAccessKey
 	if cfg.SecretAccessKey != "" {
@@ -1141,10 +1453,16 @@ func (s *BackupService) cleanupOldBackups(ctx context.Context, schedule *BackupS
 		}
 	}
 
-	// 删除 S3 上的文件
+	// Delete artifacts using the destination recorded with each backup.
 	for _, r := range toDelete {
-		if r.S3Key != "" {
-			_ = s.deleteS3Object(ctx, r.S3Key)
+		key := r.StorageKey
+		if key == "" {
+			key = r.S3Key
+		}
+		if key != "" {
+			if store, _, err := s.storeForRecord(ctx, &r); err == nil {
+				_ = store.Delete(ctx, key)
+			}
 		}
 	}
 
@@ -1153,16 +1471,4 @@ func (s *BackupService) cleanupOldBackups(ctx context.Context, schedule *BackupS
 		return s.saveRecordsLocked(ctx, toKeep)
 	}
 	return nil
-}
-
-func (s *BackupService) deleteS3Object(ctx context.Context, key string) error {
-	s3Cfg, err := s.loadS3Config(ctx)
-	if err != nil || s3Cfg == nil {
-		return nil
-	}
-	objectStore, err := s.getOrCreateStore(ctx, s3Cfg)
-	if err != nil {
-		return err
-	}
-	return objectStore.Delete(ctx, key)
 }

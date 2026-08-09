@@ -1,7 +1,45 @@
 <template>
     <div class="space-y-6">
-      <!-- S3 Storage Config -->
+      <!-- Backup destination -->
       <div class="card p-6">
+        <div class="mb-4">
+          <h3 class="text-base font-semibold text-gray-900 dark:text-white">
+            {{ t('admin.backup.storage.title') }}
+          </h3>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            {{ t('admin.backup.storage.description') }}
+          </p>
+        </div>
+        <div class="inline-flex rounded-lg border border-gray-200 p-1 dark:border-dark-600">
+          <button
+            type="button"
+            class="rounded-md px-3 py-1.5 text-sm"
+            :class="storageForm.storage_type === 's3' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-300'"
+            @click="selectStorageType('s3')"
+          >
+            {{ t('admin.backup.storage.cloud') }}
+          </button>
+          <button
+            type="button"
+            class="rounded-md px-3 py-1.5 text-sm"
+            :class="storageForm.storage_type === 'local' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-300'"
+            @click="selectStorageType('local')"
+          >
+            {{ t('admin.backup.storage.local') }}
+          </button>
+        </div>
+        <p v-if="storageForm.storage_type === 'local'" class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+          {{ t('admin.backup.storage.localDefaultHint') }}
+        </p>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button type="button" class="btn btn-primary btn-sm" :disabled="savingStorage" @click="saveStorage">
+            {{ savingStorage ? t('common.loading') : t('common.save') }}
+          </button>
+        </div>
+      </div>
+
+      <!-- S3 Storage Config -->
+      <div v-if="storageForm.storage_type === 's3'" class="card p-6">
         <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 class="text-base font-semibold text-gray-900 dark:text-white">
@@ -16,12 +54,23 @@
         </div>
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>
+            <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.s3.provider') }}</label>
+            <select v-model="s3Form.provider" class="input w-full">
+              <option value="s3">{{ t('admin.backup.s3.providerS3') }}</option>
+              <option value="tencent_cos">{{ t('admin.backup.s3.providerTencentCos') }}</option>
+            </select>
+          </div>
+          <div v-if="s3Form.provider !== 'tencent_cos'">
             <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.s3.endpoint') }}</label>
             <input v-model="s3Form.endpoint" class="input w-full" placeholder="https://<account_id>.r2.cloudflarestorage.com" />
           </div>
           <div>
             <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.s3.region') }}</label>
-            <input v-model="s3Form.region" class="input w-full" placeholder="auto" />
+            <select v-if="s3Form.provider === 'tencent_cos'" v-model="s3Form.region" class="input w-full">
+              <option value="auto" disabled>{{ t('admin.backup.s3.selectRegion') }}</option>
+              <option v-for="region in tencentCosRegions" :key="region" :value="region">{{ region }}</option>
+            </select>
+            <input v-else v-model="s3Form.region" class="input w-full" placeholder="auto" />
           </div>
           <div>
             <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.s3.bucket') }}</label>
@@ -32,11 +81,11 @@
             <input v-model="s3Form.prefix" class="input w-full" placeholder="backups/" />
           </div>
           <div>
-            <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.s3.accessKeyId') }}</label>
+            <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ s3Form.provider === 'tencent_cos' ? t('admin.backup.s3.secretId') : t('admin.backup.s3.accessKeyId') }}</label>
             <input v-model="s3Form.access_key_id" class="input w-full" />
           </div>
           <div>
-            <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.s3.secretAccessKey') }}</label>
+            <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ s3Form.provider === 'tencent_cos' ? t('admin.backup.s3.secretKey') : t('admin.backup.s3.secretAccessKey') }}</label>
             <input v-model="s3Form.secret_access_key" type="password" class="input w-full" :placeholder="s3SecretConfigured ? t('admin.backup.s3.secretConfigured') : ''" />
           </div>
           <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 md:col-span-2">
@@ -199,6 +248,7 @@
                 <th class="py-2 pr-4">ID</th>
                 <th class="py-2 pr-4">{{ t('admin.backup.columns.status') }}</th>
                 <th class="py-2 pr-4">{{ t('admin.backup.columns.fileName') }}</th>
+                <th class="py-2 pr-4">{{ t('admin.backup.columns.storage') }}</th>
                 <th class="py-2 pr-4">{{ t('admin.backup.columns.size') }}</th>
                 <th class="py-2 pr-4">{{ t('admin.backup.columns.expiresAt') }}</th>
                 <th class="py-2 pr-4">{{ t('admin.backup.columns.triggeredBy') }}</th>
@@ -220,6 +270,9 @@
                   </span>
                 </td>
                 <td class="py-3 pr-4 text-xs">{{ record.file_name }}</td>
+                <td class="py-3 pr-4 text-xs">
+                  {{ record.storage_type === 'local' ? t('admin.backup.storage.local') : record.storage_provider === 'tencent_cos' ? t('admin.backup.s3.providerTencentCos') : t('admin.backup.storage.cloud') }}
+                </td>
                 <td class="py-3 pr-4 text-xs">{{ formatSize(record.size_bytes) }}</td>
                 <td class="py-3 pr-4 text-xs">
                   {{ record.expires_at ? formatDate(record.expires_at) : t('admin.backup.neverExpire') }}
@@ -234,7 +287,7 @@
                       v-if="record.status === 'completed'"
                       type="button"
                       class="btn btn-secondary btn-xs"
-                      @click="downloadBackup(record.id)"
+                      @click="downloadBackup(record)"
                     >
                       {{ t('admin.backup.actions.download') }}
                     </button>
@@ -258,7 +311,7 @@
                 </td>
               </tr>
               <tr v-if="backups.length === 0">
-                <td colspan="8" class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                <td colspan="9" class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
                   {{ t('admin.backup.empty') }}
                 </td>
               </tr>
@@ -361,6 +414,7 @@ import { adminAPI } from '@/api'
 import { useAppStore } from '@/stores'
 import type {
   BackupS3Config,
+  BackupStorageConfig,
   BackupScheduleConfig,
   BackupRecord,
   ImageStorageConfig,
@@ -385,6 +439,7 @@ function reportStepUpBlocked(error: unknown): boolean {
 
 // S3 config
 const s3Form = ref<BackupS3Config>({
+  provider: 's3',
   endpoint: '',
   region: 'auto',
   bucket: '',
@@ -396,6 +451,30 @@ const s3Form = ref<BackupS3Config>({
 const s3SecretConfigured = ref(false)
 const savingS3 = ref(false)
 const testingS3 = ref(false)
+const tencentCosRegions = [
+  'ap-beijing',
+  'ap-nanjing',
+  'ap-shanghai',
+  'ap-guangzhou',
+  'ap-chengdu',
+  'ap-chongqing',
+  'ap-hongkong',
+  'ap-singapore',
+  'ap-tokyo',
+  'ap-seoul',
+  'ap-mumbai',
+  'ap-bangkok',
+  'na-siliconvalley',
+  'na-ashburn',
+  'eu-frankfurt',
+  'eu-moscow',
+  'sa-saopaulo',
+]
+
+const storageForm = ref<BackupStorageConfig>({
+  storage_type: 's3',
+})
+const savingStorage = ref(false)
 
 // Async image object storage. Shares the S3 client with backups, so the default is
 // to reuse the credentials configured above and only differ by prefix.
@@ -554,6 +633,7 @@ async function loadS3Config() {
   try {
     const cfg = await adminAPI.backup.getS3Config()
     s3Form.value = {
+      provider: cfg.provider || 's3',
       endpoint: cfg.endpoint || '',
       region: cfg.region || 'auto',
       bucket: cfg.bucket || '',
@@ -566,6 +646,37 @@ async function loadS3Config() {
   } catch (error) {
     appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
   }
+}
+
+async function loadStorageConfig() {
+  try {
+    const cfg = await adminAPI.backup.getStorageConfig()
+    storageForm.value = {
+      storage_type: cfg.storage_type || 's3',
+    }
+  } catch (error) {
+    appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
+  }
+}
+
+async function saveStorage() {
+  savingStorage.value = true
+  try {
+    await backupStepUp.run(() => adminAPI.backup.updateStorageConfig(storageForm.value))
+    appStore.showSuccess(t('admin.backup.storage.saved'))
+    await loadStorageConfig()
+  } catch (error) {
+    if (isStepUpCancelled(error)) return
+    if (reportStepUpBlocked(error)) return
+    appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
+  } finally {
+    savingStorage.value = false
+  }
+}
+
+function selectStorageType(storageType: BackupStorageConfig['storage_type']) {
+  storageForm.value.storage_type = storageType
+  if (storageType === 's3') void loadS3Config()
 }
 
 async function saveS3Config() {
@@ -712,15 +823,16 @@ async function createBackup() {
   }
 }
 
-async function downloadBackup(id: string) {
+async function downloadBackup(record: BackupRecord) {
   try {
-    const result = await backupStepUp.run(() => adminAPI.backup.getDownloadURL(id))
-    // 预签名 URL 带 attachment disposition，同页 anchor 导航直接触发下载；
-    // 不用 window.open：step-up 弹窗 await 会耗尽瞬态用户激活，新标签页会被浏览器拦截。
+    const blob = await backupStepUp.run(() => adminAPI.backup.downloadBackup(record.id))
+    const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
-    link.href = result.url
+    link.href = url
+    link.download = record.file_name
     link.rel = 'noopener'
     link.click()
+    window.setTimeout(() => URL.revokeObjectURL(url), 0)
   } catch (error) {
     if (isStepUpCancelled(error)) return
     if (reportStepUpBlocked(error)) return
@@ -790,7 +902,13 @@ function formatDate(value?: string): string {
 
 onMounted(async () => {
   document.addEventListener('visibilitychange', handleVisibilityChange)
-  await Promise.all([loadS3Config(), loadImageStorageConfig(), loadSchedule(), loadBackups()])
+  await loadStorageConfig()
+  await Promise.all([
+    storageForm.value.storage_type === 's3' ? loadS3Config() : Promise.resolve(),
+    loadImageStorageConfig(),
+    loadSchedule(),
+    loadBackups(),
+  ])
 
   // 如果有正在 running 的备份，恢复轮询
   const runningBackup = backups.value.find(r => r.status === 'running')
