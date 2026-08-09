@@ -148,3 +148,6 @@ output/
 # Local portable PostgreSQL clients used for backup/restore
 tools/postgresql/*
 !tools/postgresql/README.md
+
+# Vitest / Vite cache at repo root
+.vite/
