@@ -24,7 +24,7 @@ services:
   # Sub2API Application
   # ===========================================================================
   sub2api:
-    image: "${SUB2API_IMAGE:-ghcr.io/todaybin/sub2api:0.1.173-custom.2}"
+    image: "${SUB2API_IMAGE:-ghcr.io/todaybin/sub2api:0.1.173-custom.3}"
     container_name: sub2api
     restart: unless-stopped
     security_opt:
