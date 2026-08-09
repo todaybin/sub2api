@@ -219,7 +219,7 @@ func (s *UpdateService) applyReleaseAssets(ctx context.Context, releaseAssets []
 	var checksumURL string
 
 	for _, asset := range releaseAssets {
-		if strings.Contains(asset.Name, archiveName) && !strings.HasSuffix(asset.Name, ".txt") {
+		if releaseArchiveMatchesPlatform(asset.Name, archiveName) {
 			downloadURL = asset.DownloadURL
 		}
 		if asset.Name == "checksums.txt" {
@@ -311,6 +311,15 @@ func (s *UpdateService) applyReleaseAssets(ctx context.Context, releaseAssets []
 	// Success - backup file is kept for rollback capability
 	// It will be cleaned up on next successful update
 	return nil
+}
+
+// releaseArchiveMatchesPlatform accepts only the standard release archive for
+// the current platform. Release pages may also contain checksum sidecars and
+// optional packages (for example, an archive with PostgreSQL backup tools),
+// neither of which is a self-update binary.
+func releaseArchiveMatchesPlatform(name, archiveName string) bool {
+	return strings.HasSuffix(name, "_"+archiveName+".tar.gz") ||
+		strings.HasSuffix(name, "_"+archiveName+".zip")
 }
 
 // Rollback restores the previous version

@@ -295,3 +295,12 @@ func TestUpdateServiceRollbackToVersionAcceptsVPrefix(t *testing.T) {
 	require.NotErrorIs(t, err, ErrRollbackVersionNotAllowed)
 	require.Contains(t, err.Error(), "no compatible release found")
 }
+
+func TestReleaseArchiveMatchesPlatformExcludesOptionalPackagesAndChecksums(t *testing.T) {
+	archiveName := "linux_amd64"
+
+	require.True(t, releaseArchiveMatchesPlatform("sub2api_0.1.173-custom.3_linux_amd64.tar.gz", archiveName))
+	require.False(t, releaseArchiveMatchesPlatform("sub2api_0.1.173-custom.3_linux_amd64_with_backup_tools.tar.gz", archiveName))
+	require.False(t, releaseArchiveMatchesPlatform("sub2api_0.1.173-custom.3_linux_amd64.tar.gz.sha256", archiveName))
+	require.False(t, releaseArchiveMatchesPlatform("sub2api_0.1.173-custom.3_windows_amd64.zip", archiveName))
+}
