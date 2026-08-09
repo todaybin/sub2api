@@ -67,6 +67,16 @@ tools/postgresql/windows-amd64/bin/其他依赖 DLL
 
 ## 项目内便携客户端
 
+当前项目已放入与仓库默认 `postgres:18-alpine` 同主版本的 PostgreSQL `18.4` 客户端：
+
+```text
+tools/postgresql/windows-amd64/bin/  Windows x64，EDB PostgreSQL 18.4 官方二进制包
+tools/postgresql/linux-amd64/bin/    Linux x64，PGDG PostgreSQL 18.4 Debian 12 客户端包
+tools/postgresql/linux-amd64/lib/    Linux x64 对应的 libpq 运行库
+```
+
+Windows 版已在本机验证 `pg_dump.exe --version` 和 `psql.exe --version`，均返回 `18.4`。Linux 版针对 Debian 12、Ubuntu 22.04 及其他使用 glibc 2.34 或更新版本的 x64 发行版。Alpine Linux 使用 musl，不能使用此处的 glibc 客户端；请在 Alpine 中执行 `apk add postgresql-client`，或使用项目 Docker 镜像内置的同主版本客户端。
+
 支持以下目录布局：
 
 ```text

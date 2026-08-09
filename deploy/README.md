@@ -22,6 +22,8 @@ This directory contains files for deploying Sub2API on Linux servers and Apple-s
 | `.env.example` | Container environment variables template |
 | `DOCKER.md` | Docker Hub documentation |
 | `install.sh` | One-click binary installation script |
+| `start.sh` | Portable binary-package startup script (embedded UI, skips setup for installed systems) |
+| `BUILD_CN.md` | Linux AMD64 integrated build and release rules (Chinese) |
 | `install-datamanagementd.sh` | datamanagementd 一键安装脚本 |
 | `sub2api.service` | Systemd service unit file |
 | `sub2api-datamanagementd.service` | datamanagementd systemd service unit file |
