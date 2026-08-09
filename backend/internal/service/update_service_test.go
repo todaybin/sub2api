@@ -304,3 +304,19 @@ func TestReleaseArchiveMatchesPlatformExcludesOptionalPackagesAndChecksums(t *te
 	require.False(t, releaseArchiveMatchesPlatform("sub2api_0.1.173-custom.3_linux_amd64.tar.gz.sha256", archiveName))
 	require.False(t, releaseArchiveMatchesPlatform("sub2api_0.1.173-custom.3_windows_amd64.zip", archiveName))
 }
+
+func TestUpdateServiceCustomCacheRecomputesAvailabilityForCurrentVersion(t *testing.T) {
+	cache := &updateServiceCacheStub{data: `{"latest":"0.1.173","self_update_available":true,"self_update_version":"0.1.173-custom.3","timestamp":4102444800}`}
+	svc := NewUpdateService(
+		cache,
+		&updateServiceGitHubClientStub{},
+		"0.1.173-custom.3",
+		"custom",
+	)
+
+	info, err := svc.CheckUpdate(context.Background(), false)
+
+	require.NoError(t, err)
+	require.False(t, info.SelfUpdateAvailable)
+	require.Equal(t, "0.1.173-custom.3", info.SelfUpdateVersion)
+}

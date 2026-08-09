@@ -732,6 +732,15 @@ func (s *UpdateService) getFromCache(ctx context.Context) (*UpdateInfo, error) {
 	if s.isCustomBuild() && cached.SelfUpdateVersion == "" {
 		return nil, fmt.Errorf("cached custom update data is incomplete")
 	}
+	if s.isCustomBuild() {
+		if _, ok := parseCustomVersion(cached.SelfUpdateVersion); !ok {
+			return nil, fmt.Errorf("cached custom update data has invalid version")
+		}
+		// The cache can outlive the binary that created it (for example, after
+		// upgrading the container while Redis is retained). Recompute this
+		// decision against the running version instead of trusting stale state.
+		cached.SelfUpdateAvailable = compareCustomVersions(s.currentVersion, cached.SelfUpdateVersion) < 0
+	}
 	if !s.isCustomBuild() && cached.SelfUpdateVersion == "" {
 		cached.SelfUpdateVersion = cached.Latest
 		cached.SelfUpdateAvailable = compareVersions(s.currentVersion, cached.Latest) < 0
