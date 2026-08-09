@@ -372,6 +372,213 @@ func TestUpstreamBillingProbeSuccessPersistsSanitizedSnapshot(t *testing.T) {
 	require.Equal(t, snapshot.Status, persisted.Status)
 }
 
+const upstreamBillingProbeResponseWithoutBalance = `{
+	"object":"sub2api.key_billing",
+	"schema_version":1,
+	"billing_scope":"token",
+	"group_rate_multiplier":0.8,
+	"resolved_rate_multiplier":0.8,
+	"peak_rate_enabled":false,
+	"effective_rate_multiplier":0.8,
+	"observed_at":"2026-07-13T01:00:00Z"
+}`
+
+func TestUpstreamBillingProbeFallsBackToGenericBalance(t *testing.T) {
+	account := &Account{
+		ID:          18,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Concurrency: 2,
+		Credentials: map[string]any{"api_key": "sk-sensitive", "base_url": "https://upstream.example/v1"},
+		Extra: map[string]any{
+			UpstreamBillingProbeEnabledExtraKey:     true,
+			UpstreamBillingBalanceQueryModeExtraKey: "generic",
+		},
+	}
+	repo := &upstreamBillingProbeAccountRepo{accounts: map[int64]*Account{account.ID: account}}
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(upstreamBillingProbeResponseWithoutBalance))},
+		{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"balance":"12.50"}`))},
+	}}
+	svc := newUpstreamBillingProbeTestService(repo, upstream, &upstreamBillingProbeSettingRepo{})
+
+	snapshot, err := svc.ProbeAccount(context.Background(), account.ID)
+	require.NoError(t, err)
+	require.Equal(t, UpstreamBillingProbeStatusOK, snapshot.Status)
+	require.Equal(t, UpstreamBillingProbeStatusOK, snapshot.BalanceStatus)
+	require.Equal(t, 12.5, snapshot.Data["balance"])
+	require.Equal(t, "USD", snapshot.Data["currency"])
+	require.Equal(t, "generic", snapshot.Data["balance_source"])
+	require.Len(t, upstream.requests, 2)
+	require.Equal(t, "https://upstream.example/user/balance", upstream.requests[1].URL.String())
+	require.Equal(t, "Bearer sk-sensitive", upstream.requests[1].Header.Get("Authorization"))
+}
+
+func TestBuildUpstreamBillingAuxiliaryURLRemovesModelV1Suffix(t *testing.T) {
+	tests := []struct {
+		name     string
+		baseURL  string
+		endpoint string
+		want     string
+	}{
+		{
+			name:     "new api model base",
+			baseURL:  "https://www.juaiapi.com/v1",
+			endpoint: "/api/user/self",
+			want:     "https://www.juaiapi.com/api/user/self",
+		},
+		{
+			name:     "sub2api usage model base",
+			baseURL:  "https://upstream.example/v1/",
+			endpoint: "/v1/usage",
+			want:     "https://upstream.example/v1/usage",
+		},
+		{
+			name:     "reverse proxy prefix",
+			baseURL:  "https://upstream.example/gateway/v1",
+			endpoint: "/user/balance",
+			want:     "https://upstream.example/gateway/user/balance",
+		},
+		{
+			name:     "root base",
+			baseURL:  "https://upstream.example",
+			endpoint: "/user/balance",
+			want:     "https://upstream.example/user/balance",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, buildUpstreamBillingAuxiliaryURL(tt.baseURL, tt.endpoint))
+		})
+	}
+}
+
+func TestParseNewAPIUpstreamBalanceResponseUsesUSDByDefault(t *testing.T) {
+	data, err := parseNewAPIUpstreamBalanceResponse([]byte(`{"success":true,"data":{"quota":25000000}}`))
+	require.NoError(t, err)
+	require.Equal(t, 50.0, data["balance"])
+	require.Equal(t, "USD", data["currency"])
+}
+
+func TestParseSub2APIUsageResponse(t *testing.T) {
+	data, err := parseSub2APIUsageResponse([]byte(`{"balance":56.63329189,"remaining":56.63329189,"unit":"CNY","isValid":true}`))
+	require.NoError(t, err)
+	require.Equal(t, 56.63329189, data["balance"])
+	require.Equal(t, "CNY", data["currency"])
+}
+
+func TestUpstreamBillingProbeAutoUsesSub2APIUsageAndCurrencyOverride(t *testing.T) {
+	account := &Account{
+		ID:          20,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Concurrency: 2,
+		Credentials: map[string]any{"api_key": "sk-sensitive", "base_url": "https://upstream.example"},
+		Extra: map[string]any{
+			UpstreamBillingProbeEnabledExtraKey:     true,
+			UpstreamBillingBalanceQueryModeExtraKey: "auto",
+			UpstreamBillingBalanceCurrencyExtraKey:  "CNY",
+		},
+	}
+	repo := &upstreamBillingProbeAccountRepo{accounts: map[int64]*Account{account.ID: account}}
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(upstreamBillingProbeResponseWithoutBalance))},
+		{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"remaining":"56.63329189","unit":"USD","isValid":true}`))},
+	}}
+	svc := newUpstreamBillingProbeTestService(repo, upstream, &upstreamBillingProbeSettingRepo{})
+
+	snapshot, err := svc.ProbeAccount(context.Background(), account.ID)
+	require.NoError(t, err)
+	require.Equal(t, UpstreamBillingProbeStatusOK, snapshot.BalanceStatus)
+	require.Equal(t, 56.63329189, snapshot.Data["balance"])
+	require.Equal(t, "CNY", snapshot.Data["currency"])
+	require.Equal(t, "sub2api_usage", snapshot.Data["balance_source"])
+	require.Len(t, upstream.requests, 2)
+	require.Equal(t, "https://upstream.example/v1/usage", upstream.requests[1].URL.String())
+	require.Equal(t, "cc-switch/1.0", upstream.requests[1].Header.Get("User-Agent"))
+}
+
+func TestParseNewAPIUpstreamBalanceResponseHonorsCurrency(t *testing.T) {
+	data, err := parseNewAPIUpstreamBalanceResponse([]byte(`{"success":true,"data":{"quota":25000000,"currency":"USD"}}`))
+	require.NoError(t, err)
+	require.Equal(t, "USD", data["currency"])
+}
+
+func TestUpstreamBillingProbeUsesNewAPIPATWithoutLegacyUserID(t *testing.T) {
+	account := &Account{
+		ID:          19,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Schedulable: true,
+		Concurrency: 2,
+		Credentials: map[string]any{
+			"api_key":                            "sk-sensitive",
+			"base_url":                           "https://new-api.example",
+			UpstreamBillingBalanceAccessTokenKey: "access-sensitive",
+		},
+		Extra: map[string]any{
+			UpstreamBillingProbeEnabledExtraKey:     true,
+			UpstreamBillingBalanceQueryModeExtraKey: "new_api",
+		},
+	}
+	repo := &upstreamBillingProbeAccountRepo{accounts: map[int64]*Account{account.ID: account}}
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		{StatusCode: http.StatusNotFound, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"error":"not found"}`))},
+		{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"success":true,"data":{"quota":0}}`))},
+	}}
+	settingsRepo := &upstreamBillingProbeSettingRepo{values: map[string]string{
+		SettingKeyUpstreamBillingProbeSettings: `{"enabled":true,"interval_minutes":30,"auto_disable_zero_balance":true}`,
+	}}
+	svc := newUpstreamBillingProbeTestService(repo, upstream, settingsRepo)
+
+	snapshot, err := svc.probeScheduledAccount(context.Background(), account.ID, 30, true)
+	require.NoError(t, err)
+	require.Equal(t, float64(0), snapshot.Data["balance"])
+	require.False(t, account.Schedulable)
+	require.Len(t, upstream.requests, 2)
+	require.Equal(t, "https://new-api.example/v1/sub2api/billing", upstream.requests[0].URL.String())
+	require.Equal(t, "https://new-api.example/api/user/self", upstream.requests[1].URL.String())
+	require.Equal(t, "Bearer access-sensitive", upstream.requests[1].Header.Get("Authorization"))
+	require.Empty(t, upstream.requests[1].Header.Get("New-Api-User"))
+}
+
+func TestUpstreamBillingProbeSendsLegacyNewAPIUserIDWhenConfigured(t *testing.T) {
+	account := &Account{
+		ID:          21,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			UpstreamBillingBalanceAccessTokenKey: "access-sensitive",
+			UpstreamBillingBalanceUserIDKey:      "42",
+		},
+		Extra: map[string]any{
+			UpstreamBillingBalanceQueryModeExtraKey: "new_api",
+		},
+	}
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{},
+		Body:       io.NopCloser(strings.NewReader(`{"success":true,"data":{"quota":25000000}}`)),
+	}}
+	svc := newUpstreamBillingProbeTestService(
+		&upstreamBillingProbeAccountRepo{accounts: map[int64]*Account{account.ID: account}},
+		upstream,
+		&upstreamBillingProbeSettingRepo{},
+	)
+
+	data, result := svc.probeFallbackBalance(context.Background(), account, "https://new-api.example", "", "sk-sensitive")
+
+	require.Empty(t, result.reason)
+	require.Equal(t, 50.0, data["balance"])
+	require.Len(t, upstream.requests, 1)
+	require.Equal(t, "42", upstream.requests[0].Header.Get("New-Api-User"))
+}
+
 func TestUpstreamBillingProbeAutoDisablesOnlyScheduledBalanceAccounts(t *testing.T) {
 	for _, tt := range []struct {
 		name        string

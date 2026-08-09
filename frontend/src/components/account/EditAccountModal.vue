@@ -1701,6 +1701,62 @@
           @update:model-value="handleUpstreamBillingAutoProbeChange"
         />
       </div>
+		<div v-if="account?.type === 'apikey'" class="space-y-3">
+			<div class="flex items-center justify-between gap-4">
+				<div>
+					<label class="input-label mb-0">{{ t('admin.accounts.upstreamBilling.balanceAutoProbe') }}</label>
+					<p class="input-hint">{{ t('admin.accounts.upstreamBilling.balanceAutoProbeHint') }}</p>
+				</div>
+				<Toggle v-model="upstreamBillingBalanceProbeEnabled" data-testid="upstream-billing-balance-auto-probe" />
+			</div>
+			<template v-if="upstreamBillingBalanceProbeEnabled">
+			<div>
+				<label class="input-label">{{ t('admin.accounts.upstreamBilling.balanceQueryMode') }}</label>
+				<select v-model="upstreamBillingBalanceQueryMode" class="input" data-testid="upstream-billing-balance-query-mode" @change="handleEditUpstreamUsageModeChange">
+					<option value="auto">{{ t('admin.accounts.upstreamBilling.balanceQueryAuto') }}</option>
+					<option value="generic">{{ t('admin.accounts.upstreamBilling.balanceQueryGeneric') }}</option>
+					<option value="new_api">{{ t('admin.accounts.upstreamBilling.balanceQueryNewAPI') }}</option>
+					<option value="custom">{{ t('admin.accounts.upstreamBilling.balanceQueryCustom') }}</option>
+				</select>
+				<p class="input-hint">{{ t('admin.accounts.upstreamBilling.balanceQueryHint') }}</p>
+			</div>
+			<div>
+				<label class="input-label">{{ t('admin.accounts.upstreamBilling.balanceCurrency') }}</label>
+				<select v-model="upstreamBillingBalanceCurrency" class="input" data-testid="upstream-billing-balance-currency">
+					<option value="">{{ t('admin.accounts.upstreamBilling.balanceCurrencyAuto') }}</option>
+					<option value="USD">USD ($)</option>
+					<option value="CNY">CNY (¥)</option>
+				</select>
+				<p class="input-hint">{{ t('admin.accounts.upstreamBilling.balanceCurrencyHint') }}</p>
+			</div>
+			<template v-if="upstreamBillingBalanceQueryMode === 'new_api'">
+				<div>
+					<label class="input-label">{{ t('admin.accounts.upstreamBilling.balanceAccessToken') }}</label>
+					<input v-model="upstreamBillingBalanceAccessToken" type="password" class="input font-mono" autocomplete="new-password" :placeholder="t('admin.accounts.leaveEmptyToKeep')" />
+				</div>
+				<div>
+					<label class="input-label">{{ t('admin.accounts.upstreamBilling.balanceUserID') }}</label>
+					<input v-model="upstreamBillingBalanceUserID" type="text" class="input font-mono" />
+					<p class="input-hint">{{ t('admin.accounts.upstreamBilling.balanceUserIDHint') }}</p>
+				</div>
+			</template>
+			<div v-if="upstreamBillingBalanceQueryMode !== 'auto'">
+				<label class="input-label">{{ t('admin.accounts.upstreamBilling.queryConfigJSON') }}</label>
+				<textarea v-model="upstreamBillingUsageQueryConfigJSON" rows="14" class="input font-mono text-xs" spellcheck="false" data-testid="upstream-usage-query-config" />
+				<p class="input-hint">{{ t('admin.accounts.upstreamBilling.queryConfigHint') }}</p>
+				<details class="mt-2 rounded border border-gray-200 p-3 text-xs text-gray-600 dark:border-dark-600 dark:text-gray-300">
+					<summary class="cursor-pointer font-medium">{{ t('admin.accounts.upstreamBilling.queryConfigHelp') }}</summary>
+					<div class="mt-2 space-y-2">
+						<p>{{ t('admin.accounts.upstreamBilling.queryConfigScope') }}</p>
+						<p class="break-words font-mono">{{ t('admin.accounts.upstreamBilling.queryConfigVariables') }}</p>
+						<p class="break-words font-mono">{{ t('admin.accounts.upstreamBilling.queryConfigMapping') }}</p>
+					</div>
+				</details>
+				<button type="button" class="btn-secondary mt-2" @click="testEditUpstreamUsageQuery">{{ t('admin.accounts.upstreamBilling.testQuery') }}</button>
+				<pre v-if="upstreamBillingUsageQueryTest" class="mt-2 max-h-52 overflow-auto rounded bg-gray-100 p-3 text-xs dark:bg-dark-700">{{ upstreamBillingUsageQueryTest }}</pre>
+			</div>
+			</template>
+		</div>
 
       <OllamaCloudUsageSettings
         v-if="account?.ollama_cloud_usage?.eligible"
@@ -2703,6 +2759,7 @@ import {
   type HeaderOverrideRow
 } from '@/components/account/credentialsBuilder'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
+import { templateJSON, type UpstreamUsageQueryMode } from '@/utils/upstreamUsageQuery'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
 import { VERTEX_LOCATION_OPTIONS } from '@/constants/account'
 import {
@@ -2777,6 +2834,34 @@ interface TempUnschedRuleForm {
 const submitting = ref(false)
 const editBaseUrl = ref('https://api.anthropic.com')
 const editApiKey = ref('')
+const upstreamBillingBalanceProbeEnabled = ref(false)
+const upstreamBillingBalanceQueryMode = ref<UpstreamUsageQueryMode>('auto')
+const upstreamBillingBalanceCurrency = ref<'' | 'USD' | 'CNY'>('')
+const upstreamBillingBalanceAccessToken = ref('')
+const upstreamBillingBalanceUserID = ref('')
+const upstreamBillingUsageQueryConfigJSON = ref('')
+const upstreamBillingUsageQueryTest = ref('')
+const handleEditUpstreamUsageModeChange = () => {
+  upstreamBillingUsageQueryConfigJSON.value = templateJSON(upstreamBillingBalanceQueryMode.value)
+  upstreamBillingUsageQueryTest.value = ''
+}
+
+const testEditUpstreamUsageQuery = async () => {
+  try {
+    const config = JSON.parse(upstreamBillingUsageQueryConfigJSON.value)
+    const result = await adminAPI.accounts.testUpstreamUsageQuery({
+      platform: props.account?.platform || '',
+      base_url: editBaseUrl.value.trim(),
+      api_key: editApiKey.value.trim(),
+      access_token: upstreamBillingBalanceAccessToken.value.trim(),
+      user_id: upstreamBillingBalanceUserID.value.trim(),
+      config
+    })
+    upstreamBillingUsageQueryTest.value = JSON.stringify(result, null, 2)
+  } catch (error) {
+    upstreamBillingUsageQueryTest.value = error instanceof Error ? error.message : String(error)
+  }
+}
 // Bedrock credentials
 const editBedrockAccessKeyId = ref('')
 const editBedrockSecretAccessKey = ref('')
@@ -3357,6 +3442,16 @@ const syncFormFromAccount = (newAccount: Account | null) => {
 	autoPause5hDisabled.value = extra?.auto_pause_5h_disabled === true
 	autoPause7dDisabled.value = extra?.auto_pause_7d_disabled === true
 	upstreamBillingAutoProbeEnabled.value = extra?.upstream_billing_probe_enabled === true
+	upstreamBillingBalanceProbeEnabled.value = extra?.upstream_billing_balance_probe_enabled === true || (extra?.upstream_billing_balance_probe_enabled === undefined && upstreamBillingAutoProbeEnabled.value)
+	const balanceMode = extra?.upstream_billing_balance_query_mode
+	upstreamBillingBalanceQueryMode.value = balanceMode === 'generic' || balanceMode === 'new_api' || balanceMode === 'custom' ? balanceMode : 'auto'
+	const balanceCurrency = extra?.upstream_billing_balance_currency
+	upstreamBillingBalanceCurrency.value = balanceCurrency === 'USD' || balanceCurrency === 'CNY' ? balanceCurrency : ''
+	upstreamBillingBalanceAccessToken.value = ''
+	upstreamBillingUsageQueryConfigJSON.value = extra?.upstream_billing_usage_query_config
+		? JSON.stringify(extra.upstream_billing_usage_query_config, null, 2)
+		: (upstreamBillingBalanceQueryMode.value === 'generic' || upstreamBillingBalanceQueryMode.value === 'new_api' ? templateJSON(upstreamBillingBalanceQueryMode.value) : '')
+	upstreamBillingUsageQueryTest.value = ''
   upstreamBillingRateSyncEnabled.value =
     upstreamBillingAutoProbeEnabled.value && extra?.upstream_billing_rate_sync_enabled === true
 
@@ -3546,6 +3641,9 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   // Initialize API Key fields for apikey type
   if (newAccount.type === 'apikey' && newAccount.credentials) {
     const credentials = newAccount.credentials as Record<string, unknown>
+		upstreamBillingBalanceUserID.value = typeof credentials.upstream_billing_balance_user_id === 'string'
+			? credentials.upstream_billing_balance_user_id
+			: ''
     const platformDefaultUrl =
       newAccount.platform === 'openai'
         ? 'https://api.openai.com'
@@ -4141,10 +4239,19 @@ const handleSubmit = async () => {
     updatePayload.auto_pause_on_expired = autoPauseOnExpired.value
     if (props.account.type === 'apikey') {
       updatePayload.upstream_billing_probe_enabled = upstreamBillingAutoProbeEnabled.value
+      updatePayload.upstream_billing_balance_probe_enabled = upstreamBillingBalanceProbeEnabled.value
       updatePayload.upstream_billing_rate_sync_enabled = upstreamBillingRateSyncEnabled.value
       if (upstreamBillingRateSyncEnabled.value) {
         delete updatePayload.rate_multiplier
       }
+		const currentExtra = (props.account.extra as Record<string, unknown>) || {}
+		updatePayload.extra = {
+			...currentExtra,
+			upstream_billing_balance_query_mode: upstreamBillingBalanceQueryMode.value,
+			upstream_billing_balance_currency: upstreamBillingBalanceCurrency.value,
+			upstream_billing_balance_probe_enabled: upstreamBillingBalanceProbeEnabled.value,
+			...(upstreamBillingUsageQueryConfigJSON.value.trim() ? { upstream_billing_usage_query_config: JSON.parse(upstreamBillingUsageQueryConfigJSON.value) } : {})
+		}
     }
 
     // For apikey type, handle credentials update
@@ -4158,6 +4265,23 @@ const handleSubmit = async () => {
         ...currentCredentials,
         base_url: newBaseUrl
       }
+		if (upstreamBillingBalanceQueryMode.value === 'new_api') {
+			const hasExistingBalanceToken = props.account.credentials_status?.has_upstream_billing_balance_access_token === true
+			if (!upstreamBillingBalanceAccessToken.value.trim() && !hasExistingBalanceToken) {
+				appStore.showError(t('admin.accounts.upstreamBilling.balanceCredentialsRequired'))
+				return
+			}
+			if (upstreamBillingBalanceAccessToken.value.trim()) {
+				newCredentials.upstream_billing_balance_access_token = upstreamBillingBalanceAccessToken.value.trim()
+			}
+			if (upstreamBillingBalanceUserID.value.trim()) {
+				newCredentials.upstream_billing_balance_user_id = upstreamBillingBalanceUserID.value.trim()
+			} else {
+				delete newCredentials.upstream_billing_balance_user_id
+			}
+		} else {
+			delete newCredentials.upstream_billing_balance_user_id
+		}
 
       // Handle API key
       // 后端响应已脱敏：currentCredentials 不会再包含 api_key 原文。

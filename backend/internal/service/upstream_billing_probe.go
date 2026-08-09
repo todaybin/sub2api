@@ -13,6 +13,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"net/url"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -33,6 +34,10 @@ const (
 	UpstreamBillingProbeEnabledExtraKey          = "upstream_billing_probe_enabled"
 	UpstreamBillingRateSyncEnabledExtraKey       = "upstream_billing_rate_sync_enabled"
 	UpstreamBillingBalanceAutoDisabledAtExtraKey = "upstream_billing_balance_auto_disabled_at"
+	UpstreamBillingBalanceQueryModeExtraKey      = "upstream_billing_balance_query_mode"
+	UpstreamBillingBalanceCurrencyExtraKey       = "upstream_billing_balance_currency"
+	UpstreamBillingBalanceAccessTokenKey         = "upstream_billing_balance_access_token"
+	UpstreamBillingBalanceUserIDKey              = "upstream_billing_balance_user_id"
 
 	upstreamBillingProbeDefaultIntervalMinutes = 30
 	upstreamBillingProbeMinIntervalMinutes     = 5
@@ -106,15 +111,18 @@ type UpstreamBillingProbeSettings struct {
 // UpstreamBillingProbeSnapshot is persisted in accounts.extra. Data is kept as
 // a sanitized map so future response fields do not require a database change.
 type UpstreamBillingProbeSnapshot struct {
-	Status        string         `json:"status"`
-	Data          map[string]any `json:"data,omitempty"`
-	ReceivedAt    *time.Time     `json:"received_at,omitempty"`
-	FreshUntil    *time.Time     `json:"fresh_until,omitempty"`
-	LastAttemptAt time.Time      `json:"last_attempt_at"`
-	NextProbeAt   time.Time      `json:"next_probe_at"`
-	FailureCount  int            `json:"failure_count,omitempty"`
-	HTTPStatus    int            `json:"http_status,omitempty"`
-	LastError     string         `json:"last_error,omitempty"`
+	Status            string         `json:"status"`
+	Data              map[string]any `json:"data,omitempty"`
+	ReceivedAt        *time.Time     `json:"received_at,omitempty"`
+	FreshUntil        *time.Time     `json:"fresh_until,omitempty"`
+	LastAttemptAt     time.Time      `json:"last_attempt_at"`
+	NextProbeAt       time.Time      `json:"next_probe_at"`
+	FailureCount      int            `json:"failure_count,omitempty"`
+	HTTPStatus        int            `json:"http_status,omitempty"`
+	LastError         string         `json:"last_error,omitempty"`
+	BalanceStatus     string         `json:"balance_status,omitempty"`
+	BalanceHTTPStatus int            `json:"balance_http_status,omitempty"`
+	BalanceLastError  string         `json:"balance_last_error,omitempty"`
 	// SyncedRateMultiplier records the value this probe wrote into
 	// accounts.rate_multiplier. It is only set when the account opted into rate
 	// sync and the declared value passed the write-back range check, so the
@@ -139,6 +147,7 @@ type upstreamBillingProbeResponse struct {
 	BillingScope            string                             `json:"billing_scope"`
 	BillingMode             string                             `json:"billing_mode"`
 	Balance                 *float64                           `json:"balance"`
+	Currency                string                             `json:"currency"`
 	SubscriptionID          *int64                             `json:"subscription_id"`
 	Usage                   *upstreamBillingProbeUsageResponse `json:"usage"`
 	GroupRateMultiplier     *float64                           `json:"group_rate_multiplier"`
@@ -383,7 +392,7 @@ func (s *UpstreamBillingProbeService) RunDue(ctx context.Context) error {
 	due := make([]Account, 0, len(accounts))
 	for i := range accounts {
 		account := accounts[i]
-		if !isUpstreamBillingProbeAccount(&account) || !account.IsActive() || !upstreamBillingProbeEnabled(&account) {
+		if !isUpstreamBillingProbeAccount(&account) || !account.IsActive() || !upstreamBillingAnyProbeEnabled(&account) {
 			continue
 		}
 		snapshot := decodeUpstreamBillingProbeSnapshot(account.Extra)
@@ -431,7 +440,24 @@ func (s *UpstreamBillingProbeService) listDueAccounts(ctx context.Context, now t
 	}
 	// Non-production repositories and older adapters keep the generic path. The
 	// runner still truncates before issuing network requests.
-	return s.accountRepo.FindByExtraField(ctx, UpstreamBillingProbeEnabledExtraKey, true)
+	rateAccounts, err := s.accountRepo.FindByExtraField(ctx, UpstreamBillingProbeEnabledExtraKey, true)
+	if err != nil {
+		return nil, err
+	}
+	balanceAccounts, err := s.accountRepo.FindByExtraField(ctx, UpstreamBillingBalanceProbeEnabledExtraKey, true)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[int64]struct{}, len(rateAccounts)+len(balanceAccounts))
+	combined := make([]Account, 0, len(rateAccounts)+len(balanceAccounts))
+	for _, account := range append(rateAccounts, balanceAccounts...) {
+		if _, ok := seen[account.ID]; ok {
+			continue
+		}
+		seen[account.ID] = struct{}{}
+		combined = append(combined, account)
+	}
+	return combined, nil
 }
 
 func (s *UpstreamBillingProbeService) getSettings(ctx context.Context) (*UpstreamBillingProbeSettings, error) {
@@ -489,7 +515,7 @@ func (s *UpstreamBillingProbeService) probeAccountWithMode(ctx context.Context, 
 			return nil, ErrUpstreamBillingProbeAccountInvalid
 		}
 		if requireEnabled {
-			if !account.IsActive() || !upstreamBillingProbeEnabled(account) {
+			if !account.IsActive() || !upstreamBillingAnyProbeEnabled(account) {
 				return nil, nil
 			}
 			if snapshot := decodeUpstreamBillingProbeSnapshot(account.Extra); snapshot != nil &&
@@ -497,7 +523,7 @@ func (s *UpstreamBillingProbeService) probeAccountWithMode(ctx context.Context, 
 				return nil, nil
 			}
 		}
-		return s.probeLoadedAccount(ctx, account, intervalMinutes, autoDisableZeroBalance)
+		return s.probeLoadedAccount(ctx, account, intervalMinutes, autoDisableZeroBalance, requireEnabled)
 	})
 	if err != nil {
 		return nil, err
@@ -603,15 +629,210 @@ func (s *UpstreamBillingProbeService) SetAccountEnabled(ctx context.Context, acc
 	return s.accountRepo.UpdateExtra(ctx, accountID, updates)
 }
 
-func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, account *Account, intervalMinutes int, autoDisableZeroBalance bool) (*UpstreamBillingProbeSnapshot, error) {
+type upstreamBillingHTTPResult struct {
+	body       []byte
+	statusCode int
+	retryAfter time.Duration
+	reason     string
+}
+
+func (s *UpstreamBillingProbeService) doUpstreamBillingRequest(ctx context.Context, account *Account, requestURL, proxyURL, authorization string, extraHeaders http.Header) upstreamBillingHTTPResult {
+	probeCtx, cancel := context.WithTimeout(ctx, upstreamBillingProbeRequestTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(probeCtx, http.MethodGet, requestURL, bytes.NewReader(nil))
+	if err != nil {
+		return upstreamBillingHTTPResult{reason: "request_build_failed"}
+	}
+	profile := HTTPUpstreamProfileDefault
+	if account.Platform == PlatformOpenAI {
+		profile = HTTPUpstreamProfileOpenAI
+	}
+	reqCtx := WithHTTPUpstreamProfile(req.Context(), profile)
+	req = req.WithContext(WithHTTPUpstreamRedirectsDisabled(reqCtx))
+	req.Header.Set("Accept", "application/json")
+	// Match the compatibility templates used by upstream balance endpoints.
+	req.Header.Set("User-Agent", "cc-switch/1.0")
+	if authorization != "" {
+		req.Header.Set("Authorization", authorization)
+	}
+	for key, values := range extraHeaders {
+		for _, value := range values {
+			req.Header.Add(key, value)
+		}
+	}
+	account.ApplyHeaderOverrides(req.Header)
+	var tlsProfile *tlsfingerprint.Profile
+	if s.accountTestService.tlsFPProfileService != nil {
+		tlsProfile = s.accountTestService.tlsFPProfileService.ResolveTLSProfile(account)
+	}
+	resp, err := s.accountTestService.httpUpstream.DoWithTLS(req, proxyURL, account.ID, account.Concurrency, tlsProfile)
+	if err != nil {
+		return upstreamBillingHTTPResult{reason: "request_failed"}
+	}
+	if resp == nil || resp.Body == nil {
+		return upstreamBillingHTTPResult{reason: "empty_response"}
+	}
+	defer func() { _ = resp.Body.Close() }()
+	result := upstreamBillingHTTPResult{statusCode: resp.StatusCode, retryAfter: retryAfter(resp.Header, s.currentTime().UTC())}
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, upstreamBillingProbeMaxBodyBytes+1))
+	if readErr != nil {
+		result.reason = "response_read_failed"
+		return result
+	}
+	if len(body) > upstreamBillingProbeMaxBodyBytes {
+		result.reason = "response_too_large"
+		return result
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		result.reason = "http_error"
+		return result
+	}
+	result.body = body
+	return result
+}
+
+func buildUpstreamBillingAuxiliaryURL(baseURL, endpoint string) string {
+	parsed, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		trimmedBaseURL := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+		trimmedBaseURL = strings.TrimSuffix(trimmedBaseURL, "/v1")
+		return trimmedBaseURL + "/" + strings.TrimLeft(endpoint, "/")
+	}
+	basePath := strings.TrimRight(parsed.Path, "/")
+	if strings.EqualFold(path.Base(basePath), "v1") {
+		basePath = strings.TrimSuffix(basePath, "/"+path.Base(basePath))
+	}
+	parsed.Path = strings.TrimRight(basePath, "/") + "/" + strings.TrimLeft(endpoint, "/")
+	parsed.RawPath = ""
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String()
+}
+
+func (s *UpstreamBillingProbeService) probeFallbackBalance(ctx context.Context, account *Account, normalizedBaseURL, proxyURL, apiKey string) (map[string]any, upstreamBillingHTTPResult) {
+	mode, _ := account.Extra[UpstreamBillingBalanceQueryModeExtraKey].(string)
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	if mode == "" {
+		return nil, upstreamBillingHTTPResult{reason: "balance_query_not_configured"}
+	}
+	type balanceCandidate struct {
+		endpoint      string
+		authorization string
+		headers       http.Header
+		parser        func([]byte) (map[string]any, error)
+		source        string
+	}
+	candidates := []balanceCandidate{}
+	switch mode {
+	case "auto":
+		candidates = append(candidates,
+			balanceCandidate{
+				endpoint:      "/v1/usage",
+				authorization: "Bearer " + apiKey,
+				headers:       make(http.Header),
+				parser:        parseSub2APIUsageResponse,
+				source:        "sub2api_usage",
+			},
+			balanceCandidate{
+				endpoint:      "/user/balance",
+				authorization: "Bearer " + apiKey,
+				headers:       make(http.Header),
+				parser:        parseGenericUpstreamBalanceResponse,
+				source:        "generic",
+			},
+		)
+	case "generic", "new_api", "custom":
+		config, err := upstreamUsageConfigForAccount(account, mode)
+		if err != nil {
+			return nil, upstreamBillingHTTPResult{reason: "invalid_query_config"}
+		}
+		queryAccount := *account
+		queryAccount.Credentials = map[string]any{}
+		for key, value := range account.Credentials {
+			queryAccount.Credentials[key] = value
+		}
+		queryAccount.Credentials["base_url"] = normalizedBaseURL
+		queryAccount.Credentials["api_key"] = apiKey
+		result, httpResult := s.executeUsageQuery(ctx, &queryAccount, config, nil)
+		if httpResult.reason != "" {
+			return nil, httpResult
+		}
+		if result == nil || !result.Result.IsValid {
+			return nil, upstreamBillingHTTPResult{statusCode: httpResult.statusCode, reason: "invalid_balance_result"}
+		}
+		return usageQueryResultData(result, config), httpResult
+	default:
+		return nil, upstreamBillingHTTPResult{reason: "invalid_balance_query_mode"}
+	}
+	var lastResult upstreamBillingHTTPResult
+	for _, candidate := range candidates {
+		result := s.doUpstreamBillingRequest(ctx, account, buildUpstreamBillingAuxiliaryURL(normalizedBaseURL, candidate.endpoint), proxyURL, candidate.authorization, candidate.headers)
+		lastResult = result
+		if result.reason != "" {
+			continue
+		}
+		data, err := candidate.parser(result.body)
+		if err != nil {
+			lastResult.reason = "invalid_response"
+			continue
+		}
+		data["billing_mode"] = "balance"
+		data["balance_source"] = candidate.source
+		return data, result
+	}
+	return nil, lastResult
+}
+
+func (s *UpstreamBillingProbeService) persistFallbackBalanceAfterPrimaryFailure(
+	ctx context.Context,
+	account *Account,
+	normalizedBaseURL, proxyURL, apiKey string,
+	intervalMinutes int,
+	now time.Time,
+	primaryHTTPStatus int,
+	autoDisableZeroBalance bool,
+) (*UpstreamBillingProbeSnapshot, bool, error) {
+	balanceData, balanceResult := s.probeFallbackBalance(ctx, account, normalizedBaseURL, proxyURL, apiKey)
+	if balanceResult.reason != "" {
+		return nil, false, nil
+	}
+	if currency := upstreamBillingBalanceCurrencyOverride(account.Extra); currency != "" {
+		balanceData["currency"] = currency
+	}
+	snapshot := &UpstreamBillingProbeSnapshot{
+		Status:            UpstreamBillingProbeStatusOK,
+		Data:              balanceData,
+		ReceivedAt:        probeTimePtr(now),
+		FreshUntil:        probeTimePtr(now.Add(2 * time.Duration(intervalMinutes) * time.Minute)),
+		LastAttemptAt:     now,
+		NextProbeAt:       now.Add(nextProbeDelay(intervalMinutes, 0)),
+		HTTPStatus:        primaryHTTPStatus,
+		BalanceStatus:     UpstreamBillingProbeStatusOK,
+		BalanceHTTPStatus: balanceResult.statusCode,
+	}
+	if autoDisableZeroBalance && balanceData["billing_mode"] == "balance" && upstreamBillingBalanceExhausted(balanceData) {
+		latestSettings, settingsErr := s.getSettings(ctx)
+		if settingsErr == nil && latestSettings.Enabled && latestSettings.AutoDisableZeroBalance {
+			snapshot.AutoDisableZeroBalance = true
+		}
+	}
+	if err := s.updateSnapshot(ctx, account, snapshot, nil); err != nil {
+		return nil, true, err
+	}
+	return snapshot, true, nil
+}
+
+func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, account *Account, intervalMinutes int, autoDisableZeroBalance bool, scheduled bool) (*UpstreamBillingProbeSnapshot, error) {
 	now := s.currentTime().UTC()
 	if s.accountTestService == nil || s.accountTestService.httpUpstream == nil {
 		return s.persistProbeFailure(ctx, account, intervalMinutes, now, 0, "transport_unavailable", 0)
 	}
 	// 平台放宽后取数直读 credentials：所有 API-key 平台的密钥与自定义上游
 	// 统一存放在 credentials.api_key / credentials.base_url。
+	rateRequested := !scheduled || upstreamBillingProbeEnabled(account)
+	balanceRequested := !scheduled || upstreamBillingBalanceProbeEnabled(account)
 	apiKey := account.GetCredential("api_key")
-	if apiKey == "" {
+	if apiKey == "" && rateRequested {
 		return s.persistProbeFailure(ctx, account, intervalMinutes, now, 0, "missing_api_key", 0)
 	}
 	baseURL := account.GetCredential("base_url")
@@ -620,7 +841,7 @@ func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, ac
 			// 保持官方语义：OpenAI 账号无自定义 base 时探官方域（404 → unsupported）。
 			baseURL = "https://api.openai.com"
 		}
-	} else if upstreamBillingProbeTargetIsOfficialAPI(baseURL) {
+	} else if rateRequested && upstreamBillingProbeTargetIsOfficialAPI(baseURL) {
 		// 其他平台 base_url 为空或指向官方 API 根域（前端创建时会把空值
 		// 填成官方默认域，且提供 us-east-1.api.x.ai 等官方区域预设）⇒
 		// 必无 /v1/sub2api/billing；不发请求，直接记 unsupported，避免
@@ -640,6 +861,31 @@ func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, ac
 			return nil, ErrUpstreamBillingProbeIdentityChanged
 		}
 		proxyURL = account.Proxy.URL()
+	}
+	if !rateRequested {
+		balanceData, balanceResult := s.probeFallbackBalance(ctx, account, normalizedBaseURL, proxyURL, apiKey)
+		if balanceResult.reason != "" {
+			return s.persistProbeFailure(ctx, account, intervalMinutes, now, balanceResult.statusCode, balanceResult.reason, balanceResult.retryAfter)
+		}
+		if currency := upstreamBillingBalanceCurrencyOverride(account.Extra); currency != "" {
+			balanceData["currency"] = currency
+		}
+		snapshot := &UpstreamBillingProbeSnapshot{
+			Status: UpstreamBillingProbeStatusOK, Data: balanceData, ReceivedAt: probeTimePtr(now),
+			FreshUntil: probeTimePtr(now.Add(2 * time.Duration(intervalMinutes) * time.Minute)), LastAttemptAt: now,
+			NextProbeAt: now.Add(nextProbeDelay(intervalMinutes, 0)), BalanceStatus: UpstreamBillingProbeStatusOK,
+			BalanceHTTPStatus: balanceResult.statusCode,
+		}
+		if autoDisableZeroBalance && balanceData["billing_mode"] == "balance" && upstreamBillingBalanceExhausted(balanceData) {
+			latestSettings, settingsErr := s.getSettings(ctx)
+			if settingsErr == nil && latestSettings.Enabled && latestSettings.AutoDisableZeroBalance {
+				snapshot.AutoDisableZeroBalance = true
+			}
+		}
+		if err := s.updateSnapshot(ctx, account, snapshot, nil); err != nil {
+			return nil, err
+		}
+		return snapshot, nil
 	}
 	probeURL := buildOpenAIEndpointURL(normalizedBaseURL, "/v1/sub2api/billing")
 	probeCtx, cancel := context.WithTimeout(ctx, upstreamBillingProbeRequestTimeout)
@@ -678,13 +924,28 @@ func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, ac
 		return s.persistProbeFailure(ctx, account, intervalMinutes, now, resp.StatusCode, "response_too_large", retryAfter(resp.Header, now))
 	}
 	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed {
+		if balanceRequested {
+			if snapshot, handled, fallbackErr := s.persistFallbackBalanceAfterPrimaryFailure(ctx, account, normalizedBaseURL, proxyURL, apiKey, intervalMinutes, now, resp.StatusCode, autoDisableZeroBalance); handled {
+				return snapshot, fallbackErr
+			}
+		}
 		return s.persistProbeFailure(ctx, account, intervalMinutes, now, resp.StatusCode, "unsupported", retryAfter(resp.Header, now))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if balanceRequested {
+			if snapshot, handled, fallbackErr := s.persistFallbackBalanceAfterPrimaryFailure(ctx, account, normalizedBaseURL, proxyURL, apiKey, intervalMinutes, now, resp.StatusCode, autoDisableZeroBalance); handled {
+				return snapshot, fallbackErr
+			}
+		}
 		return s.persistProbeFailure(ctx, account, intervalMinutes, now, resp.StatusCode, "http_error", retryAfter(resp.Header, now))
 	}
 	data, err := parseUpstreamBillingProbeResponse(body)
 	if err != nil {
+		if balanceRequested {
+			if snapshot, handled, fallbackErr := s.persistFallbackBalanceAfterPrimaryFailure(ctx, account, normalizedBaseURL, proxyURL, apiKey, intervalMinutes, now, resp.StatusCode, autoDisableZeroBalance); handled {
+				return snapshot, fallbackErr
+			}
+		}
 		return s.persistProbeFailure(ctx, account, intervalMinutes, now, resp.StatusCode, "invalid_response", retryAfter(resp.Header, now))
 	}
 	snapshot := &UpstreamBillingProbeSnapshot{
@@ -696,7 +957,30 @@ func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, ac
 		NextProbeAt:   now.Add(nextProbeDelay(intervalMinutes, 0)),
 		HTTPStatus:    resp.StatusCode,
 	}
-	if autoDisableZeroBalance && upstreamBillingBalanceExhausted(data) {
+	if _, hasBalance := resolveAccountExtraNumber(data, "balance"); !hasBalance && balanceRequested && data["billing_mode"] != "subscription" {
+		balanceData, balanceResult := s.probeFallbackBalance(ctx, account, normalizedBaseURL, proxyURL, apiKey)
+		snapshot.BalanceHTTPStatus = balanceResult.statusCode
+		if balanceResult.reason != "" {
+			snapshot.BalanceStatus = UpstreamBillingProbeStatusFailed
+			snapshot.BalanceLastError = balanceResult.reason
+		} else {
+			snapshot.BalanceStatus = UpstreamBillingProbeStatusOK
+			for key, value := range balanceData {
+				data[key] = value
+			}
+		}
+	} else {
+		snapshot.BalanceStatus = UpstreamBillingProbeStatusOK
+		if _, hasCurrency := data["currency"]; !hasCurrency {
+			data["currency"] = "USD"
+		}
+	}
+	if currency := upstreamBillingBalanceCurrencyOverride(account.Extra); currency != "" {
+		if _, hasBalance := resolveAccountExtraNumber(data, "balance"); hasBalance {
+			data["currency"] = currency
+		}
+	}
+	if autoDisableZeroBalance && balanceRequested && data["billing_mode"] == "balance" && upstreamBillingBalanceExhausted(data) {
 		latestSettings, settingsErr := s.getSettings(ctx)
 		if settingsErr == nil && latestSettings.Enabled && latestSettings.AutoDisableZeroBalance {
 			snapshot.AutoDisableZeroBalance = true
@@ -849,6 +1133,14 @@ func parseUpstreamBillingProbeResponse(body []byte) (map[string]any, error) {
 			return nil, fmt.Errorf("invalid balance")
 		}
 		data["balance"] = *response.Balance
+		currency := strings.ToUpper(strings.TrimSpace(response.Currency))
+		if currency == "" {
+			currency = "USD"
+		}
+		if currency != "USD" && currency != "CNY" {
+			return nil, fmt.Errorf("invalid balance currency")
+		}
+		data["currency"] = currency
 	}
 	if response.SubscriptionID != nil {
 		if *response.SubscriptionID <= 0 {
@@ -908,6 +1200,114 @@ func parseUpstreamBillingProbeResponse(body []byte) (map[string]any, error) {
 		return nil, fmt.Errorf("inconsistent effective billing multiplier")
 	}
 	return data, nil
+}
+
+func parseGenericUpstreamBalanceResponse(body []byte) (map[string]any, error) {
+	var response map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.UseNumber()
+	if err := decoder.Decode(&response); err != nil {
+		return nil, err
+	}
+	balance, ok := parseFiniteBalanceNumber(response["balance"])
+	if !ok {
+		return nil, fmt.Errorf("missing or invalid balance")
+	}
+	return map[string]any{"balance": balance, "currency": parseBalanceCurrency(response["currency"], "USD")}, nil
+}
+
+func parseSub2APIUsageResponse(body []byte) (map[string]any, error) {
+	var response map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.UseNumber()
+	if err := decoder.Decode(&response); err != nil {
+		return nil, err
+	}
+	if valid, exists := response["isValid"]; exists && valid == false {
+		return nil, fmt.Errorf("upstream reported invalid balance")
+	}
+	balance, ok := parseFiniteBalanceNumber(response["remaining"])
+	if !ok {
+		balance, ok = parseFiniteBalanceNumber(response["balance"])
+	}
+	if !ok {
+		if quota, quotaOK := response["quota"].(map[string]any); quotaOK {
+			balance, ok = parseFiniteBalanceNumber(quota["remaining"])
+		}
+	}
+	if !ok {
+		return nil, fmt.Errorf("missing or invalid remaining balance")
+	}
+	return map[string]any{
+		"balance":  balance,
+		"currency": parseBalanceCurrency(response["unit"], "USD"),
+	}, nil
+}
+
+func upstreamBillingBalanceCurrencyOverride(extra map[string]any) string {
+	if extra == nil {
+		return ""
+	}
+	currency, _ := extra[UpstreamBillingBalanceCurrencyExtraKey].(string)
+	currency = strings.ToUpper(strings.TrimSpace(currency))
+	if currency == "USD" || currency == "CNY" {
+		return currency
+	}
+	return ""
+}
+
+func parseNewAPIUpstreamBalanceResponse(body []byte) (map[string]any, error) {
+	var response map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.UseNumber()
+	if err := decoder.Decode(&response); err != nil {
+		return nil, err
+	}
+	if success, exists := response["success"]; exists && success != true {
+		return nil, fmt.Errorf("upstream reported failure")
+	}
+	data, ok := response["data"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("missing response data")
+	}
+	quota, ok := parseFiniteBalanceNumber(data["quota"])
+	if !ok {
+		return nil, fmt.Errorf("missing or invalid quota")
+	}
+	// New API and CC Switch define 500,000 quota credits as one USD.
+	return map[string]any{"balance": quota / 500000, "currency": parseBalanceCurrency(data["currency"], "USD")}, nil
+}
+
+func parseBalanceCurrency(value any, fallback string) string {
+	currency, _ := value.(string)
+	currency = strings.ToUpper(strings.TrimSpace(currency))
+	if currency != "USD" && currency != "CNY" {
+		return fallback
+	}
+	return currency
+}
+
+func parseFiniteBalanceNumber(value any) (float64, bool) {
+	var number float64
+	switch typed := value.(type) {
+	case json.Number:
+		parsed, err := typed.Float64()
+		if err != nil {
+			return 0, false
+		}
+		number = parsed
+	case float64:
+		number = typed
+	case string:
+		parsed, err := strconv.ParseFloat(strings.TrimSpace(typed), 64)
+		if err != nil {
+			return 0, false
+		}
+		number = parsed
+	default:
+		return 0, false
+	}
+	return number, !math.IsNaN(number) && !math.IsInf(number, 0)
 }
 
 func upstreamBillingBalanceExhausted(data map[string]any) bool {
@@ -1032,6 +1432,11 @@ func decodeUpstreamBillingProbeSnapshot(extra map[string]any) *UpstreamBillingPr
 	return &snapshot
 }
 
+// DecodeUpstreamBillingProbeSnapshot returns the sanitized persisted probe snapshot.
+func DecodeUpstreamBillingProbeSnapshot(extra map[string]any) *UpstreamBillingProbeSnapshot {
+	return decodeUpstreamBillingProbeSnapshot(extra)
+}
+
 // IsUpstreamBillingProbeIdentity reports whether an account identity may opt
 // in to the upstream billing probe. `/v1/sub2api/billing` is a key-scoped
 // sub2api convention shared by the five supported API-key platforms.
@@ -1107,6 +1512,24 @@ func upstreamBillingProbeEnabled(account *Account) bool {
 	}
 	enabled, ok := account.Extra[UpstreamBillingProbeEnabledExtraKey].(bool)
 	return ok && enabled
+}
+
+func upstreamBillingBalanceProbeEnabled(account *Account) bool {
+	if account == nil || account.Extra == nil {
+		return false
+	}
+	enabled, ok := account.Extra[UpstreamBillingBalanceProbeEnabledExtraKey].(bool)
+	if ok {
+		return enabled
+	}
+	// Before the independent switch existed, enabling the billing probe also
+	// enabled its configured balance fallback. Preserve that behavior for old
+	// rows until an admin explicitly saves the new switch.
+	return upstreamBillingProbeEnabled(account)
+}
+
+func upstreamBillingAnyProbeEnabled(account *Account) bool {
+	return upstreamBillingProbeEnabled(account) || upstreamBillingBalanceProbeEnabled(account)
 }
 
 // upstreamBillingRateSyncEnabled is the probe-side pre-filter deciding whether

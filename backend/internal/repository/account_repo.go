@@ -2679,6 +2679,14 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
 	if err != nil {
 		return err
 	}
+	var expectedBalanceQueryMode any
+	if account.Extra != nil {
+		expectedBalanceQueryMode = account.Extra[service.UpstreamBillingBalanceQueryModeExtraKey]
+	}
+	expectedBalanceQueryModeJSON, err := json.Marshal(expectedBalanceQueryMode)
+	if err != nil {
+		return err
+	}
 	client := clientFromContext(ctx, r.client)
 	proxyMatches, err := lockAndMatchProbeProxyIdentity(ctx, client, account)
 	if err != nil {
@@ -2694,24 +2702,24 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
 	result, err := client.ExecContext(ctx, `
 		UPDATE accounts
 		SET
-			extra = (COALESCE(extra, '{}'::jsonb) || $1::jsonb) || CASE
+				extra = (COALESCE(extra, '{}'::jsonb) || $1::jsonb) || CASE
 				WHEN $11::boolean
 					AND schedulable IS TRUE
-					AND extra @> '{"upstream_billing_probe_enabled": true}'::jsonb
+					AND (extra @> '{"upstream_billing_probe_enabled": true}'::jsonb OR extra @> '{"upstream_billing_balance_probe_enabled": true}'::jsonb)
 				THEN $12::jsonb
 				ELSE '{}'::jsonb
 			END,
-			rate_multiplier = CASE
+				rate_multiplier = CASE
 				WHEN $10::numeric IS NOT NULL
 					AND extra @> '{"upstream_billing_probe_enabled": true}'::jsonb
 					AND extra @> '{"upstream_billing_rate_sync_enabled": true}'::jsonb
 				THEN $10::numeric
 				ELSE rate_multiplier
 			END,
-			schedulable = CASE
+				schedulable = CASE
 				WHEN $11::boolean
 					AND schedulable IS TRUE
-					AND extra @> '{"upstream_billing_probe_enabled": true}'::jsonb
+					AND (extra @> '{"upstream_billing_probe_enabled": true}'::jsonb OR extra @> '{"upstream_billing_balance_probe_enabled": true}'::jsonb)
 				THEN FALSE
 				ELSE schedulable
 			END,
@@ -2725,8 +2733,9 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
 			AND COALESCE(extra -> 'upstream_billing_probe_enabled', 'null'::jsonb) = $8::jsonb
 			AND COALESCE(extra -> 'upstream_billing_rate_sync_enabled', 'null'::jsonb) = $9::jsonb
 			AND schedulable = $13
+			AND COALESCE(extra -> 'upstream_billing_balance_query_mode', 'null'::jsonb) = $14::jsonb
 			AND deleted_at IS NULL
-	`, string(payload), account.ID, account.Platform, account.Type, string(credentials), proxyID, string(expectedSnapshotJSON), string(expectedEnabledJSON), string(expectedRateSyncEnabledJSON), rateMultiplier, snapshot.AutoDisableZeroBalance, string(autoDisablePayload), account.Schedulable)
+	`, string(payload), account.ID, account.Platform, account.Type, string(credentials), proxyID, string(expectedSnapshotJSON), string(expectedEnabledJSON), string(expectedRateSyncEnabledJSON), rateMultiplier, snapshot.AutoDisableZeroBalance, string(autoDisablePayload), account.Schedulable, string(expectedBalanceQueryModeJSON))
 	if err != nil {
 		return err
 	}
@@ -3501,7 +3510,10 @@ func (r *accountRepository) ListDueUpstreamBillingProbeAccounts(ctx context.Cont
 			WHERE deleted_at IS NULL
 				AND status = 'active'
 				AND type = 'apikey'
-				AND extra @> '{"upstream_billing_probe_enabled": true}'::jsonb
+				AND (
+					extra @> '{"upstream_billing_probe_enabled": true}'::jsonb
+					OR extra @> '{"upstream_billing_balance_probe_enabled": true}'::jsonb
+				)
 		), parsed AS MATERIALIZED (
 			SELECT
 				id,

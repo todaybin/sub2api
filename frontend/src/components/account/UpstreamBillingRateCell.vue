@@ -3,20 +3,20 @@
     <HelpTooltip class="-ml-1" width-class="w-max max-w-[calc(100vw-2rem)]" data-testid="upstream-billing-details">
       <template #trigger>
         <div class="cursor-help border-b border-dotted border-gray-300 py-0.5 dark:border-dark-600">
-          <div
-            v-if="billingIdentity"
-            class="whitespace-nowrap text-xs font-medium text-gray-800 dark:text-gray-200"
-            data-testid="upstream-billing-identity"
-          >
-            {{ billingIdentity }}
-          </div>
           <div class="flex items-center gap-1.5 whitespace-nowrap">
             <span
               class="text-sm font-medium"
               :class="hasEffectiveRate ? 'font-mono text-gray-800 dark:text-gray-200' : statusClass || 'text-gray-400 dark:text-gray-500'"
               data-testid="upstream-billing-rate"
             >
-              {{ primaryValue }}
+              {{ rateDisplay }}
+            </span>
+            <span
+              v-if="billingIdentity"
+              class="text-sm font-medium text-gray-800 dark:text-gray-200"
+              data-testid="upstream-billing-identity"
+            >
+              / {{ billingIdentity }}
             </span>
             <span v-if="usageSummary" class="text-[10px] text-gray-500 dark:text-gray-400" data-testid="upstream-billing-usage">
               {{ usageSummary }}
@@ -25,11 +25,14 @@
         </div>
       </template>
       <div class="space-y-1">
-        <template v-if="hasEffectiveRate && data">
-          <p v-if="validBalance != null">
-            {{ t('admin.accounts.upstreamBilling.balance', { value: formatCurrency(validBalance) }) }}
+        <p v-if="validBalance != null">
+          {{ t('admin.accounts.upstreamBilling.balance', { value: formattedBalance }) }}
+        </p>
+        <template v-if="data && billingDataUsable">
+          <p v-if="billingModeLabel" data-testid="upstream-billing-mode">
+            {{ t('admin.accounts.upstreamBilling.billingMode', { value: billingModeLabel }) }}
           </p>
-          <p v-else-if="data.billing_mode === 'balance'">
+          <p v-if="validBalance == null && data.billing_mode === 'balance'">
             {{ t('admin.accounts.upstreamBilling.balanceUnknown') }}
           </p>
           <p v-if="validSubscriptionID != null">
@@ -47,23 +50,25 @@
               end: formatDate(validUsage.period_end)
             }) }}
           </p>
-          <p>{{ t('admin.accounts.upstreamBilling.groupRate', { value: data.group_rate_multiplier }) }}</p>
-          <p v-if="data.user_rate_multiplier != null">
-            {{ t('admin.accounts.upstreamBilling.userRate', { value: data.user_rate_multiplier }) }}
-          </p>
-          <p>
-            {{
-              data.peak_rate_enabled
-                ? t('admin.accounts.upstreamBilling.peakRate', {
-                    start: data.peak_start,
-                    end: data.peak_end,
-                    value: data.peak_rate_multiplier,
-                    timezone: data.timezone
-                  })
-                : t('admin.accounts.upstreamBilling.noPeakRate')
-            }}
-          </p>
-          <p>{{ t('admin.accounts.upstreamBilling.effectiveRate', { value: currentEffectiveRate ?? '-' }) }}</p>
+          <template v-if="hasEffectiveRate">
+            <p v-if="data.group_rate_multiplier != null">{{ t('admin.accounts.upstreamBilling.groupRate', { value: data.group_rate_multiplier }) }}</p>
+            <p v-if="data.user_rate_multiplier != null">
+              {{ t('admin.accounts.upstreamBilling.userRate', { value: data.user_rate_multiplier }) }}
+            </p>
+            <p>
+              {{
+                data.peak_rate_enabled
+                  ? t('admin.accounts.upstreamBilling.peakRate', {
+                      start: data.peak_start,
+                      end: data.peak_end,
+                      value: data.peak_rate_multiplier,
+                      timezone: data.timezone
+                    })
+                  : t('admin.accounts.upstreamBilling.noPeakRate')
+              }}
+            </p>
+            <p>{{ t('admin.accounts.upstreamBilling.effectiveRate', { value: currentEffectiveRate ?? '-' }) }}</p>
+          </template>
           <p>{{ t('admin.accounts.upstreamBilling.updatedAt', { value: formatDate(snapshot?.received_at) }) }}</p>
         </template>
         <template v-else-if="stale && lastDetectedRate != null">
@@ -161,7 +166,10 @@ const autoDisabledAt = computed(() => {
   const value = props.account.extra?.upstream_billing_balance_auto_disabled_at
   return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : ''
 })
-const probeEnabled = computed(() => props.account.extra?.upstream_billing_probe_enabled === true)
+const probeEnabled = computed(() =>
+  props.account.extra?.upstream_billing_probe_enabled === true ||
+  props.account.extra?.upstream_billing_balance_probe_enabled === true
+)
 const nextProbeAt = computed(() => {
   const value = snapshot.value?.next_probe_at
   return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : ''
@@ -262,10 +270,12 @@ const statusClass = computed(() => {
 const hasEffectiveRate = computed(() => effectiveRate.value !== '-')
 const billingDataUsable = computed(() => validTimestamps.value && !stale.value && ['ok', 'failed'].includes(snapshot.value?.status ?? ''))
 const validBalance = computed(() => {
-  if (!billingDataUsable.value || data.value?.billing_mode !== 'balance') return null
-  const value = data.value.balance
+  if (!billingDataUsable.value) return null
+  const value = data.value?.balance
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 })
+const balanceCurrency = computed(() => data.value?.currency === 'CNY' ? 'CNY' : 'USD')
+const formattedBalance = computed(() => validBalance.value == null ? '' : formatCurrency(validBalance.value, balanceCurrency.value))
 const validSubscriptionID = computed(() => {
   if (!billingDataUsable.value || data.value?.billing_mode !== 'subscription') return null
   const value = data.value.subscription_id
@@ -281,7 +291,7 @@ const validUsage = computed(() => {
 })
 const billingIdentity = computed(() => {
   if (validBalance.value != null) {
-    return t('admin.accounts.upstreamBilling.balanceShort', { value: formatCurrency(validBalance.value) })
+    return t('admin.accounts.upstreamBilling.balanceShort', { value: formattedBalance.value })
   }
   if (validSubscriptionID.value != null) {
     return t('admin.accounts.upstreamBilling.subscriptionShort', { id: validSubscriptionID.value })
@@ -291,10 +301,16 @@ const billingIdentity = computed(() => {
   }
   return ''
 })
+const billingModeLabel = computed(() => {
+  if (!billingDataUsable.value) return ''
+  if (data.value?.billing_mode === 'subscription') return t('admin.accounts.upstreamBilling.billingModeSubscription')
+  if (data.value?.billing_mode === 'balance') return t('admin.accounts.upstreamBilling.billingModeBalance')
+  return ''
+})
 const usageSummary = computed(() => validUsage.value
   ? `${t('admin.accounts.upstreamBilling.requestsShort', { value: formatCompactNumber(validUsage.value.requests, { allowBillions: false }) })} · ${t('admin.accounts.upstreamBilling.tokensShort', { value: formatCompactNumber(validUsage.value.total_tokens) })}`
   : '')
-const primaryValue = computed(() => hasEffectiveRate.value ? effectiveRate.value : statusLabel.value || '-')
+const rateDisplay = computed(() => hasEffectiveRate.value ? effectiveRate.value : statusLabel.value || '-')
 const formatDate = (value?: string) => value
   ? new Date(value).toLocaleString(undefined, {
       month: '2-digit',

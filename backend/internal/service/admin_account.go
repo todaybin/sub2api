@@ -523,6 +523,10 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 	if err != nil {
 		return nil, err
 	}
+	accountExtra, err = NormalizeUpstreamUsageQueryExtra(accountExtra)
+	if err != nil {
+		return nil, err
+	}
 
 	// 绑定分组
 	groupIDs := input.GroupIDs
@@ -548,6 +552,9 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 	}
 
 	// 校验并规范化请求头覆写配置（header 名小写化、格式检查）
+	if err := ProtectUpstreamUsageQuerySecrets(accountExtra, input.Credentials); err != nil {
+		return nil, err
+	}
 	if err := NormalizeHeaderOverrideCredentials(input.Credentials); err != nil {
 		return nil, err
 	}
@@ -555,6 +562,9 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 	account, err := buildAccountForCreate(input, accountExtra)
 	if err != nil {
 		return nil, err
+	}
+	if enabled, ok := account.Extra[UpstreamBillingBalanceProbeEnabledExtraKey].(bool); ok && enabled && !isUpstreamBillingProbeAccount(account) {
+		return nil, ErrUpstreamBillingProbeAccountInvalid
 	}
 	if err := s.accountRepo.Create(ctx, account); err != nil {
 		return nil, err
@@ -610,6 +620,10 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		if err != nil {
 			return nil, err
 		}
+		normalizedExtra, err = NormalizeUpstreamUsageQueryExtra(normalizedExtra)
+		if err != nil {
+			return nil, err
+		}
 	}
 	previousProbeIdentity := upstreamBillingProbeIdentity(account)
 	previousOllamaUsageIdentity := ollamaCloudUsageIdentity(account)
@@ -659,6 +673,11 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		account.Credentials = MergePreservingSensitiveCreds(account.Credentials, input.Credentials)
 		// 校验并规范化请求头覆写配置（header 名小写化、格式检查）
 		if err := NormalizeHeaderOverrideCredentials(account.Credentials); err != nil {
+			return nil, err
+		}
+	}
+	if input.Extra != nil {
+		if err := ProtectUpstreamUsageQuerySecrets(normalizedExtra, account.Credentials); err != nil {
 			return nil, err
 		}
 	}
@@ -741,6 +760,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		if !isUpstreamBillingProbeAccount(account) {
 			return nil, ErrUpstreamBillingProbeAccountInvalid
 		}
+	}
+	if enabled, ok := account.Extra[UpstreamBillingBalanceProbeEnabledExtraKey].(bool); ok && enabled && !isUpstreamBillingProbeAccount(account) {
+		return nil, ErrUpstreamBillingProbeAccountInvalid
 	}
 	if account.Extra == nil && (requestedProbeEnabledUpdate != nil || requestedRateSyncEnabledUpdate != nil) {
 		account.Extra = make(map[string]any)
@@ -1169,7 +1191,7 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 }
 
 func updatesUpstreamBillingProbeIdentity(credentials map[string]any) bool {
-	for _, key := range []string{"api_key", "base_url", credKeyHeaderOverrideEnabled, credKeyHeaderOverrides} {
+	for _, key := range []string{"api_key", "base_url", credKeyHeaderOverrideEnabled, credKeyHeaderOverrides, UpstreamBillingBalanceAccessTokenKey, UpstreamBillingBalanceUserIDKey} {
 		if _, ok := credentials[key]; ok {
 			return true
 		}
@@ -1185,10 +1207,13 @@ func upstreamBillingProbeIdentity(account *Account) map[string]any {
 	if account.ProxyID != nil {
 		identity["proxy_id"] = *account.ProxyID
 	}
-	for _, key := range []string{"api_key", "base_url", credKeyHeaderOverrideEnabled, credKeyHeaderOverrides} {
+	for _, key := range []string{"api_key", "base_url", credKeyHeaderOverrideEnabled, credKeyHeaderOverrides, UpstreamBillingBalanceAccessTokenKey, UpstreamBillingBalanceUserIDKey} {
 		if value, ok := account.Credentials[key]; ok {
 			identity[key] = value
 		}
+	}
+	if value, ok := account.Extra[UpstreamBillingBalanceQueryModeExtraKey]; ok {
+		identity[UpstreamBillingBalanceQueryModeExtraKey] = value
 	}
 	return identity
 }

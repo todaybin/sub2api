@@ -635,7 +635,7 @@ const DEFAULT_HIDDEN_COLUMNS = ['today_stats', 'proxy', 'notes', 'priority', 'sc
 const HIDDEN_COLUMNS_KEY = 'account-hidden-columns'
 // One-time migration: hide scheduler score for existing admins too, because showing it opt-ins to heavy backend scoring.
 const HIDDEN_COLUMNS_VERSION_KEY = 'account-hidden-columns-version'
-const HIDDEN_COLUMNS_CURRENT_VERSION = 'scheduler-score-hidden-by-default'
+const HIDDEN_COLUMNS_CURRENT_VERSION = 'upstream-billing-visible-v1'
 
 // Sorting settings
 const ACCOUNT_SORT_STORAGE_KEY = 'account-table-sort'
@@ -706,8 +706,8 @@ const refreshTodayStatsBatch = async () => {
   // Why this checks both columns:
   // - today_stats column shows dedicated today's metrics.
   // - usage column also embeds today's stats for Key/Bedrock rows.
-  // So we only skip fetching when BOTH columns are hidden.
-  if (hiddenColumns.has('today_stats') && hiddenColumns.has('usage')) {
+  // The upstream billing column reuses this local-only batch response for persisted snapshots.
+  if (hiddenColumns.has('today_stats') && hiddenColumns.has('usage') && hiddenColumns.has('upstream_billing_rate')) {
     todayStatsLoading.value = false
     todayStatsError.value = null
     return
@@ -729,12 +729,17 @@ const refreshTodayStatsBatch = async () => {
     const result = await adminAPI.accounts.getBatchTodayStats(accountIDs)
     if (reqSeq !== todayStatsReqSeq.value) return
     const serverStats = result.stats ?? {}
+	const upstreamBilling = result.upstream_billing ?? {}
     const nextStats: Record<string, WindowStats> = {}
     for (const accountID of accountIDs) {
       const key = String(accountID)
       nextStats[key] = serverStats[key] ?? buildDefaultTodayStats()
     }
     todayStatsByAccountId.value = nextStats
+	for (const accountID of accountIDs) {
+		const snapshot = upstreamBilling[String(accountID)]
+		if (snapshot) patchUpstreamBillingSnapshot(accountID, snapshot)
+	}
   } catch (error) {
     if (reqSeq !== todayStatsReqSeq.value) return
     todayStatsError.value = 'Failed'
@@ -792,9 +797,11 @@ const loadSavedColumns = () => {
       parsed.forEach(key => {
         hiddenColumns.add(key)
       })
-      // Older saved column layouts may have scheduler_score visible; migrate them to the new safe default once.
+      // Keep newly added upstream balance data visible even when an older browser
+      // preference stored the column as hidden.
       if (localStorage.getItem(HIDDEN_COLUMNS_VERSION_KEY) !== HIDDEN_COLUMNS_CURRENT_VERSION) {
         hiddenColumns.add('scheduler_score')
+        hiddenColumns.delete('upstream_billing_rate')
         localStorage.setItem(HIDDEN_COLUMNS_KEY, JSON.stringify([...hiddenColumns]))
         localStorage.setItem(HIDDEN_COLUMNS_VERSION_KEY, HIDDEN_COLUMNS_CURRENT_VERSION)
       }
@@ -883,7 +890,7 @@ const toggleColumn = (key: string) => {
     hiddenColumns.add(key)
   }
   saveColumnsToStorage()
-  if ((key === 'today_stats' || key === 'usage') && wasHidden) {
+  if ((key === 'today_stats' || key === 'usage' || key === 'upstream_billing_rate') && wasHidden) {
     refreshTodayStatsBatch().catch((error) => {
       console.error('Failed to load account today stats after showing column:', error)
     })

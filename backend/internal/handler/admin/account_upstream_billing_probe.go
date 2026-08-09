@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"encoding/json"
 	"strconv"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
@@ -14,6 +15,47 @@ type upstreamBillingProbeEnabledRequest struct {
 
 type upstreamBillingProbeBatchRequest struct {
 	AccountIDs []int64 `json:"account_ids" binding:"required"`
+}
+
+type upstreamUsageQueryTestRequest struct {
+	Platform    string            `json:"platform"`
+	BaseURL     string            `json:"base_url"`
+	APIKey      string            `json:"api_key"`
+	AccessToken string            `json:"access_token"`
+	UserID      string            `json:"user_id"`
+	Variables   map[string]string `json:"variables,omitempty"`
+	Config      json.RawMessage   `json:"config" binding:"required"`
+}
+
+func (h *AccountHandler) TestUpstreamUsageQuery(c *gin.Context) {
+	if h.upstreamBillingProbe == nil {
+		response.ErrorFrom(c, service.ErrUpstreamBillingProbeUnavailable)
+		return
+	}
+	var req upstreamUsageQueryTestRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	var raw any
+	if err := json.Unmarshal(req.Config, &raw); err != nil {
+		response.BadRequest(c, "config must be valid JSON: "+err.Error())
+		return
+	}
+	config, err := service.DecodeUpstreamUsageQueryConfig(raw)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	result, err := h.upstreamBillingProbe.TestUsageQuery(c.Request.Context(), &service.UpstreamUsageQueryTestInput{
+		Platform: req.Platform, BaseURL: req.BaseURL, APIKey: req.APIKey, AccessToken: req.AccessToken,
+		UserID: req.UserID, Variables: req.Variables, Config: config,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
 }
 
 func (h *AccountHandler) GetUpstreamBillingProbeSettings(c *gin.Context) {

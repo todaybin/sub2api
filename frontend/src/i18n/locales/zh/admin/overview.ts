@@ -82,18 +82,32 @@ export default {
 
     backup: {
       title: '数据库备份',
-      description: '全量数据库备份到 S3 兼容存储，支持定时备份与恢复',
+      description: '全量数据库备份到本地或云存储，支持定时备份与恢复',
+      storage: {
+        title: '备份存储目标',
+        description: '选择手动和定时数据库备份的存储位置。',
+        cloud: '云存储',
+        local: '本地存储',
+        localDefaultHint: '备份文件将自动保存到当前运行目录下的 data/backups/database，无需配置路径。',
+        saved: '备份存储目标已保存'
+      },
       s3: {
-        title: 'S3 存储配置',
-        description: '配置 S3 兼容存储（支持 Cloudflare R2）',
-        descriptionPrefix: '配置 S3 兼容存储（支持',
-        descriptionSuffix: '）',
+        title: '云存储配置',
+        description: '配置 S3 兼容存储、Cloudflare R2 或腾讯云 COS',
+        descriptionPrefix: '配置云对象存储（支持',
+        descriptionSuffix: ' 和腾讯云 COS）',
+        provider: '云存储类型',
+        providerS3: 'S3 兼容存储',
+        providerTencentCos: '腾讯云 COS',
         enabled: '启用 S3 存储',
         endpoint: '端点地址',
         region: '区域',
+        selectRegion: '请选择 COS 所在区域',
         bucket: '存储桶',
         prefix: 'Key 前缀',
         accessKeyId: 'Access Key ID',
+        secretId: 'SecretID',
+        secretKey: 'SecretKEY',
         secretAccessKey: 'Secret Access Key',
         secretConfigured: '已配置，留空保持不变',
         forcePathStyle: '强制路径风格',
@@ -143,6 +157,7 @@ export default {
       columns: {
         status: '状态',
         fileName: '文件名',
+        storage: '存储位置',
         size: '大小',
         expiresAt: '过期时间',
         triggeredBy: '触发方式',
@@ -158,7 +173,7 @@ export default {
       progress: {
         pending: '准备中',
         dumping: '导出数据库',
-        uploading: '上传中',
+        uploading: '写入备份',
       },
       trigger: {
         manual: '手动',

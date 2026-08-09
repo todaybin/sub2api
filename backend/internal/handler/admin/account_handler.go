@@ -127,6 +127,7 @@ type CreateAccountRequest struct {
 	ExpiresAt               *int64         `json:"expires_at"`
 	AutoPauseOnExpired      *bool          `json:"auto_pause_on_expired"`
 	ProbeEnabled            *bool          `json:"upstream_billing_probe_enabled"`
+	BalanceProbeEnabled     *bool          `json:"upstream_billing_balance_probe_enabled"`
 	ConfirmMixedChannelRisk *bool          `json:"confirm_mixed_channel_risk"` // 用户确认混合渠道风险
 }
 
@@ -148,6 +149,7 @@ type UpdateAccountRequest struct {
 	ExpiresAt               *int64         `json:"expires_at"`
 	AutoPauseOnExpired      *bool          `json:"auto_pause_on_expired"`
 	ProbeEnabled            *bool          `json:"upstream_billing_probe_enabled"`
+	BalanceProbeEnabled     *bool          `json:"upstream_billing_balance_probe_enabled"`
 	RateSyncEnabled         *bool          `json:"upstream_billing_rate_sync_enabled"`
 	ConfirmMixedChannelRisk *bool          `json:"confirm_mixed_channel_risk"` // 用户确认混合渠道风险
 }
@@ -827,6 +829,12 @@ func (h *AccountHandler) Create(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	if req.BalanceProbeEnabled != nil {
+		if req.Extra == nil {
+			req.Extra = make(map[string]any)
+		}
+		req.Extra[service.UpstreamBillingBalanceProbeEnabledExtraKey] = *req.BalanceProbeEnabled
+	}
 	if err := service.ValidateOpenAILongContextBillingExtra(req.Platform, req.Extra); err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -963,6 +971,12 @@ func (h *AccountHandler) Update(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
+	}
+	if req.BalanceProbeEnabled != nil {
+		if req.Extra == nil {
+			req.Extra = make(map[string]any)
+		}
+		req.Extra[service.UpstreamBillingBalanceProbeEnabledExtraKey] = *req.BalanceProbeEnabled
 	}
 	if req.RateMultiplier != nil && *req.RateMultiplier < 0 {
 		response.BadRequest(c, "rate_multiplier must be >= 0")
@@ -2419,7 +2433,7 @@ func (h *AccountHandler) GetTodayStats(c *gin.Context) {
 
 // BatchTodayStatsRequest 批量今日统计请求体。
 type BatchTodayStatsRequest struct {
-	AccountIDs []int64 `json:"account_ids" binding:"required"`
+	AccountIDs []int64 `json:"account_ids"`
 }
 
 // GetBatchTodayStats 批量获取多个账号的今日统计。
@@ -2433,7 +2447,10 @@ func (h *AccountHandler) GetBatchTodayStats(c *gin.Context) {
 
 	accountIDs := normalizeInt64IDList(req.AccountIDs)
 	if len(accountIDs) == 0 {
-		response.Success(c, gin.H{"stats": map[string]any{}})
+		response.Success(c, gin.H{
+			"stats":            map[string]any{},
+			"upstream_billing": map[string]any{},
+		})
 		return
 	}
 
@@ -2458,7 +2475,21 @@ func (h *AccountHandler) GetBatchTodayStats(c *gin.Context) {
 		return
 	}
 
-	payload := gin.H{"stats": stats}
+	accounts, err := h.adminService.GetAccountsByIDs(c.Request.Context(), accountIDs)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	upstreamBilling := make(map[string]*service.UpstreamBillingProbeSnapshot, len(accounts))
+	for _, account := range accounts {
+		if account == nil {
+			continue
+		}
+		if snapshot := service.DecodeUpstreamBillingProbeSnapshot(account.Extra); snapshot != nil {
+			upstreamBilling[strconv.FormatInt(account.ID, 10)] = snapshot
+		}
+	}
+	payload := gin.H{"stats": stats, "upstream_billing": upstreamBilling}
 	cached := accountTodayStatsBatchCache.Set(cacheKey, payload)
 	if cached.ETag != "" {
 		c.Header("ETag", cached.ETag)

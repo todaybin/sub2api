@@ -1174,6 +1174,63 @@
           />
         </div>
 
+		<div class="space-y-3">
+			<div class="flex items-center justify-between gap-4">
+				<div>
+					<label class="input-label mb-0">{{ t('admin.accounts.upstreamBilling.balanceAutoProbe') }}</label>
+					<p class="input-hint">{{ t('admin.accounts.upstreamBilling.balanceAutoProbeHint') }}</p>
+				</div>
+				<Toggle v-model="upstreamBillingBalanceProbeEnabled" data-testid="upstream-billing-balance-auto-probe" />
+			</div>
+			<template v-if="upstreamBillingBalanceProbeEnabled">
+			<div>
+				<label class="input-label">{{ t('admin.accounts.upstreamBilling.balanceQueryMode') }}</label>
+				<select v-model="upstreamBillingBalanceQueryMode" class="input" data-testid="upstream-billing-balance-query-mode" @change="handleCreateUpstreamUsageModeChange">
+					<option value="auto">{{ t('admin.accounts.upstreamBilling.balanceQueryAuto') }}</option>
+					<option value="generic">{{ t('admin.accounts.upstreamBilling.balanceQueryGeneric') }}</option>
+					<option value="new_api">{{ t('admin.accounts.upstreamBilling.balanceQueryNewAPI') }}</option>
+					<option value="custom">{{ t('admin.accounts.upstreamBilling.balanceQueryCustom') }}</option>
+				</select>
+				<p class="input-hint">{{ t('admin.accounts.upstreamBilling.balanceQueryHint') }}</p>
+			</div>
+			<div>
+				<label class="input-label">{{ t('admin.accounts.upstreamBilling.balanceCurrency') }}</label>
+				<select v-model="upstreamBillingBalanceCurrency" class="input" data-testid="upstream-billing-balance-currency">
+					<option value="">{{ t('admin.accounts.upstreamBilling.balanceCurrencyAuto') }}</option>
+					<option value="USD">USD ($)</option>
+					<option value="CNY">CNY (¥)</option>
+				</select>
+				<p class="input-hint">{{ t('admin.accounts.upstreamBilling.balanceCurrencyHint') }}</p>
+			</div>
+			<template v-if="upstreamBillingBalanceQueryMode === 'new_api'">
+				<div>
+					<label class="input-label">{{ t('admin.accounts.upstreamBilling.balanceAccessToken') }}</label>
+					<input v-model="upstreamBillingBalanceAccessToken" type="password" class="input font-mono" autocomplete="new-password" />
+				</div>
+				<div>
+					<label class="input-label">{{ t('admin.accounts.upstreamBilling.balanceUserID') }}</label>
+					<input v-model="upstreamBillingBalanceUserID" type="text" class="input font-mono" />
+					<p class="input-hint">{{ t('admin.accounts.upstreamBilling.balanceUserIDHint') }}</p>
+				</div>
+			</template>
+			<div v-if="upstreamBillingBalanceQueryMode !== 'auto'">
+				<label class="input-label">{{ t('admin.accounts.upstreamBilling.queryConfigJSON') }}</label>
+				<textarea v-model="upstreamBillingUsageQueryConfigJSON" rows="14" class="input font-mono text-xs" spellcheck="false" data-testid="upstream-usage-query-config" />
+				<p class="input-hint">{{ t('admin.accounts.upstreamBilling.queryConfigHint') }}</p>
+				<details class="mt-2 rounded border border-gray-200 p-3 text-xs text-gray-600 dark:border-dark-600 dark:text-gray-300">
+					<summary class="cursor-pointer font-medium">{{ t('admin.accounts.upstreamBilling.queryConfigHelp') }}</summary>
+					<div class="mt-2 space-y-2">
+						<p>{{ t('admin.accounts.upstreamBilling.queryConfigScope') }}</p>
+						<p class="break-words font-mono">{{ t('admin.accounts.upstreamBilling.queryConfigVariables') }}</p>
+						<p class="break-words font-mono">{{ t('admin.accounts.upstreamBilling.queryConfigMapping') }}</p>
+					</div>
+				</details>
+				<button type="button" class="btn-secondary mt-2" @click="testCreateUpstreamUsageQuery">{{ t('admin.accounts.upstreamBilling.testQuery') }}</button>
+				<pre v-if="upstreamBillingUsageQueryTest" class="mt-2 max-h-52 overflow-auto rounded bg-gray-100 p-3 text-xs dark:bg-dark-700">{{ upstreamBillingUsageQueryTest }}</pre>
+			</div>
+			</template>
+		</div>
+
         <!-- Gemini API Key tier selection -->
         <div v-if="form.platform === 'gemini'">
           <label class="input-label">{{ t('admin.accounts.gemini.tier.label') }}</label>
@@ -3599,6 +3656,7 @@ import {
   type HeaderOverrideRow
 } from '@/components/account/credentialsBuilder'
 import { formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
+import { templateJSON, type UpstreamUsageQueryMode } from '@/utils/upstreamUsageQuery'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
 import { VERTEX_LOCATION_OPTIONS } from '@/constants/account'
 import {
@@ -3731,7 +3789,35 @@ const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_acco
 const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-token'
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
 const apiKeyValue = ref('')
-const upstreamBillingAutoProbeEnabled = ref(true)
+	const upstreamBillingAutoProbeEnabled = ref(true)
+	const upstreamBillingBalanceProbeEnabled = ref(true)
+	const upstreamBillingBalanceQueryMode = ref<UpstreamUsageQueryMode>('auto')
+	const upstreamBillingBalanceCurrency = ref<'' | 'USD' | 'CNY'>('')
+	const upstreamBillingBalanceAccessToken = ref('')
+	const upstreamBillingBalanceUserID = ref('')
+	const upstreamBillingUsageQueryConfigJSON = ref('')
+const upstreamBillingUsageQueryTest = ref('')
+	const handleCreateUpstreamUsageModeChange = () => {
+		upstreamBillingUsageQueryConfigJSON.value = templateJSON(upstreamBillingBalanceQueryMode.value)
+		upstreamBillingUsageQueryTest.value = ''
+	}
+
+const testCreateUpstreamUsageQuery = async () => {
+	try {
+		const config = JSON.parse(upstreamBillingUsageQueryConfigJSON.value)
+		const result = await adminAPI.accounts.testUpstreamUsageQuery({
+			platform: form.platform,
+			base_url: apiKeyBaseUrl.value.trim(),
+			api_key: apiKeyValue.value.trim(),
+			access_token: upstreamBillingBalanceAccessToken.value.trim(),
+			user_id: upstreamBillingBalanceUserID.value.trim(),
+			config
+		})
+		upstreamBillingUsageQueryTest.value = JSON.stringify(result, null, 2)
+	} catch (error) {
+		upstreamBillingUsageQueryTest.value = error instanceof Error ? error.message : String(error)
+	}
+}
 
 const syncPreviewCredentials = computed(() => {
   if (!apiKeyValue.value) return undefined
@@ -5118,6 +5204,16 @@ const handleSubmit = async () => {
     base_url: apiKeyBaseUrl.value.trim() || defaultBaseUrl,
     api_key: apiKeyValue.value.trim()
   }
+	if (upstreamBillingBalanceQueryMode.value === 'new_api') {
+		if (!upstreamBillingBalanceAccessToken.value.trim()) {
+			appStore.showError(t('admin.accounts.upstreamBilling.balanceCredentialsRequired'))
+			return
+		}
+		credentials.upstream_billing_balance_access_token = upstreamBillingBalanceAccessToken.value.trim()
+		if (upstreamBillingBalanceUserID.value.trim()) {
+			credentials.upstream_billing_balance_user_id = upstreamBillingBalanceUserID.value.trim()
+		}
+	}
   if (form.platform === 'gemini') {
     credentials.tier_id = geminiTierAIStudio.value
   }
@@ -5171,13 +5267,20 @@ const handleSubmit = async () => {
   }
 
   form.credentials = credentials
-  const extra = buildAnthropicExtra(buildOpenAIExtra())
+	const extra = {
+		...(buildAnthropicExtra(buildOpenAIExtra()) || {}),
+		upstream_billing_balance_query_mode: upstreamBillingBalanceQueryMode.value,
+		upstream_billing_balance_currency: upstreamBillingBalanceCurrency.value,
+		upstream_billing_balance_probe_enabled: upstreamBillingBalanceProbeEnabled.value,
+		...(upstreamBillingUsageQueryConfigJSON.value.trim() ? { upstream_billing_usage_query_config: JSON.parse(upstreamBillingUsageQueryConfigJSON.value) } : {})
+	}
 
   await doCreateAccount({
     ...form,
     group_ids: form.group_ids,
     extra,
-    upstream_billing_probe_enabled: upstreamBillingAutoProbeEnabled.value,
+		upstream_billing_probe_enabled: upstreamBillingAutoProbeEnabled.value,
+		upstream_billing_balance_probe_enabled: upstreamBillingBalanceProbeEnabled.value,
     auto_pause_on_expired: autoPauseOnExpired.value
   })
 }

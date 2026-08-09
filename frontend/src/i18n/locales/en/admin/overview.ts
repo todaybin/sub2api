@@ -82,18 +82,32 @@ export default {
 
     backup: {
       title: 'Database Backup',
-      description: 'Full database backup to S3-compatible storage with scheduled backup and restore',
+      description: 'Full database backup to local or cloud storage with scheduled backup and restore',
+      storage: {
+        title: 'Backup Destination',
+        description: 'Choose where manual and scheduled database backups are stored.',
+        cloud: 'Cloud storage',
+        local: 'Local storage',
+        localDefaultHint: 'Backups are saved automatically under data/backups/database in the current working directory. No path configuration is required.',
+        saved: 'Backup destination saved'
+      },
       s3: {
-        title: 'S3 Storage Configuration',
-        description: 'Configure S3-compatible storage (supports Cloudflare R2)',
-        descriptionPrefix: 'Configure S3-compatible storage (supports',
-        descriptionSuffix: ')',
+        title: 'Cloud Storage Configuration',
+        description: 'Configure S3-compatible storage, Cloudflare R2, or Tencent Cloud COS',
+        descriptionPrefix: 'Configure cloud object storage (supports',
+        descriptionSuffix: ' and Tencent Cloud COS)',
+        provider: 'Cloud provider',
+        providerS3: 'S3-compatible storage',
+        providerTencentCos: 'Tencent Cloud COS',
         enabled: 'Enable S3 Storage',
         endpoint: 'Endpoint',
         region: 'Region',
+        selectRegion: 'Select the COS region',
         bucket: 'Bucket',
         prefix: 'Key Prefix',
         accessKeyId: 'Access Key ID',
+        secretId: 'SecretID',
+        secretKey: 'SecretKEY',
         secretAccessKey: 'Secret Access Key',
         secretConfigured: 'Already configured, leave empty to keep',
         forcePathStyle: 'Force Path Style',
@@ -143,6 +157,7 @@ export default {
       columns: {
         status: 'Status',
         fileName: 'File Name',
+        storage: 'Storage',
         size: 'Size',
         expiresAt: 'Expires At',
         triggeredBy: 'Triggered By',
@@ -158,7 +173,7 @@ export default {
       progress: {
         pending: 'Preparing',
         dumping: 'Dumping database',
-        uploading: 'Uploading',
+        uploading: 'Saving backup',
       },
       trigger: {
         manual: 'Manual',

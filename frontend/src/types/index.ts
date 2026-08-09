@@ -980,24 +980,26 @@ export interface TempUnschedulableStatus {
 }
 
 export interface UpstreamBillingData {
-  object: 'sub2api.key_billing'
-  schema_version: 1
-  billing_scope: 'token'
+  object?: 'sub2api.key_billing'
+  schema_version?: 1
+  billing_scope?: 'token'
   billing_mode?: 'balance' | 'subscription'
   balance?: number
+  currency?: 'USD' | 'CNY'
+  balance_source?: 'sub2api_usage' | 'generic' | 'new_api'
   subscription_id?: number
   usage?: UpstreamBillingUsage
-  group_rate_multiplier: number
+  group_rate_multiplier?: number
   user_rate_multiplier?: number
-  resolved_rate_multiplier: number
-  peak_rate_enabled: boolean
+  resolved_rate_multiplier?: number
+  peak_rate_enabled?: boolean
   peak_start?: string
   peak_end?: string
   peak_rate_multiplier?: number
   applied_peak_multiplier?: number
-  effective_rate_multiplier: number
+  effective_rate_multiplier?: number
   timezone?: string
-  observed_at: string
+  observed_at?: string
 }
 
 export interface UpstreamBillingUsage {
@@ -1021,6 +1023,9 @@ export interface UpstreamBillingProbeSnapshot {
   failure_count?: number
   http_status?: number
   last_error?: string
+  balance_status?: UpstreamBillingProbeStatus
+  balance_http_status?: number
+  balance_last_error?: string
   // Value this probe wrote into the account rate multiplier; absent when the
   // probe did not sync a rate.
   synced_rate_multiplier?: number
@@ -1106,8 +1111,12 @@ export interface Account {
     model_rate_limits?: Record<string, { rate_limited_at: string; rate_limit_reset_at: string }>
     antigravity_credits_overages?: Record<string, { activated_at: string; active_until: string }>
     upstream_billing_probe_enabled?: boolean
+    upstream_billing_balance_probe_enabled?: boolean
     upstream_billing_rate_sync_enabled?: boolean
+    upstream_billing_balance_query_mode?: 'auto' | 'generic' | 'new_api' | 'custom'
+    upstream_billing_usage_query_config?: Record<string, unknown>
     upstream_billing_balance_auto_disabled_at?: string
+	upstream_billing_balance_currency?: '' | 'USD' | 'CNY'
     upstream_billing_probe?: UpstreamBillingProbeSnapshot
     codex_reset_credit_snapshot?: {
       available_count?: number
@@ -1396,6 +1405,7 @@ export interface CreateAccountRequest {
   expires_at?: number | null
   auto_pause_on_expired?: boolean
   upstream_billing_probe_enabled?: boolean
+  upstream_billing_balance_probe_enabled?: boolean
   confirm_mixed_channel_risk?: boolean
 }
 
@@ -1416,6 +1426,7 @@ export interface UpdateAccountRequest {
   expires_at?: number | null
   auto_pause_on_expired?: boolean
   upstream_billing_probe_enabled?: boolean
+  upstream_billing_balance_probe_enabled?: boolean
   upstream_billing_rate_sync_enabled?: boolean
   confirm_mixed_channel_risk?: boolean
 }

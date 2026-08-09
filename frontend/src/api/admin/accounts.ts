@@ -22,6 +22,7 @@ import type {
   CheckMixedChannelRequest,
   CheckMixedChannelResponse,
   UpstreamBillingProbeResult,
+  UpstreamBillingProbeSnapshot,
   UpstreamBillingProbeSettings,
   OllamaCloudUsageSettings,
   OllamaCloudUsageState
@@ -487,6 +488,7 @@ export async function getTodayStats(id: number): Promise<WindowStats> {
 
 export interface BatchTodayStatsResponse {
   stats: Record<string, WindowStats>
+  upstream_billing: Record<string, UpstreamBillingProbeSnapshot>
 }
 
 /**
@@ -926,6 +928,25 @@ export async function probeUpstreamBillingBatch(accountIds: number[]): Promise<U
   return data.results
 }
 
+export interface UpstreamUsageQueryTestResult {
+  result: { is_valid: boolean; invalid_message?: string; plan_name?: string; remaining?: number; used?: number; total?: number; unit?: string; extra?: Record<string, unknown> }
+  status_code: number
+  response: unknown
+}
+
+export async function testUpstreamUsageQuery(payload: {
+  platform: string
+  base_url: string
+  api_key?: string
+  access_token?: string
+  user_id?: string
+  variables?: Record<string, string>
+  config: unknown
+}): Promise<UpstreamUsageQueryTestResult> {
+  const { data } = await apiClient.post<UpstreamUsageQueryTestResult>('/admin/accounts/upstream-usage-query/test', payload)
+  return data
+}
+
 export async function getOllamaCloudUsageSettings(): Promise<OllamaCloudUsageSettings> {
   const { data } = await apiClient.get<OllamaCloudUsageSettings>('/admin/accounts/ollama-cloud-usage/settings')
   return data
@@ -1023,6 +1044,7 @@ export const accountsAPI = {
   setUpstreamBillingProbeEnabled,
   probeUpstreamBilling,
   probeUpstreamBillingBatch,
+  testUpstreamUsageQuery,
   getOllamaCloudUsageSettings,
   updateOllamaCloudUsageSettings,
   getOllamaCloudUsage,

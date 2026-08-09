@@ -144,6 +144,9 @@ describe('UpstreamBillingRateCell', () => {
     await flushPromises()
     const tooltips = document.body.querySelectorAll('[role="tooltip"]')
     const tooltip = tooltips[tooltips.length - 1] as HTMLElement
+    expect(tooltip.querySelector('[data-testid="upstream-billing-mode"]')?.textContent).toContain(
+      'admin.accounts.upstreamBilling.billingMode:admin.accounts.upstreamBilling.billingModeBalance'
+    )
     expect(tooltip.querySelector('[data-testid="upstream-billing-auto-disable-state"] span')?.className).toContain('text-emerald-400')
     expect(tooltip.querySelector('[data-testid="upstream-billing-auto-disabled-at"]')).not.toBeNull()
 
@@ -168,6 +171,34 @@ describe('UpstreamBillingRateCell', () => {
     expect(wrapper.get('[data-testid="upstream-billing-identity"]').text()).toContain('987')
     wrapper.unmount()
   })
+
+	it('shows a currency-aware balance even when multiplier fields are unavailable', () => {
+		const wrapper = mount(UpstreamBillingRateCell, {
+			props: {
+				account: makeAccount({
+					extra: {
+						upstream_billing_probe: {
+							status: 'ok',
+							data: {
+								billing_mode: 'balance',
+								balance: 88.5,
+								currency: 'CNY',
+								balance_source: 'generic'
+							},
+							received_at: '2026-07-13T00:00:00Z',
+							fresh_until: '2026-07-14T00:00:00Z',
+							last_attempt_at: '2026-07-13T00:00:00Z',
+							next_probe_at: '2026-07-13T00:30:00Z'
+						}
+					}
+				}),
+				now: Date.now()
+			}
+		})
+
+		expect(wrapper.get('[data-testid="upstream-billing-identity"]').text()).toContain('88.50')
+		expect(wrapper.get('[data-testid="upstream-billing-rate"]').text()).toBe('-')
+	})
 
   it('uses retained failed data only while it is still fresh', async () => {
     const account = makeAccount({
