@@ -945,6 +945,16 @@ export default {
         securityWarning: '警告：此密钥拥有完整的管理员权限，请妥善保管。',
         usage: '使用方法：在请求头中添加 x-api-key: <your-admin-api-key>'
       },
+      integrationAdmin: {
+        title: '第三方通用管理入口',
+        description: '供外部系统通过签名调用现有管理员接口，不暴露全局管理员 API Key。',
+        create: '创建凭据',
+        regenerate: '轮换凭据',
+        currentId: '集成标识',
+        generated: '第三方集成凭据已生成',
+        secretWarning: '请立即复制两个值。签名密钥只显示一次。',
+        signatureHint: '请求必须携带 X-Integration-ID、X-Timestamp、X-Nonce、X-Signature 和 Idempotency-Key。签名示例见 docs/ADMIN_INTEGRATION_GATEWAY_API.md。'
+      },
       soraS3: {
         title: 'Sora 存储配置',
         description: '以多配置列表管理 Sora 媒体存储，支持 S3 和 Google Drive',

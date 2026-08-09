@@ -1201,6 +1201,31 @@ export async function deleteAdminApiKey(): Promise<{ message: string }> {
   return data;
 }
 
+export interface IntegrationAdminCredentialsStatus {
+  exists: boolean;
+  masked_integration_id: string;
+}
+
+export interface GeneratedIntegrationAdminCredentials {
+  integration_id: string;
+  signing_secret: string;
+}
+
+export async function getIntegrationAdminCredentials(): Promise<IntegrationAdminCredentialsStatus> {
+  const { data } = await apiClient.get<IntegrationAdminCredentialsStatus>("/admin/settings/integration-admin");
+  return data;
+}
+
+export async function regenerateIntegrationAdminCredentials(): Promise<GeneratedIntegrationAdminCredentials> {
+  const { data } = await apiClient.post<GeneratedIntegrationAdminCredentials>("/admin/settings/integration-admin/regenerate");
+  return data;
+}
+
+export async function deleteIntegrationAdminCredentials(): Promise<{ message: string }> {
+  const { data } = await apiClient.delete<{ message: string }>("/admin/settings/integration-admin");
+  return data;
+}
+
 // ==================== Overload Cooldown Settings ====================
 
 /**
@@ -1507,6 +1532,9 @@ export const settingsAPI = {
   getAdminApiKey,
   regenerateAdminApiKey,
   deleteAdminApiKey,
+  getIntegrationAdminCredentials,
+  regenerateIntegrationAdminCredentials,
+  deleteIntegrationAdminCredentials,
   getOverloadCooldownSettings,
   updateOverloadCooldownSettings,
   getRateLimit429CooldownSettings,

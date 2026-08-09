@@ -342,6 +342,9 @@ const (
 
 	// 管理员 API Key
 	SettingKeyAdminAPIKey = "admin_api_key" // 全局管理员 API Key（用于外部系统集成）
+	// SettingKeyIntegrationAdminCredentials stores the dedicated credential used by
+	// signed third-party requests to the integration admin gateway.
+	SettingKeyIntegrationAdminCredentials = "integration_admin_credentials"
 
 	// Gemini 配额策略（JSON）
 	SettingKeyGeminiQuotaPolicy = "gemini_quota_policy"

@@ -13,6 +13,7 @@ import (
 func ProvideAdminHandlers(
 	dashboardHandler *admin.DashboardHandler,
 	userHandler *admin.UserHandler,
+	provisioningHandler *admin.ProvisioningHandler,
 	groupHandler *admin.GroupHandler,
 	accountHandler *admin.AccountHandler,
 	announcementHandler *admin.AnnouncementHandler,
@@ -53,6 +54,7 @@ func ProvideAdminHandlers(
 	return &AdminHandlers{
 		Dashboard:              dashboardHandler,
 		User:                   userHandler,
+		Provisioning:           provisioningHandler,
 		Group:                  groupHandler,
 		Account:                accountHandler,
 		Announcement:           announcementHandler,
@@ -240,6 +242,7 @@ var ProviderSet = wire.NewSet(
 	// Admin handlers
 	admin.NewDashboardHandler,
 	admin.NewUserHandler,
+	admin.NewProvisioningHandler,
 	admin.NewGroupHandler,
 	admin.ProvideAccountHandler,
 	admin.NewAnnouncementHandler,

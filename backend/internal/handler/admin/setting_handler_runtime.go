@@ -50,6 +50,39 @@ func (h *SettingHandler) DeleteAdminAPIKey(c *gin.Context) {
 	response.Success(c, gin.H{"message": "Admin API key deleted"})
 }
 
+// GetIntegrationAdminCredentials returns only the non-sensitive state of the
+// third-party integration gateway credential.
+func (h *SettingHandler) GetIntegrationAdminCredentials(c *gin.Context) {
+	maskedID, exists, err := h.settingService.GetIntegrationAdminCredentialsStatus(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"exists": exists, "masked_integration_id": maskedID})
+}
+
+// RegenerateIntegrationAdminCredentials creates a dedicated integration ID and
+// HMAC secret. The secret is returned only by this response.
+func (h *SettingHandler) RegenerateIntegrationAdminCredentials(c *gin.Context) {
+	credentials, err := h.settingService.GenerateIntegrationAdminCredentials(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{
+		"integration_id": credentials.IntegrationID,
+		"signing_secret": credentials.SigningSecret,
+	})
+}
+
+func (h *SettingHandler) DeleteIntegrationAdminCredentials(c *gin.Context) {
+	if err := h.settingService.DeleteIntegrationAdminCredentials(c.Request.Context()); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "Integration admin credentials deleted"})
+}
+
 // GetOverloadCooldownSettings 获取529过载冷却配置
 // GET /api/v1/admin/settings/overload-cooldown
 func (h *SettingHandler) GetOverloadCooldownSettings(c *gin.Context) {

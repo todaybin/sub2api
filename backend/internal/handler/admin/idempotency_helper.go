@@ -50,6 +50,9 @@ func executeAdminIdempotent(
 }
 
 func adminActorScope(c *gin.Context) string {
+	if integrationID := c.GetString(middleware2.IntegrationIDContextKey); integrationID != "" {
+		return "integration:" + integrationID
+	}
 	actorScope := "admin:0"
 	if subject, ok := middleware2.GetAuthSubjectFromContext(c); ok {
 		actorScope = "admin:" + strconv.FormatInt(subject.UserID, 10)

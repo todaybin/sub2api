@@ -32,6 +32,18 @@ func adminAuth(
 	auditService *service.AuditLogService,
 ) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// The integration gateway has already authenticated a signed request and
+		// installed a synthetic admin subject for the existing admin handlers.
+		if identity, ok := integrationIdentityFromRequest(c.Request.Context()); ok {
+			c.Set(IntegrationAuthenticatedContextKey, true)
+			c.Set(IntegrationIDContextKey, identity.IntegrationID)
+			c.Set(string(ContextKeyUser), identity.Admin)
+			c.Set(string(ContextKeyUserRole), identity.AdminRole)
+			c.Set(ContextKeyAuthEmail, "integration:"+identity.IntegrationID)
+			c.Set("auth_method", "integration")
+			c.Next()
+			return
+		}
 		// WebSocket upgrade requests cannot set Authorization headers in browsers.
 		// For admin WebSocket endpoints (e.g. Ops realtime), allow passing the JWT via
 		// Sec-WebSocket-Protocol (subprotocol list) using a prefixed token item:

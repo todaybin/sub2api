@@ -113,10 +113,12 @@ var auditSensitiveReads = map[string]string{
 	"GET /api/v1/admin/proxies/data":              "admin.proxies.export",
 	"GET /api/v1/admin/redeem-codes/export":       "admin.redeem_codes.export",
 	"GET /api/v1/admin/backups/:id/download-url":  "admin.backups.download",
+	"GET /api/v1/admin/backups/:id/download":      "admin.backups.download",
 	"GET /api/v1/admin/settings/admin-api-key":    "admin.admin_api_key.read",
 	"GET /api/v1/admin/users/:id/api-keys":        "admin.users.api_keys.read",
 	"GET /api/v1/admin/groups/:id/api-keys":       "admin.groups.api_keys.read",
 	"GET /api/v1/admin/backups/s3-config":         "admin.backups.s3_config.read",
+	"GET /api/v1/admin/backups/storage-config":    "admin.backups.storage_config.read",
 	"GET /api/v1/admin/data-management/s3/config": "admin.data_management.s3_config.read",
 }
 
@@ -134,6 +136,7 @@ var auditActionOverrides = map[string]string{
 	"POST /api/v1/admin/backups/:id/restore":                  "admin.backups.restore",
 	"DELETE /api/v1/admin/backups/:id":                        "admin.backups.delete",
 	"PUT /api/v1/admin/backups/s3-config":                     "admin.backups.s3_config.update",
+	"PUT /api/v1/admin/backups/storage-config":                "admin.backups.storage_config.update",
 	"POST /api/v1/admin/settings/admin-api-key/regenerate":    "admin.admin_api_key.regenerate",
 	"DELETE /api/v1/admin/settings/admin-api-key":             "admin.admin_api_key.delete",
 	"PUT /api/v1/admin/prompt-audit/config":                   "admin.prompt_audit.config.update",

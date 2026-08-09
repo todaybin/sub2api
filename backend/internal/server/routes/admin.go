@@ -290,6 +290,7 @@ func registerUserManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	users := admin.Group("/users")
 	{
 		users.GET("", h.Admin.User.List)
+		users.POST("/provision", h.Admin.Provisioning.Create)
 		users.GET("/:id", h.Admin.User.GetByID)
 		users.POST("/:id/auth-identities", h.Admin.User.BindAuthIdentity)
 		users.POST("", h.Admin.User.Create)
@@ -350,6 +351,7 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 		accounts.GET("/upstream-billing-probe/settings", h.Admin.Account.GetUpstreamBillingProbeSettings)
 		accounts.PUT("/upstream-billing-probe/settings", h.Admin.Account.UpdateUpstreamBillingProbeSettings)
 		accounts.POST("/upstream-billing-probe/batch", h.Admin.Account.ProbeUpstreamBillingBatch)
+		accounts.POST("/upstream-usage-query/test", h.Admin.Account.TestUpstreamUsageQuery)
 		accounts.GET("/ollama-cloud-usage/settings", h.Admin.Account.GetOllamaCloudUsageSettings)
 		accounts.PUT("/ollama-cloud-usage/settings", h.Admin.Account.UpdateOllamaCloudUsageSettings)
 		accounts.GET("/:id", h.Admin.Account.GetByID)
@@ -541,6 +543,9 @@ func registerSettingsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		adminSettings.GET("/admin-api-key", h.Admin.Setting.GetAdminAPIKey)
 		adminSettings.POST("/admin-api-key/regenerate", h.Admin.Setting.RegenerateAdminAPIKey)
 		adminSettings.DELETE("/admin-api-key", h.Admin.Setting.DeleteAdminAPIKey)
+		adminSettings.GET("/integration-admin", h.Admin.Setting.GetIntegrationAdminCredentials)
+		adminSettings.POST("/integration-admin/regenerate", h.Admin.Setting.RegenerateIntegrationAdminCredentials)
+		adminSettings.DELETE("/integration-admin", h.Admin.Setting.DeleteIntegrationAdminCredentials)
 		// 529过载冷却配置
 		adminSettings.GET("/overload-cooldown", h.Admin.Setting.GetOverloadCooldownSettings)
 		adminSettings.PUT("/overload-cooldown", h.Admin.Setting.UpdateOverloadCooldownSettings)
@@ -595,6 +600,9 @@ func registerBackupRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAut
 	backup := admin.Group("/backups")
 	{
 		// S3 存储配置
+		backup.GET("/storage-config", h.Admin.Backup.GetStorageConfig)
+		backup.PUT("/storage-config", gin.HandlerFunc(stepUpAuth), h.Admin.Backup.UpdateStorageConfig)
+		backup.POST("/storage-config/test", h.Admin.Backup.TestLocalStorage)
 		backup.GET("/s3-config", h.Admin.Backup.GetS3Config)
 		// 修改 S3 目标可将数据库备份外泄——要求 step-up 2FA
 		backup.PUT("/s3-config", gin.HandlerFunc(stepUpAuth), h.Admin.Backup.UpdateS3Config)
@@ -617,6 +625,7 @@ func registerBackupRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAut
 		backup.DELETE("/:id", h.Admin.Backup.DeleteBackup)
 		// 备份下载链接可直接取走整库数据——要求 step-up 2FA
 		backup.GET("/:id/download-url", gin.HandlerFunc(stepUpAuth), h.Admin.Backup.GetDownloadURL)
+		backup.GET("/:id/download", gin.HandlerFunc(stepUpAuth), h.Admin.Backup.Download)
 
 		// 恢复操作：整库覆盖可回滚安全设置（含 step-up 开关本身）——要求 step-up 2FA
 		backup.POST("/:id/restore", gin.HandlerFunc(stepUpAuth), h.Admin.Backup.RestoreBackup)

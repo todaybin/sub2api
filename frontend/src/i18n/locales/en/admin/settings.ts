@@ -951,6 +951,16 @@ export default {
         securityWarning: 'Warning: This key provides full admin access. Keep it secure.',
         usage: 'Usage: Add to request header - x-api-key: <your-admin-api-key>'
       },
+      integrationAdmin: {
+        title: 'Third-party Integration Gateway',
+        description: 'Signed gateway for external systems to call existing admin APIs without exposing the global admin key.',
+        create: 'Create Credentials',
+        regenerate: 'Rotate Credentials',
+        currentId: 'Integration ID',
+        generated: 'Integration credentials generated',
+        secretWarning: 'Copy both values now. The signing secret is shown only once.',
+        signatureHint: 'Requests require X-Integration-ID, X-Timestamp, X-Nonce, X-Signature, and Idempotency-Key. See docs/ADMIN_INTEGRATION_GATEWAY_API.md for signing examples.'
+      },
       soraS3: {
         title: 'Sora Storage',
         description: 'Manage Sora media storage profiles with S3 and Google Drive support',

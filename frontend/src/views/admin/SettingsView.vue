@@ -196,6 +196,47 @@
                   </p>
                 </div>
               </div>
+
+              <div class="border-t border-gray-100 pt-5 dark:border-dark-700">
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                      {{ t("admin.settings.integrationAdmin.title") }}
+                    </h3>
+                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.integrationAdmin.description") }}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    @click="createIntegrationAdminCredentials"
+                    :disabled="integrationAdminOperating"
+                    class="btn btn-secondary btn-sm shrink-0"
+                  >
+                    {{ integrationAdminExists ? t("admin.settings.integrationAdmin.regenerate") : t("admin.settings.integrationAdmin.create") }}
+                  </button>
+                </div>
+                <div v-if="integrationAdminLoading" class="mt-3 text-sm text-gray-500">
+                  {{ t("common.loading") }}
+                </div>
+                <div v-else class="mt-3 space-y-3">
+                  <p v-if="integrationAdminExists" class="text-sm text-gray-600 dark:text-gray-300">
+                    {{ t("admin.settings.integrationAdmin.currentId") }}:
+                    <code class="rounded bg-gray-100 px-1.5 py-0.5 font-mono dark:bg-dark-700">{{ integrationAdminMaskedID }}</code>
+                  </p>
+                  <p class="rounded border border-sky-200 bg-sky-50 p-3 font-mono text-xs text-sky-900 dark:border-sky-800 dark:bg-sky-900/20 dark:text-sky-100">
+                    POST /api/v1/integrations/admin/users/provision
+                  </p>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.integrationAdmin.signatureHint") }}
+                  </p>
+                  <div v-if="newIntegrationAdminCredentials" class="rounded border border-green-200 bg-green-50 p-3 text-sm dark:border-green-800 dark:bg-green-900/20">
+                    <p class="font-medium text-green-700 dark:text-green-300">{{ t("admin.settings.integrationAdmin.secretWarning") }}</p>
+                    <code class="mt-2 block select-all break-all font-mono text-xs">{{ newIntegrationAdminCredentials.integration_id }}</code>
+                    <code class="mt-1 block select-all break-all font-mono text-xs">{{ newIntegrationAdminCredentials.signing_secret }}</code>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -8649,6 +8690,11 @@ const adminApiKeyExists = ref(false);
 const adminApiKeyMasked = ref("");
 const adminApiKeyOperating = ref(false);
 const newAdminApiKey = ref("");
+const integrationAdminLoading = ref(true);
+const integrationAdminExists = ref(false);
+const integrationAdminMaskedID = ref("");
+const integrationAdminOperating = ref(false);
+const newIntegrationAdminCredentials = ref<{ integration_id: string; signing_secret: string } | null>(null);
 const subscriptionGroups = ref<AdminGroup[]>([]);
 
 // Upstream billing probe state
@@ -11354,6 +11400,32 @@ async function createAdminApiKey() {
   }
 }
 
+async function loadIntegrationAdminCredentials() {
+  integrationAdminLoading.value = true;
+  try {
+    const status = await adminAPI.settings.getIntegrationAdminCredentials();
+    integrationAdminExists.value = status.exists;
+    integrationAdminMaskedID.value = status.masked_integration_id;
+  } finally {
+    integrationAdminLoading.value = false;
+  }
+}
+
+async function createIntegrationAdminCredentials() {
+  integrationAdminOperating.value = true;
+  try {
+    const result = await adminAPI.settings.regenerateIntegrationAdminCredentials();
+    integrationAdminExists.value = true;
+    integrationAdminMaskedID.value = `${result.integration_id.slice(0, 8)}...${result.integration_id.slice(-4)}`;
+    newIntegrationAdminCredentials.value = result;
+    appStore.showSuccess(t("admin.settings.integrationAdmin.generated"));
+  } catch (error) {
+    appStore.showError(extractApiErrorMessage(error, t("common.error")));
+  } finally {
+    integrationAdminOperating.value = false;
+  }
+}
+
 async function regenerateAdminApiKey() {
   if (!confirm(t("admin.settings.adminApiKey.regenerateConfirm"))) return;
   await createAdminApiKey();
@@ -12184,6 +12256,7 @@ onMounted(() => {
   loadSettings();
   loadSubscriptionGroups();
   loadAdminApiKey();
+  loadIntegrationAdminCredentials();
   loadUpstreamBillingProbeSettings();
   loadOllamaCloudUsageSettings();
   loadOverloadCooldownSettings();
