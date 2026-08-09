@@ -29,7 +29,7 @@ builds:
       - -s -w
       - -X main.Commit={{.Commit}}
       - -X main.Date={{.Date}}
-      - -X main.BuildType=release
+      - -X main.BuildType=custom
 
 archives:
   - id: default

@@ -21,6 +21,7 @@ export default {
   version: {
     currentVersion: '当前版本',
     latestVersion: '最新版本',
+    customLatestVersion: '最新自研版本',
     upToDate: '已是最新版本',
     updateAvailable: '有新版本可用！',
     releaseNotes: '更新日志',
@@ -32,6 +33,7 @@ export default {
     sourceMode: '源码构建',
     sourceModeHint: '源码构建请使用 git pull 更新',
     updateNow: '立即更新',
+    waitingForCustomRelease: '检测到官方新版本，待团队完成适配并发布新的自研版本后可更新。',
     updating: '正在更新...',
     updateComplete: '更新完成',
     updateFailed: '更新失败',

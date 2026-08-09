@@ -21,6 +21,7 @@ export default {
   version: {
     currentVersion: 'Current Version',
     latestVersion: 'Latest Version',
+    customLatestVersion: 'Latest Custom Version',
     upToDate: "You're running the latest version.",
     updateAvailable: 'A new version is available!',
     releaseNotes: 'Release Notes',
@@ -32,6 +33,8 @@ export default {
     sourceMode: 'Source Build',
     sourceModeHint: 'Source build, use git pull to update',
     updateNow: 'Update Now',
+    waitingForCustomRelease:
+      'The official version has changed. Update becomes available after the team publishes an adapted custom release.',
     updating: 'Updating...',
     updateComplete: 'Update Complete',
     updateFailed: 'Update Failed',

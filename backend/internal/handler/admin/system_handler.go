@@ -133,7 +133,7 @@ func (h *SystemHandler) PerformUpdate(c *gin.Context) {
 func (h *SystemHandler) GetRollbackVersions(c *gin.Context) {
 	versions, err := h.updateSvc.ListRollbackVersions(c.Request.Context())
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, err.Error())
+		response.ErrorFrom(c, err)
 		return
 	}
 	response.Success(c, gin.H{

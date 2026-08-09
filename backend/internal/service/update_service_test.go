@@ -29,11 +29,21 @@ func (s *updateServiceCacheStub) SetUpdateInfo(_ context.Context, data string, _
 
 type updateServiceGitHubClientStub struct {
 	release        *GitHubRelease
+	releases       map[string]*GitHubRelease
+	latestErrs     map[string]error
+	fetchedRepos   []string
 	recentReleases []*GitHubRelease
 	recentErr      error
 }
 
-func (s *updateServiceGitHubClientStub) FetchLatestRelease(context.Context, string) (*GitHubRelease, error) {
+func (s *updateServiceGitHubClientStub) FetchLatestRelease(_ context.Context, repo string) (*GitHubRelease, error) {
+	s.fetchedRepos = append(s.fetchedRepos, repo)
+	if err := s.latestErrs[repo]; err != nil {
+		return nil, err
+	}
+	if s.releases != nil {
+		return s.releases[repo], nil
+	}
 	return s.release, nil
 }
 
@@ -67,6 +77,106 @@ func TestUpdateServicePerformUpdateNoUpdateReturnsSentinel(t *testing.T) {
 	require.Error(t, err)
 	require.True(t, errors.Is(err, ErrNoUpdateAvailable))
 	require.ErrorIs(t, err, ErrNoUpdateAvailable)
+}
+
+func TestUpdateServiceCustomBuildSeparatesOfficialReminderFromCustomUpdate(t *testing.T) {
+	client := &updateServiceGitHubClientStub{releases: map[string]*GitHubRelease{
+		githubRepo:       {TagName: "v0.1.174", Name: "Official v0.1.174"},
+		customGitHubRepo: {TagName: "v0.1.173-custom.1", Name: "Custom v0.1.173-custom.1"},
+	}}
+	svc := NewUpdateService(
+		&updateServiceCacheStub{},
+		client,
+		"0.1.173-custom.1",
+		"custom",
+	)
+
+	info, err := svc.CheckUpdate(context.Background(), true)
+
+	require.NoError(t, err)
+	require.True(t, info.HasUpdate)
+	require.Equal(t, "0.1.174", info.LatestVersion)
+	require.True(t, info.SelfUpdateEnabled)
+	require.False(t, info.SelfUpdateAvailable)
+	require.Equal(t, "0.1.173-custom.1", info.SelfUpdateVersion)
+	require.False(t, info.RollbackEnabled)
+	require.Equal(t, "custom", info.BuildType)
+	require.Equal(t, []string{githubRepo, customGitHubRepo}, client.fetchedRepos)
+
+	client.releases[customGitHubRepo] = &GitHubRelease{
+		TagName: "v0.1.173-custom.2",
+		Name:    "Custom v0.1.173-custom.2",
+	}
+	info, err = svc.CheckUpdate(context.Background(), true)
+	require.NoError(t, err)
+	require.True(t, info.HasUpdate)
+	require.True(t, info.SelfUpdateAvailable)
+	require.Equal(t, "0.1.173-custom.2", info.SelfUpdateVersion)
+	require.Equal(t, "Custom v0.1.173-custom.2", info.SelfUpdateReleaseInfo.Name)
+}
+
+func TestUpdateServiceCustomBuildOnlyUpdatesFromCustomRepository(t *testing.T) {
+	client := &updateServiceGitHubClientStub{releases: map[string]*GitHubRelease{
+		customGitHubRepo: {TagName: "v0.1.173-custom.1"},
+	}}
+	svc := NewUpdateService(
+		&updateServiceCacheStub{},
+		client,
+		"0.1.173-custom.1",
+		"custom",
+	)
+
+	require.ErrorIs(t, svc.PerformUpdate(context.Background()), ErrNoUpdateAvailable)
+	require.Equal(t, []string{customGitHubRepo}, client.fetchedRepos)
+	_, err := svc.ListRollbackVersions(context.Background())
+	require.ErrorIs(t, err, ErrRollbackDisabled)
+	require.ErrorIs(t, svc.RollbackToVersion(context.Background(), "0.1.172"), ErrRollbackDisabled)
+	require.ErrorIs(t, svc.Rollback(), ErrRollbackDisabled)
+}
+
+func TestUpdateServiceCustomBuildRejectsNonCustomRelease(t *testing.T) {
+	svc := NewUpdateService(
+		&updateServiceCacheStub{},
+		&updateServiceGitHubClientStub{releases: map[string]*GitHubRelease{
+			customGitHubRepo: {TagName: "v0.1.174"},
+		}},
+		"0.1.173-custom.1",
+		"custom",
+	)
+
+	err := svc.PerformUpdate(context.Background())
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "is not a custom build")
+}
+
+func TestUpdateServiceCustomCheckSurvivesOfficialCheckFailure(t *testing.T) {
+	svc := NewUpdateService(
+		&updateServiceCacheStub{},
+		&updateServiceGitHubClientStub{
+			latestErrs: map[string]error{githubRepo: errors.New("official unavailable")},
+			releases: map[string]*GitHubRelease{
+				customGitHubRepo: {TagName: "v0.1.173-custom.2"},
+			},
+		},
+		"0.1.173-custom.1",
+		"custom",
+	)
+
+	info, err := svc.CheckUpdate(context.Background(), true)
+
+	require.NoError(t, err)
+	require.False(t, info.HasUpdate)
+	require.True(t, info.SelfUpdateAvailable)
+	require.Equal(t, "0.1.173-custom.2", info.SelfUpdateVersion)
+	require.Contains(t, info.Warning, "official unavailable")
+}
+
+func TestCompareCustomVersions(t *testing.T) {
+	require.Less(t, compareCustomVersions("0.1.173-custom.1", "0.1.173-custom.2"), 0)
+	require.Less(t, compareCustomVersions("0.1.173-custom.9", "0.1.174-custom.1"), 0)
+	require.Zero(t, compareCustomVersions("0.1.173-custom.1", "0.1.173-custom.1"))
+	require.Greater(t, compareCustomVersions("0.1.174-custom.1", "0.1.173-custom.9"), 0)
 }
 
 func newRollbackTestService(current string, releases []*GitHubRelease) *UpdateService {

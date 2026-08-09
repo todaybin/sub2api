@@ -42,6 +42,11 @@ export const useAppStore = defineStore('app', () => {
   const latestVersion = ref<string>('')
   const hasUpdate = ref<boolean>(false)
   const buildType = ref<string>('source')
+  const selfUpdateEnabled = ref<boolean>(false)
+  const selfUpdateAvailable = ref<boolean>(false)
+  const selfUpdateVersion = ref<string>('')
+  const selfUpdateReleaseInfo = ref<ReleaseInfo | null>(null)
+  const rollbackEnabled = ref<boolean>(false)
   const releaseInfo = ref<ReleaseInfo | null>(null)
 
   // Auto-incrementing ID for toasts
@@ -248,6 +253,11 @@ export const useAppStore = defineStore('app', () => {
         latest_version: latestVersion.value,
         has_update: hasUpdate.value,
         build_type: buildType.value,
+        self_update_enabled: selfUpdateEnabled.value,
+        self_update_available: selfUpdateAvailable.value,
+        self_update_version: selfUpdateVersion.value || undefined,
+        self_update_release_info: selfUpdateReleaseInfo.value || undefined,
+        rollback_enabled: rollbackEnabled.value,
         release_info: releaseInfo.value || undefined,
         cached: true
       }
@@ -265,6 +275,11 @@ export const useAppStore = defineStore('app', () => {
       latestVersion.value = data.latest_version
       hasUpdate.value = data.has_update
       buildType.value = data.build_type || 'source'
+      selfUpdateEnabled.value = data.self_update_enabled === true
+      selfUpdateAvailable.value = data.self_update_available === true
+      selfUpdateVersion.value = data.self_update_version || ''
+      selfUpdateReleaseInfo.value = data.self_update_release_info || null
+      rollbackEnabled.value = data.rollback_enabled === true
       releaseInfo.value = data.release_info || null
       versionLoaded.value = true
       return data
@@ -282,6 +297,7 @@ export const useAppStore = defineStore('app', () => {
   function clearVersionCache(): void {
     versionLoaded.value = false
     hasUpdate.value = false
+    selfUpdateAvailable.value = false
   }
 
   // ==================== Public Settings Management ====================
@@ -458,6 +474,11 @@ export const useAppStore = defineStore('app', () => {
     latestVersion,
     hasUpdate,
     buildType,
+    selfUpdateEnabled,
+    selfUpdateAvailable,
+    selfUpdateVersion,
+    selfUpdateReleaseInfo,
+    rollbackEnabled,
     releaseInfo,
 
     // Computed

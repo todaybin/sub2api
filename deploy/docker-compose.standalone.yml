@@ -12,7 +12,7 @@
 
 services:
   sub2api:
-    image: weishaw/sub2api:latest
+    image: "${SUB2API_IMAGE:-ghcr.io/todaybin/sub2api:0.1.173-custom.1}"
     container_name: sub2api
     restart: unless-stopped
     security_opt:

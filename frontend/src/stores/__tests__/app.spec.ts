@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAppStore } from '@/stores/app'
 import { getPublicSettings } from '@/api/auth'
+import { checkUpdates } from '@/api/admin/system'
 import type { PublicSettings } from '@/types'
 
 function createDeferred<T>() {
@@ -78,6 +79,7 @@ describe('useAppStore', () => {
     vi.useFakeTimers()
     localStorage.clear()
     vi.mocked(getPublicSettings).mockReset()
+    vi.mocked(checkUpdates).mockReset()
     // 清除 window.__APP_CONFIG__
     delete (window as any).__APP_CONFIG__
   })
@@ -85,6 +87,31 @@ describe('useAppStore', () => {
   afterEach(() => {
     vi.useRealTimers()
     localStorage.clear()
+  })
+
+  it('keeps official notices separate from custom update availability', async () => {
+    vi.mocked(checkUpdates).mockResolvedValue({
+      current_version: '0.1.173-custom.1',
+      latest_version: '0.1.174',
+      has_update: true,
+      cached: false,
+      build_type: 'custom',
+      self_update_enabled: true,
+      self_update_available: false,
+      self_update_version: '0.1.173-custom.1',
+      rollback_enabled: false
+    })
+    const store = useAppStore()
+
+    const result = await store.fetchVersion(true)
+
+    expect(result?.has_update).toBe(true)
+    expect(store.hasUpdate).toBe(true)
+    expect(store.buildType).toBe('custom')
+    expect(store.selfUpdateEnabled).toBe(true)
+    expect(store.selfUpdateAvailable).toBe(false)
+    expect(store.selfUpdateVersion).toBe('0.1.173-custom.1')
+    expect(store.rollbackEnabled).toBe(false)
   })
 
   // --- Toast 消息管理 ---

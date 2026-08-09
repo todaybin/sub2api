@@ -26,6 +26,7 @@ type systemHandlerUpdateServiceStub struct {
 	performCtxErr         error
 	performHasDeadline    bool
 	rollbackCall          int
+	rollbackErr           error
 	rollbackToCall        int
 	rollbackToCtxErr      error
 	rollbackToHasDeadline bool
@@ -50,7 +51,7 @@ func (s *systemHandlerUpdateServiceStub) PerformUpdate(ctx context.Context) erro
 
 func (s *systemHandlerUpdateServiceStub) Rollback() error {
 	s.rollbackCall++
-	return nil
+	return s.rollbackErr
 }
 
 func (s *systemHandlerUpdateServiceStub) ListRollbackVersions(context.Context) ([]service.RollbackVersion, error) {
@@ -173,6 +174,20 @@ func TestSystemHandlerPerformUpdateFailureStillReturnsInternalError(t *testing.T
 	require.Equal(t, "internal error", body.Message)
 }
 
+func TestSystemHandlerPerformUpdateDisabledReturnsForbidden(t *testing.T) {
+	updateSvc := &systemHandlerUpdateServiceStub{performErr: service.ErrSelfUpdateDisabled}
+	repo := newMemoryIdempotencyRepoStub()
+	router := newSystemHandlerTestRouter(t, updateSvc, repo)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/system/update", nil)
+	req.Header.Set("Idempotency-Key", "custom-update-disabled")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.Equal(t, 1, updateSvc.performCall)
+}
+
 // TestSystemHandlerPerformUpdateSurvivesClientDisconnect reproduces #4504:
 // the browser or a reverse proxy (axios 30s default, nginx proxy_read_timeout
 // 60s) aborts the long-running update request and cancels the request
@@ -280,6 +295,22 @@ func TestSystemHandlerRollbackWithDisallowedVersionReturnsBadRequest(t *testing.
 	require.Equal(t, 1, updateSvc.rollbackToCall)
 }
 
+func TestSystemHandlerRollbackDisabledReturnsForbidden(t *testing.T) {
+	updateSvc := &systemHandlerUpdateServiceStub{rollbackToErr: service.ErrRollbackDisabled}
+	repo := newMemoryIdempotencyRepoStub()
+	router := newSystemHandlerTestRouter(t, updateSvc, repo)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/system/rollback",
+		strings.NewReader(`{"version":"0.1.172"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", "custom-rollback-disabled")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.Equal(t, 1, updateSvc.rollbackToCall)
+}
+
 func TestSystemHandlerGetRollbackVersions(t *testing.T) {
 	updateSvc := &systemHandlerUpdateServiceStub{
 		rollbackVersions: []service.RollbackVersion{
@@ -321,4 +352,16 @@ func TestSystemHandlerGetRollbackVersionsError(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+func TestSystemHandlerGetRollbackVersionsDisabledReturnsForbidden(t *testing.T) {
+	updateSvc := &systemHandlerUpdateServiceStub{rollbackVersionsErr: service.ErrRollbackDisabled}
+	repo := newMemoryIdempotencyRepoStub()
+	router := newSystemHandlerTestRouter(t, updateSvc, repo)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/system/rollback-versions", nil)
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
 }
