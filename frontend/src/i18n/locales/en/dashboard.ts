@@ -61,7 +61,10 @@ export default {
 
   // Groups (shared)
   groups: {
-    subscription: 'Sub'
+    subscription: 'Sub',
+    dynamicRate: 'Dynamic rate',
+    dynamicRateIncrease: 'Rate increased',
+    dynamicRateDecrease: 'Rate decreased'
   },
 
   // API Keys

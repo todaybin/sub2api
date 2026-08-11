@@ -18,6 +18,19 @@ type userGroupRateResolver struct {
 	logComponent string
 }
 
+type noUserGroupRateOverride struct{}
+
+func cachedUserGroupRate(value any, groupDefaultMultiplier float64) (float64, bool) {
+	switch cached := value.(type) {
+	case float64:
+		return cached, true
+	case noUserGroupRateOverride:
+		return groupDefaultMultiplier, true
+	default:
+		return 0, false
+	}
+}
+
 func newUserGroupRateResolver(repo UserGroupRateRepository, cache *gocache.Cache, cacheTTL time.Duration, sf *singleflight.Group, logComponent string) *userGroupRateResolver {
 	if cacheTTL <= 0 {
 		cacheTTL = defaultUserGroupRateCacheTTL
@@ -49,7 +62,7 @@ func (r *userGroupRateResolver) Resolve(ctx context.Context, userID, groupID int
 	key := fmt.Sprintf("%d:%d", userID, groupID)
 	if r.cache != nil {
 		if cached, ok := r.cache.Get(key); ok {
-			if multiplier, castOK := cached.(float64); castOK {
+			if multiplier, castOK := cachedUserGroupRate(cached, groupDefaultMultiplier); castOK {
 				userGroupRateCacheHitTotal.Add(1)
 				return multiplier
 			}
@@ -63,7 +76,7 @@ func (r *userGroupRateResolver) Resolve(ctx context.Context, userID, groupID int
 	value, err, shared := r.sf.Do(key, func() (any, error) {
 		if r.cache != nil {
 			if cached, ok := r.cache.Get(key); ok {
-				if multiplier, castOK := cached.(float64); castOK {
+				if multiplier, castOK := cachedUserGroupRate(cached, groupDefaultMultiplier); castOK {
 					userGroupRateCacheHitTotal.Add(1)
 					return multiplier, nil
 				}
@@ -76,12 +89,14 @@ func (r *userGroupRateResolver) Resolve(ctx context.Context, userID, groupID int
 			return nil, repoErr
 		}
 
+		var cachedValue any = noUserGroupRateOverride{}
 		multiplier := groupDefaultMultiplier
 		if userRate != nil {
 			multiplier = *userRate
+			cachedValue = multiplier
 		}
 		if r.cache != nil {
-			r.cache.Set(key, multiplier, r.cacheTTL)
+			r.cache.Set(key, cachedValue, r.cacheTTL)
 		}
 		return multiplier, nil
 	})

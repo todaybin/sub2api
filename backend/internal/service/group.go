@@ -16,11 +16,18 @@ type GroupModelsListConfig = domain.GroupModelsListConfig
 type ReasoningEffortMapping = domain.ReasoningEffortMapping
 
 type Group struct {
-	ID             int64
-	Name           string
-	Description    string
-	Platform       string
-	RateMultiplier float64
+	ID                          int64
+	Name                        string
+	Description                 string
+	Platform                    string
+	RateMultiplier              float64
+	RateMode                    string
+	DynamicRateMarkupPercent    float64
+	DynamicRateSourceMultiplier *float64
+	DynamicRateStatus           string
+	DynamicRateLastDirection    string
+	DynamicRateLastEvaluatedAt  *time.Time
+	DynamicRateLastAdjustedAt   *time.Time
 	// 高峰时段倍率：peak_rate_enabled 为 true 且当前时刻处于 [PeakStart, PeakEnd) 时，
 	// token 计费倍率额外乘以 PeakRateMultiplier。详见 PeakMultiplierAt。
 	PeakRateEnabled    bool
@@ -126,6 +133,35 @@ type Group struct {
 	AccountCount            int64
 	ActiveAccountCount      int64
 	RateLimitedAccountCount int64
+}
+
+const (
+	GroupRateModeFixed           = "fixed"
+	GroupRateModeDynamic         = "dynamic"
+	DynamicRateStatusIdle        = "idle"
+	DynamicRateStatusWaiting     = "waiting"
+	DynamicRateStatusReady       = "ready"
+	DynamicRateStatusIncomplete  = "incomplete"
+	DynamicRateStatusPaused      = "paused"
+	DynamicRateDirectionNone     = "none"
+	DynamicRateDirectionIncrease = "increase"
+	DynamicRateDirectionDecrease = "decrease"
+)
+
+func ValidateDynamicRateConfig(platform, subscriptionType, mode string, markupPercent float64) error {
+	if mode == "" {
+		mode = GroupRateModeFixed
+	}
+	if mode != GroupRateModeFixed && mode != GroupRateModeDynamic {
+		return fmt.Errorf("rate_mode must be fixed or dynamic")
+	}
+	if mode == GroupRateModeDynamic && (subscriptionType != SubscriptionTypeStandard || platform == PlatformComposite) {
+		return errors.New("dynamic rate is only supported by standard non-composite groups")
+	}
+	if math.IsNaN(markupPercent) || math.IsInf(markupPercent, 0) || markupPercent < 0 {
+		return errors.New("dynamic_rate_markup_percent must be a finite non-negative number")
+	}
+	return nil
 }
 
 func (g *Group) IsActive() bool {

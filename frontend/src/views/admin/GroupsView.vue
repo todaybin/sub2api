@@ -249,10 +249,29 @@
             </div>
           </template>
 
-          <template #cell-rate_multiplier="{ value }">
-            <span class="text-sm text-gray-700 dark:text-gray-300"
-              >{{ value }}x</span
-            >
+          <template #cell-rate_multiplier="{ value, row }">
+            <div class="space-y-0.5 text-sm">
+              <div class="flex items-center gap-1.5">
+                <span class="text-gray-700 dark:text-gray-300">{{ value }}x</span>
+                <span v-if="row.rate_mode === 'dynamic'" class="badge badge-info">
+                  {{ t('admin.groups.dynamicRate') }}
+                </span>
+              </div>
+              <template v-if="row.rate_mode === 'dynamic'">
+                <div class="text-xs text-gray-500 dark:text-gray-400">
+                  <span v-if="row.dynamic_rate_source_multiplier != null">
+                    {{ t('admin.groups.dynamicRateSource', { value: row.dynamic_rate_source_multiplier }) }}
+                  </span>
+                  <span v-else>{{ t('admin.groups.dynamicRateNoSource') }}</span>
+                  <span class="mx-1">·</span>
+                  <span>{{ t(`admin.groups.dynamicRateStatus.${row.dynamic_rate_status || 'waiting'}`) }}</span>
+                </div>
+                <div v-if="row.dynamic_rate_last_adjusted_at && row.dynamic_rate_last_direction !== 'none'" class="text-xs text-gray-400 dark:text-gray-500">
+                  {{ row.dynamic_rate_last_direction === 'increase' ? t('admin.groups.dynamicRateIncrease') : t('admin.groups.dynamicRateDecrease') }}
+                  · {{ new Date(row.dynamic_rate_last_adjusted_at).toLocaleString() }}
+                </div>
+              </template>
+            </div>
           </template>
 
           <template #cell-is_exclusive="{ value }">
@@ -583,9 +602,15 @@
           <p class="input-hint">{{ t("admin.groups.copyAccounts.hint") }}</p>
         </div>
         <div>
-          <label class="input-label">{{
-            t("admin.groups.form.rateMultiplier")
-          }}</label>
+          <label class="input-label">{{ t("admin.groups.form.rateMultiplier") }}</label>
+          <div class="mb-2 flex rounded-lg border border-gray-200 p-1 dark:border-dark-600" role="group">
+            <button type="button" class="flex-1 rounded-md px-3 py-1.5 text-sm" :class="createForm.rate_mode === 'fixed' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-300'" @click="createForm.rate_mode = 'fixed'">
+              {{ t('admin.groups.form.fixedRate') }}
+            </button>
+            <button type="button" class="flex-1 rounded-md px-3 py-1.5 text-sm" :class="createForm.rate_mode === 'dynamic' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-300'" :disabled="createForm.subscription_type !== 'standard' || createForm.platform === 'composite'" @click="createForm.rate_mode = 'dynamic'">
+              {{ t('admin.groups.form.dynamicRate') }}
+            </button>
+          </div>
           <input
             v-model.number="createForm.rate_multiplier"
             type="number"
@@ -593,9 +618,18 @@
             min="0.001"
             required
             class="input"
+            :disabled="createForm.rate_mode === 'dynamic'"
             data-tour="group-form-multiplier"
           />
           <p class="input-hint">{{ t("admin.groups.rateMultiplierHint") }}</p>
+          <div v-if="createForm.rate_mode === 'dynamic'" class="mt-2">
+            <label class="input-label">{{ t('admin.groups.form.dynamicRateMarkup') }}</label>
+            <div class="flex items-center gap-2">
+              <input v-model.number="createForm.dynamic_rate_markup_percent" type="number" min="0" step="0.1" class="input" />
+              <span class="text-sm text-gray-500">%</span>
+            </div>
+            <p class="input-hint">{{ t('admin.groups.form.dynamicRateMarkupHint') }}</p>
+          </div>
         </div>
         <div>
           <label class="input-label">{{ t("admin.groups.form.rpmLimit") }}</label>
@@ -2289,9 +2323,15 @@
           </p>
         </div>
         <div>
-          <label class="input-label">{{
-            t("admin.groups.form.rateMultiplier")
-          }}</label>
+          <label class="input-label">{{ t("admin.groups.form.rateMultiplier") }}</label>
+          <div class="mb-2 flex rounded-lg border border-gray-200 p-1 dark:border-dark-600" role="group">
+            <button type="button" class="flex-1 rounded-md px-3 py-1.5 text-sm" :class="editForm.rate_mode === 'fixed' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-300'" @click="editForm.rate_mode = 'fixed'">
+              {{ t('admin.groups.form.fixedRate') }}
+            </button>
+            <button type="button" class="flex-1 rounded-md px-3 py-1.5 text-sm" :class="editForm.rate_mode === 'dynamic' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-300'" :disabled="editForm.subscription_type !== 'standard' || editForm.platform === 'composite'" @click="editForm.rate_mode = 'dynamic'">
+              {{ t('admin.groups.form.dynamicRate') }}
+            </button>
+          </div>
           <input
             v-model.number="editForm.rate_multiplier"
             type="number"
@@ -2299,8 +2339,17 @@
             min="0.001"
             required
             class="input"
+            :disabled="editForm.rate_mode === 'dynamic'"
             data-tour="group-form-multiplier"
           />
+          <div v-if="editForm.rate_mode === 'dynamic'" class="mt-2">
+            <label class="input-label">{{ t('admin.groups.form.dynamicRateMarkup') }}</label>
+            <div class="flex items-center gap-2">
+              <input v-model.number="editForm.dynamic_rate_markup_percent" type="number" min="0" step="0.1" class="input" />
+              <span class="text-sm text-gray-500">%</span>
+            </div>
+            <p class="input-hint">{{ t('admin.groups.form.dynamicRateMarkupHint') }}</p>
+          </div>
         </div>
         <div>
           <label class="input-label">{{ t("admin.groups.form.rpmLimit") }}</label>
@@ -4360,6 +4409,7 @@ import type {
   CompositeRouteEndpoint,
   CompositeRouteMatchType,
   GroupPlatform,
+  GroupRateMode,
   SubscriptionType,
 } from "@/types";
 import type { Column } from "@/components/common/types";
@@ -4908,6 +4958,8 @@ const createForm = reactive({
   description: "",
   platform: "anthropic" as GroupPlatform,
   rate_multiplier: 1.0,
+  rate_mode: "fixed" as GroupRateMode,
+  dynamic_rate_markup_percent: 0,
   is_exclusive: false,
   subscription_type: "standard" as SubscriptionType,
   daily_limit_usd: null as number | null,
@@ -5266,6 +5318,8 @@ const editForm = reactive({
   description: "",
   platform: "anthropic" as GroupPlatform,
   rate_multiplier: 1.0,
+  rate_mode: "fixed" as GroupRateMode,
+  dynamic_rate_markup_percent: 0,
   is_exclusive: false,
   status: "active" as "active" | "inactive",
   subscription_type: "standard" as SubscriptionType,
@@ -5724,6 +5778,8 @@ const closeCreateModal = () => {
   createForm.description = "";
   createForm.platform = "anthropic";
   createForm.rate_multiplier = 1.0;
+  createForm.rate_mode = "fixed";
+  createForm.dynamic_rate_markup_percent = 0;
   createForm.is_exclusive = false;
   createForm.subscription_type = "standard";
   createForm.daily_limit_usd = null;
@@ -5959,6 +6015,8 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.description = group.description || "";
   editForm.platform = group.platform;
   editForm.rate_multiplier = group.rate_multiplier;
+  editForm.rate_mode = group.rate_mode || "fixed";
+  editForm.dynamic_rate_markup_percent = group.dynamic_rate_markup_percent ?? 0;
   editForm.is_exclusive = group.is_exclusive;
   editForm.status = group.status;
   editForm.subscription_type = group.subscription_type || "standard";
@@ -6060,6 +6118,8 @@ const closeEditModal = () => {
   editForm.peak_start = "";
   editForm.peak_end = "";
   editForm.peak_rate_multiplier = 1.0;
+  editForm.rate_mode = "fixed";
+  editForm.dynamic_rate_markup_percent = 0;
   editForm.profit_control_enabled = false;
   editForm.profit_min_margin_percent = 0;
   editForm.profit_safety_buffer_percent = 0;
@@ -6478,6 +6538,7 @@ watch(
     if (newVal === "subscription") {
       createForm.is_exclusive = true;
       createForm.fallback_group_id_on_invalid_request = null;
+      createForm.rate_mode = "fixed";
     } else {
       createForm.peak_rate_enabled = false;
       createForm.peak_start = "";
@@ -6491,6 +6552,9 @@ watch(
 watch(
   () => editForm.subscription_type,
   (newVal) => {
+    if (newVal === "subscription") {
+      editForm.rate_mode = "fixed";
+    }
     if (newVal !== "subscription") {
       editForm.peak_rate_enabled = false;
       editForm.peak_start = "";
@@ -6503,6 +6567,9 @@ watch(
 watch(
   () => createForm.platform,
   (newVal) => {
+    if (newVal === "composite") {
+      createForm.rate_mode = "fixed";
+    }
     if (!["anthropic", "antigravity"].includes(newVal)) {
       createForm.fallback_group_id_on_invalid_request = null;
     }
@@ -6551,6 +6618,9 @@ watch(
 watch(
   () => editForm.platform,
   (newVal) => {
+    if (newVal === "composite") {
+      editForm.rate_mode = "fixed";
+    }
     if (!["anthropic", "antigravity"].includes(newVal)) {
       editForm.fallback_group_id_on_invalid_request = null;
     }

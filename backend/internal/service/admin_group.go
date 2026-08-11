@@ -314,6 +314,13 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	if subscriptionType == "" {
 		subscriptionType = SubscriptionTypeStandard
 	}
+	rateMode := input.RateMode
+	if rateMode == "" {
+		rateMode = GroupRateModeFixed
+	}
+	if err := ValidateDynamicRateConfig(platform, subscriptionType, rateMode, input.DynamicRateMarkupPercent); err != nil {
+		return nil, infraerrors.Newf(http.StatusBadRequest, "INVALID_DYNAMIC_RATE", "%v", err)
+	}
 
 	// 限额字段：nil/负数 表示"无限制"，0 表示"不允许用量"，正数表示具体限额
 	dailyLimit := normalizeLimit(input.DailyLimitUSD)
@@ -453,6 +460,10 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		Description:                     input.Description,
 		Platform:                        platform,
 		RateMultiplier:                  input.RateMultiplier,
+		RateMode:                        rateMode,
+		DynamicRateMarkupPercent:        input.DynamicRateMarkupPercent,
+		DynamicRateStatus:               map[bool]string{true: DynamicRateStatusWaiting, false: DynamicRateStatusIdle}[rateMode == GroupRateModeDynamic],
+		DynamicRateLastDirection:        DynamicRateDirectionNone,
 		IsExclusive:                     input.IsExclusive,
 		Status:                          StatusActive,
 		SubscriptionType:                subscriptionType,
@@ -539,6 +550,13 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 			return nil, fmt.Errorf("failed to bind accounts to new group: %w", err)
 		}
 		group.AccountCount = int64(len(accountIDsToCopy))
+	}
+	if group.RateMode == GroupRateModeDynamic && s.dynamicGroupRate != nil {
+		if err := s.dynamicGroupRate.ReconcileGroup(ctx, group.ID); err != nil {
+			logger.LegacyPrintf("service.admin", "reconcile dynamic group after create failed: group=%d err=%v", group.ID, err)
+		} else if refreshed, loadErr := s.groupRepo.GetByID(ctx, group.ID); loadErr == nil {
+			group = refreshed
+		}
 	}
 
 	return group, nil
@@ -644,7 +662,13 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	if input.Platform != "" {
 		group.Platform = input.Platform
 	}
-	if input.RateMultiplier != nil {
+	if input.RateMode != nil {
+		group.RateMode = *input.RateMode
+	}
+	if input.DynamicRateMarkupPercent != nil {
+		group.DynamicRateMarkupPercent = *input.DynamicRateMarkupPercent
+	}
+	if input.RateMultiplier != nil && group.RateMode != GroupRateModeDynamic {
 		if *input.RateMultiplier <= 0 {
 			return nil, errors.New("rate_multiplier must be > 0")
 		}
@@ -660,6 +684,21 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	// 订阅相关字段
 	if input.SubscriptionType != "" {
 		group.SubscriptionType = input.SubscriptionType
+	}
+	if group.RateMode == "" {
+		group.RateMode = GroupRateModeFixed
+	}
+	if err := ValidateDynamicRateConfig(group.Platform, group.SubscriptionType, group.RateMode, group.DynamicRateMarkupPercent); err != nil {
+		return nil, infraerrors.Newf(http.StatusBadRequest, "INVALID_DYNAMIC_RATE", "%v", err)
+	}
+	if group.RateMode == GroupRateModeDynamic {
+		if group.DynamicRateStatus == "" || group.DynamicRateStatus == DynamicRateStatusIdle {
+			group.DynamicRateStatus = DynamicRateStatusWaiting
+		}
+	} else {
+		group.DynamicRateStatus = DynamicRateStatusIdle
+		group.DynamicRateSourceMultiplier = nil
+		group.DynamicRateLastEvaluatedAt = nil
 	}
 	// 限额字段：nil/负数 表示"无限制"，0 表示"不允许用量"，正数表示具体限额
 	// 前端始终发送这三个字段，无需 nil 守卫
@@ -949,6 +988,13 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 			if err := s.groupRepo.BindAccountsToGroup(ctx, id, accountIDsToCopy); err != nil {
 				return nil, fmt.Errorf("failed to bind accounts to group: %w", err)
 			}
+		}
+	}
+	if group.RateMode == GroupRateModeDynamic && s.dynamicGroupRate != nil {
+		if err := s.dynamicGroupRate.ReconcileGroup(ctx, group.ID); err != nil {
+			logger.LegacyPrintf("service.admin", "reconcile dynamic group after update failed: group=%d err=%v", group.ID, err)
+		} else if refreshed, loadErr := s.groupRepo.GetByID(ctx, group.ID); loadErr == nil {
+			group = refreshed
 		}
 	}
 

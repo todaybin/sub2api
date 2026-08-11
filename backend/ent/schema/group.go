@@ -45,6 +45,32 @@ func (Group) Fields() []ent.Field {
 		field.Float("rate_multiplier").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
 			Default(1.0),
+		field.String("rate_mode").
+			MaxLen(16).
+			Default("fixed").
+			Comment("fixed or dynamic upstream-based billing rate"),
+		field.Float("dynamic_rate_markup_percent").
+			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
+			Default(0).
+			Comment("dynamic billing markup percentage points"),
+		field.Float("dynamic_rate_source_multiplier").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}),
+		field.String("dynamic_rate_status").
+			MaxLen(16).
+			Default("idle"),
+		field.String("dynamic_rate_last_direction").
+			MaxLen(16).
+			Default("none"),
+		field.Time("dynamic_rate_last_evaluated_at").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}),
+		field.Time("dynamic_rate_last_adjusted_at").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}),
 		// 高峰时段倍率（added by migration 158）
 		field.Bool("peak_rate_enabled").
 			Default(false).

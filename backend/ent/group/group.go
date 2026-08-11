@@ -28,6 +28,20 @@ const (
 	FieldDescription = "description"
 	// FieldRateMultiplier holds the string denoting the rate_multiplier field in the database.
 	FieldRateMultiplier = "rate_multiplier"
+	// FieldRateMode holds the string denoting the rate_mode field in the database.
+	FieldRateMode = "rate_mode"
+	// FieldDynamicRateMarkupPercent holds the string denoting the dynamic_rate_markup_percent field in the database.
+	FieldDynamicRateMarkupPercent = "dynamic_rate_markup_percent"
+	// FieldDynamicRateSourceMultiplier holds the string denoting the dynamic_rate_source_multiplier field in the database.
+	FieldDynamicRateSourceMultiplier = "dynamic_rate_source_multiplier"
+	// FieldDynamicRateStatus holds the string denoting the dynamic_rate_status field in the database.
+	FieldDynamicRateStatus = "dynamic_rate_status"
+	// FieldDynamicRateLastDirection holds the string denoting the dynamic_rate_last_direction field in the database.
+	FieldDynamicRateLastDirection = "dynamic_rate_last_direction"
+	// FieldDynamicRateLastEvaluatedAt holds the string denoting the dynamic_rate_last_evaluated_at field in the database.
+	FieldDynamicRateLastEvaluatedAt = "dynamic_rate_last_evaluated_at"
+	// FieldDynamicRateLastAdjustedAt holds the string denoting the dynamic_rate_last_adjusted_at field in the database.
+	FieldDynamicRateLastAdjustedAt = "dynamic_rate_last_adjusted_at"
 	// FieldPeakRateEnabled holds the string denoting the peak_rate_enabled field in the database.
 	FieldPeakRateEnabled = "peak_rate_enabled"
 	// FieldPeakStart holds the string denoting the peak_start field in the database.
@@ -217,6 +231,13 @@ var Columns = []string{
 	FieldName,
 	FieldDescription,
 	FieldRateMultiplier,
+	FieldRateMode,
+	FieldDynamicRateMarkupPercent,
+	FieldDynamicRateSourceMultiplier,
+	FieldDynamicRateStatus,
+	FieldDynamicRateLastDirection,
+	FieldDynamicRateLastEvaluatedAt,
+	FieldDynamicRateLastAdjustedAt,
 	FieldPeakRateEnabled,
 	FieldPeakStart,
 	FieldPeakEnd,
@@ -310,6 +331,20 @@ var (
 	NameValidator func(string) error
 	// DefaultRateMultiplier holds the default value on creation for the "rate_multiplier" field.
 	DefaultRateMultiplier float64
+	// DefaultRateMode holds the default value on creation for the "rate_mode" field.
+	DefaultRateMode string
+	// RateModeValidator is a validator for the "rate_mode" field. It is called by the builders before save.
+	RateModeValidator func(string) error
+	// DefaultDynamicRateMarkupPercent holds the default value on creation for the "dynamic_rate_markup_percent" field.
+	DefaultDynamicRateMarkupPercent float64
+	// DefaultDynamicRateStatus holds the default value on creation for the "dynamic_rate_status" field.
+	DefaultDynamicRateStatus string
+	// DynamicRateStatusValidator is a validator for the "dynamic_rate_status" field. It is called by the builders before save.
+	DynamicRateStatusValidator func(string) error
+	// DefaultDynamicRateLastDirection holds the default value on creation for the "dynamic_rate_last_direction" field.
+	DefaultDynamicRateLastDirection string
+	// DynamicRateLastDirectionValidator is a validator for the "dynamic_rate_last_direction" field. It is called by the builders before save.
+	DynamicRateLastDirectionValidator func(string) error
 	// DefaultPeakRateEnabled holds the default value on creation for the "peak_rate_enabled" field.
 	DefaultPeakRateEnabled bool
 	// DefaultPeakStart holds the default value on creation for the "peak_start" field.
@@ -442,6 +477,41 @@ func ByDescription(opts ...sql.OrderTermOption) OrderOption {
 // ByRateMultiplier orders the results by the rate_multiplier field.
 func ByRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRateMultiplier, opts...).ToFunc()
+}
+
+// ByRateMode orders the results by the rate_mode field.
+func ByRateMode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRateMode, opts...).ToFunc()
+}
+
+// ByDynamicRateMarkupPercent orders the results by the dynamic_rate_markup_percent field.
+func ByDynamicRateMarkupPercent(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDynamicRateMarkupPercent, opts...).ToFunc()
+}
+
+// ByDynamicRateSourceMultiplier orders the results by the dynamic_rate_source_multiplier field.
+func ByDynamicRateSourceMultiplier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDynamicRateSourceMultiplier, opts...).ToFunc()
+}
+
+// ByDynamicRateStatus orders the results by the dynamic_rate_status field.
+func ByDynamicRateStatus(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDynamicRateStatus, opts...).ToFunc()
+}
+
+// ByDynamicRateLastDirection orders the results by the dynamic_rate_last_direction field.
+func ByDynamicRateLastDirection(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDynamicRateLastDirection, opts...).ToFunc()
+}
+
+// ByDynamicRateLastEvaluatedAt orders the results by the dynamic_rate_last_evaluated_at field.
+func ByDynamicRateLastEvaluatedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDynamicRateLastEvaluatedAt, opts...).ToFunc()
+}
+
+// ByDynamicRateLastAdjustedAt orders the results by the dynamic_rate_last_adjusted_at field.
+func ByDynamicRateLastAdjustedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDynamicRateLastAdjustedAt, opts...).ToFunc()
 }
 
 // ByPeakRateEnabled orders the results by the peak_rate_enabled field.

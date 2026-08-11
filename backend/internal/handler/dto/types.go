@@ -88,13 +88,16 @@ type APIKey struct {
 }
 
 type Group struct {
-	ID             int64   `json:"id"`
-	Name           string  `json:"name"`
-	Description    string  `json:"description"`
-	Platform       string  `json:"platform"`
-	RateMultiplier float64 `json:"rate_multiplier"`
-	IsExclusive    bool    `json:"is_exclusive"`
-	Status         string  `json:"status"`
+	ID                        int64      `json:"id"`
+	Name                      string     `json:"name"`
+	Description               string     `json:"description"`
+	Platform                  string     `json:"platform"`
+	RateMultiplier            float64    `json:"rate_multiplier"`
+	RateMode                  string     `json:"rate_mode"`
+	DynamicRateLastDirection  string     `json:"dynamic_rate_last_direction"`
+	DynamicRateLastAdjustedAt *time.Time `json:"dynamic_rate_last_adjusted_at"`
+	IsExclusive               bool       `json:"is_exclusive"`
+	Status                    string     `json:"status"`
 
 	SubscriptionType string   `json:"subscription_type"`
 	DailyLimitUSD    *float64 `json:"daily_limit_usd"`
@@ -164,9 +167,13 @@ type AdminGroup struct {
 	// 分组利润控制（五个 token 平台分组可启用；margin/buffer 为小数存储）。
 	// 仅管理员可见：这三个字段与同响应中的 rate_multiplier 相乘即可反推出
 	// 运营方的上游成本上限，属于内部经营信息，不得下放到 dto.Group。
-	ProfitControlEnabled bool    `json:"profit_control_enabled"`
-	ProfitMinMargin      float64 `json:"profit_min_margin"`
-	ProfitSafetyBuffer   float64 `json:"profit_safety_buffer"`
+	ProfitControlEnabled        bool       `json:"profit_control_enabled"`
+	ProfitMinMargin             float64    `json:"profit_min_margin"`
+	ProfitSafetyBuffer          float64    `json:"profit_safety_buffer"`
+	DynamicRateMarkupPercent    float64    `json:"dynamic_rate_markup_percent"`
+	DynamicRateSourceMultiplier *float64   `json:"dynamic_rate_source_multiplier"`
+	DynamicRateStatus           string     `json:"dynamic_rate_status"`
+	DynamicRateLastEvaluatedAt  *time.Time `json:"dynamic_rate_last_evaluated_at"`
 
 	// 模型路由配置（仅 anthropic 平台使用）
 	ModelRouting        map[string][]int64 `json:"model_routing"`

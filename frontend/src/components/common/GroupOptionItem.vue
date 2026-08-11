@@ -42,6 +42,13 @@
         >
           {{ peakRateText }}
         </span>
+        <span
+          v-if="rateMode === 'dynamic' && !hasUserRateOverride"
+          class="inline-flex items-center whitespace-nowrap rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700 dark:bg-cyan-900/20 dark:text-cyan-300"
+          :title="dynamicRateTitle"
+        >
+          {{ dynamicRateText }}
+        </span>
       </div>
       <!-- Checkmark -->
       <svg
@@ -62,7 +69,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import GroupBadge from './GroupBadge.vue'
-import type { SubscriptionType, GroupPlatform } from '@/types'
+import type { SubscriptionType, GroupPlatform, GroupRateMode, DynamicRateDirection } from '@/types'
 import { useAppStore } from '@/stores/app'
 import { formatPeakRateWindow, serverTimezoneLabel } from '@/utils/peak-rate'
 
@@ -81,6 +88,9 @@ interface Props {
   description?: string | null
   selected?: boolean
   showCheckmark?: boolean
+  rateMode?: GroupRateMode
+  dynamicRateLastDirection?: DynamicRateDirection
+  dynamicRateLastAdjustedAt?: string | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -88,7 +98,9 @@ const props = withDefaults(defineProps<Props>(), {
   selected: false,
   showCheckmark: true,
   userRateMultiplier: null,
-  peakRateEnabled: false
+  peakRateEnabled: false,
+  rateMode: 'fixed',
+  dynamicRateLastDirection: 'none'
 })
 
 // Whether user has a custom rate different from default
@@ -100,6 +112,7 @@ const hasCustomRate = computed(() => {
     props.userRateMultiplier !== props.rateMultiplier
   )
 })
+const hasUserRateOverride = computed(() => props.userRateMultiplier !== null && props.userRateMultiplier !== undefined)
 
 const appStore = useAppStore()
 
@@ -122,6 +135,15 @@ const peakRateText = computed(() => {
 const peakRateTitle = computed(() => {
   return t('common.peakRateTooltip', { window: peakRateText.value })
 })
+
+const dynamicRateText = computed(() => {
+  if (props.dynamicRateLastDirection === 'increase') return t('groups.dynamicRateIncrease')
+  if (props.dynamicRateLastDirection === 'decrease') return t('groups.dynamicRateDecrease')
+  return t('groups.dynamicRate')
+})
+const dynamicRateTitle = computed(() => props.dynamicRateLastAdjustedAt
+  ? `${dynamicRateText.value} · ${new Date(props.dynamicRateLastAdjustedAt).toLocaleString()}`
+  : t('groups.dynamicRate'))
 
 // Rate pill color matches platform badge color
 const ratePillClass = computed(() => {

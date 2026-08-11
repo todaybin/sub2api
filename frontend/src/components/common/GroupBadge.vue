@@ -23,13 +23,20 @@
     <span v-if="hasPeakRate" :class="peakRateClass" :title="peakRateTitle">
       {{ peakRateText }}
     </span>
+    <span
+      v-if="showDynamicRate"
+      class="rounded bg-cyan-100 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300"
+      :title="dynamicRateTitle"
+    >
+      {{ dynamicRateText }}
+    </span>
   </span>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { SubscriptionType, GroupPlatform } from '@/types'
+import type { SubscriptionType, GroupPlatform, GroupRateMode, DynamicRateDirection } from '@/types'
 import { useAppStore } from '@/stores/app'
 import { formatPeakRateWindow, serverTimezoneLabel } from '@/utils/peak-rate'
 import PlatformIcon from './PlatformIcon.vue'
@@ -52,6 +59,9 @@ interface Props {
    * 只关心费率、不关心有效期的场景）。
    */
   alwaysShowRate?: boolean
+  rateMode?: GroupRateMode
+  dynamicRateLastDirection?: DynamicRateDirection
+  dynamicRateLastAdjustedAt?: string | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -60,7 +70,9 @@ const props = withDefaults(defineProps<Props>(), {
   daysRemaining: null,
   userRateMultiplier: null,
   peakRateEnabled: false,
-  alwaysShowRate: false
+  alwaysShowRate: false,
+  rateMode: 'fixed',
+  dynamicRateLastDirection: 'none'
 })
 
 const { t } = useI18n()
@@ -76,11 +88,23 @@ const hasCustomRate = computed(() => {
     props.userRateMultiplier !== props.rateMultiplier
   )
 })
+const hasUserRateOverride = computed(() => props.userRateMultiplier !== null && props.userRateMultiplier !== undefined)
 
 const appStore = useAppStore()
 
 const hasPeakRate = computed(() => {
   return Boolean(props.showRate && props.peakRateEnabled && props.peakStart && props.peakEnd)
+})
+
+const showDynamicRate = computed(() => props.showRate && props.rateMode === 'dynamic' && !hasUserRateOverride.value)
+const dynamicRateText = computed(() => {
+  if (props.dynamicRateLastDirection === 'increase') return t('groups.dynamicRateIncrease')
+  if (props.dynamicRateLastDirection === 'decrease') return t('groups.dynamicRateDecrease')
+  return t('groups.dynamicRate')
+})
+const dynamicRateTitle = computed(() => {
+  if (!props.dynamicRateLastAdjustedAt) return t('groups.dynamicRate')
+  return `${dynamicRateText.value} · ${new Date(props.dynamicRateLastAdjustedAt).toLocaleString()}`
 })
 
 const peakRateText = computed(() => {

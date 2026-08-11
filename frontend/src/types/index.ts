@@ -530,6 +530,9 @@ export type GroupPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 
 export type VideoModelPrices = Record<string, Record<string, number>>
 
 export type SubscriptionType = 'standard' | 'subscription'
+export type GroupRateMode = 'fixed' | 'dynamic'
+export type DynamicRateDirection = 'none' | 'increase' | 'decrease'
+export type DynamicRateStatus = 'idle' | 'waiting' | 'ready' | 'incomplete' | 'paused'
 
 export interface OpenAIMessagesDispatchModelConfig {
   opus_mapped_model?: string
@@ -549,6 +552,9 @@ export interface Group {
   description: string | null
   platform: GroupPlatform
   rate_multiplier: number
+  rate_mode: GroupRateMode
+  dynamic_rate_last_direction: DynamicRateDirection
+  dynamic_rate_last_adjusted_at: string | null
   rpm_limit?: number // Group-level RPM cap (0 = unlimited); overrides user-level rpm_limit when set
   max_reasoning_effort?: string // OpenAI/Codex reasoning ceiling; empty means unlimited
   reasoning_effort_mappings?: ReasoningEffortMapping[]
@@ -609,6 +615,10 @@ export interface AdminGroup extends Group {
   profit_control_enabled: boolean
   profit_min_margin: number
   profit_safety_buffer: number
+  dynamic_rate_markup_percent: number
+  dynamic_rate_source_multiplier: number | null
+  dynamic_rate_status: DynamicRateStatus
+  dynamic_rate_last_evaluated_at: string | null
 
   // 模型路由配置（仅管理员可见，内部信息）
   model_routing: Record<string, number[]> | null
@@ -761,6 +771,8 @@ export interface CreateGroupRequest {
   description?: string | null
   platform?: GroupPlatform
   rate_multiplier?: number
+  rate_mode?: GroupRateMode
+  dynamic_rate_markup_percent?: number
   is_exclusive?: boolean
   subscription_type?: SubscriptionType
   daily_limit_usd?: number | null
@@ -820,6 +832,8 @@ export interface UpdateGroupRequest {
   description?: string | null
   platform?: GroupPlatform
   rate_multiplier?: number
+  rate_mode?: GroupRateMode
+  dynamic_rate_markup_percent?: number
   is_exclusive?: boolean
   status?: 'active' | 'inactive'
   subscription_type?: SubscriptionType

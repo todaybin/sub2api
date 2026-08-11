@@ -68,6 +68,25 @@ func TestUserGroupRateResolverResolve_InvalidCacheEntryLoadsRepoAndCaches(t *tes
 	require.Equal(t, int64(0), fallback)
 }
 
+func TestUserGroupRateResolverResolve_NoOverrideFollowsChangingGroupDefault(t *testing.T) {
+	repo := &userGroupRateResolverRepoStub{}
+	resolver := newUserGroupRateResolver(repo, nil, time.Minute, nil, "service.test")
+
+	require.Equal(t, 0.8, resolver.Resolve(context.Background(), 101, 202, 0.8))
+	require.Equal(t, 0.96, resolver.Resolve(context.Background(), 101, 202, 0.96))
+	require.Equal(t, 1, repo.calls)
+}
+
+func TestUserGroupRateResolverResolve_CustomOverrideStaysFixed(t *testing.T) {
+	rate := 0.7
+	repo := &userGroupRateResolverRepoStub{rate: &rate}
+	resolver := newUserGroupRateResolver(repo, nil, time.Minute, nil, "service.test")
+
+	require.Equal(t, rate, resolver.Resolve(context.Background(), 101, 202, 0.8))
+	require.Equal(t, rate, resolver.Resolve(context.Background(), 101, 202, 0.96))
+	require.Equal(t, 1, repo.calls)
+}
+
 func TestGatewayServiceGetUserGroupRateMultiplier_FallbacksAndUsesExistingResolver(t *testing.T) {
 	var nilSvc *GatewayService
 	require.Equal(t, 1.3, nilSvc.getUserGroupRateMultiplier(context.Background(), 101, 202, 1.3))

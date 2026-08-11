@@ -117,6 +117,136 @@ func (_u *GroupUpdate) AddRateMultiplier(v float64) *GroupUpdate {
 	return _u
 }
 
+// SetRateMode sets the "rate_mode" field.
+func (_u *GroupUpdate) SetRateMode(v string) *GroupUpdate {
+	_u.mutation.SetRateMode(v)
+	return _u
+}
+
+// SetNillableRateMode sets the "rate_mode" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableRateMode(v *string) *GroupUpdate {
+	if v != nil {
+		_u.SetRateMode(*v)
+	}
+	return _u
+}
+
+// SetDynamicRateMarkupPercent sets the "dynamic_rate_markup_percent" field.
+func (_u *GroupUpdate) SetDynamicRateMarkupPercent(v float64) *GroupUpdate {
+	_u.mutation.ResetDynamicRateMarkupPercent()
+	_u.mutation.SetDynamicRateMarkupPercent(v)
+	return _u
+}
+
+// SetNillableDynamicRateMarkupPercent sets the "dynamic_rate_markup_percent" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableDynamicRateMarkupPercent(v *float64) *GroupUpdate {
+	if v != nil {
+		_u.SetDynamicRateMarkupPercent(*v)
+	}
+	return _u
+}
+
+// AddDynamicRateMarkupPercent adds value to the "dynamic_rate_markup_percent" field.
+func (_u *GroupUpdate) AddDynamicRateMarkupPercent(v float64) *GroupUpdate {
+	_u.mutation.AddDynamicRateMarkupPercent(v)
+	return _u
+}
+
+// SetDynamicRateSourceMultiplier sets the "dynamic_rate_source_multiplier" field.
+func (_u *GroupUpdate) SetDynamicRateSourceMultiplier(v float64) *GroupUpdate {
+	_u.mutation.ResetDynamicRateSourceMultiplier()
+	_u.mutation.SetDynamicRateSourceMultiplier(v)
+	return _u
+}
+
+// SetNillableDynamicRateSourceMultiplier sets the "dynamic_rate_source_multiplier" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableDynamicRateSourceMultiplier(v *float64) *GroupUpdate {
+	if v != nil {
+		_u.SetDynamicRateSourceMultiplier(*v)
+	}
+	return _u
+}
+
+// AddDynamicRateSourceMultiplier adds value to the "dynamic_rate_source_multiplier" field.
+func (_u *GroupUpdate) AddDynamicRateSourceMultiplier(v float64) *GroupUpdate {
+	_u.mutation.AddDynamicRateSourceMultiplier(v)
+	return _u
+}
+
+// ClearDynamicRateSourceMultiplier clears the value of the "dynamic_rate_source_multiplier" field.
+func (_u *GroupUpdate) ClearDynamicRateSourceMultiplier() *GroupUpdate {
+	_u.mutation.ClearDynamicRateSourceMultiplier()
+	return _u
+}
+
+// SetDynamicRateStatus sets the "dynamic_rate_status" field.
+func (_u *GroupUpdate) SetDynamicRateStatus(v string) *GroupUpdate {
+	_u.mutation.SetDynamicRateStatus(v)
+	return _u
+}
+
+// SetNillableDynamicRateStatus sets the "dynamic_rate_status" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableDynamicRateStatus(v *string) *GroupUpdate {
+	if v != nil {
+		_u.SetDynamicRateStatus(*v)
+	}
+	return _u
+}
+
+// SetDynamicRateLastDirection sets the "dynamic_rate_last_direction" field.
+func (_u *GroupUpdate) SetDynamicRateLastDirection(v string) *GroupUpdate {
+	_u.mutation.SetDynamicRateLastDirection(v)
+	return _u
+}
+
+// SetNillableDynamicRateLastDirection sets the "dynamic_rate_last_direction" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableDynamicRateLastDirection(v *string) *GroupUpdate {
+	if v != nil {
+		_u.SetDynamicRateLastDirection(*v)
+	}
+	return _u
+}
+
+// SetDynamicRateLastEvaluatedAt sets the "dynamic_rate_last_evaluated_at" field.
+func (_u *GroupUpdate) SetDynamicRateLastEvaluatedAt(v time.Time) *GroupUpdate {
+	_u.mutation.SetDynamicRateLastEvaluatedAt(v)
+	return _u
+}
+
+// SetNillableDynamicRateLastEvaluatedAt sets the "dynamic_rate_last_evaluated_at" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableDynamicRateLastEvaluatedAt(v *time.Time) *GroupUpdate {
+	if v != nil {
+		_u.SetDynamicRateLastEvaluatedAt(*v)
+	}
+	return _u
+}
+
+// ClearDynamicRateLastEvaluatedAt clears the value of the "dynamic_rate_last_evaluated_at" field.
+func (_u *GroupUpdate) ClearDynamicRateLastEvaluatedAt() *GroupUpdate {
+	_u.mutation.ClearDynamicRateLastEvaluatedAt()
+	return _u
+}
+
+// SetDynamicRateLastAdjustedAt sets the "dynamic_rate_last_adjusted_at" field.
+func (_u *GroupUpdate) SetDynamicRateLastAdjustedAt(v time.Time) *GroupUpdate {
+	_u.mutation.SetDynamicRateLastAdjustedAt(v)
+	return _u
+}
+
+// SetNillableDynamicRateLastAdjustedAt sets the "dynamic_rate_last_adjusted_at" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableDynamicRateLastAdjustedAt(v *time.Time) *GroupUpdate {
+	if v != nil {
+		_u.SetDynamicRateLastAdjustedAt(*v)
+	}
+	return _u
+}
+
+// ClearDynamicRateLastAdjustedAt clears the value of the "dynamic_rate_last_adjusted_at" field.
+func (_u *GroupUpdate) ClearDynamicRateLastAdjustedAt() *GroupUpdate {
+	_u.mutation.ClearDynamicRateLastAdjustedAt()
+	return _u
+}
+
 // SetPeakRateEnabled sets the "peak_rate_enabled" field.
 func (_u *GroupUpdate) SetPeakRateEnabled(v bool) *GroupUpdate {
 	_u.mutation.SetPeakRateEnabled(v)
@@ -1399,6 +1529,21 @@ func (_u *GroupUpdate) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "Group.name": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.RateMode(); ok {
+		if err := group.RateModeValidator(v); err != nil {
+			return &ValidationError{Name: "rate_mode", err: fmt.Errorf(`ent: validator failed for field "Group.rate_mode": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.DynamicRateStatus(); ok {
+		if err := group.DynamicRateStatusValidator(v); err != nil {
+			return &ValidationError{Name: "dynamic_rate_status", err: fmt.Errorf(`ent: validator failed for field "Group.dynamic_rate_status": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.DynamicRateLastDirection(); ok {
+		if err := group.DynamicRateLastDirectionValidator(v); err != nil {
+			return &ValidationError{Name: "dynamic_rate_last_direction", err: fmt.Errorf(`ent: validator failed for field "Group.dynamic_rate_last_direction": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.PeakStart(); ok {
 		if err := group.PeakStartValidator(v); err != nil {
 			return &ValidationError{Name: "peak_start", err: fmt.Errorf(`ent: validator failed for field "Group.peak_start": %w`, err)}
@@ -1492,6 +1637,42 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedRateMultiplier(); ok {
 		_spec.AddField(group.FieldRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.RateMode(); ok {
+		_spec.SetField(group.FieldRateMode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DynamicRateMarkupPercent(); ok {
+		_spec.SetField(group.FieldDynamicRateMarkupPercent, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedDynamicRateMarkupPercent(); ok {
+		_spec.AddField(group.FieldDynamicRateMarkupPercent, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.DynamicRateSourceMultiplier(); ok {
+		_spec.SetField(group.FieldDynamicRateSourceMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedDynamicRateSourceMultiplier(); ok {
+		_spec.AddField(group.FieldDynamicRateSourceMultiplier, field.TypeFloat64, value)
+	}
+	if _u.mutation.DynamicRateSourceMultiplierCleared() {
+		_spec.ClearField(group.FieldDynamicRateSourceMultiplier, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.DynamicRateStatus(); ok {
+		_spec.SetField(group.FieldDynamicRateStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DynamicRateLastDirection(); ok {
+		_spec.SetField(group.FieldDynamicRateLastDirection, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DynamicRateLastEvaluatedAt(); ok {
+		_spec.SetField(group.FieldDynamicRateLastEvaluatedAt, field.TypeTime, value)
+	}
+	if _u.mutation.DynamicRateLastEvaluatedAtCleared() {
+		_spec.ClearField(group.FieldDynamicRateLastEvaluatedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.DynamicRateLastAdjustedAt(); ok {
+		_spec.SetField(group.FieldDynamicRateLastAdjustedAt, field.TypeTime, value)
+	}
+	if _u.mutation.DynamicRateLastAdjustedAtCleared() {
+		_spec.ClearField(group.FieldDynamicRateLastAdjustedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.PeakRateEnabled(); ok {
 		_spec.SetField(group.FieldPeakRateEnabled, field.TypeBool, value)
@@ -2189,6 +2370,136 @@ func (_u *GroupUpdateOne) SetNillableRateMultiplier(v *float64) *GroupUpdateOne 
 // AddRateMultiplier adds value to the "rate_multiplier" field.
 func (_u *GroupUpdateOne) AddRateMultiplier(v float64) *GroupUpdateOne {
 	_u.mutation.AddRateMultiplier(v)
+	return _u
+}
+
+// SetRateMode sets the "rate_mode" field.
+func (_u *GroupUpdateOne) SetRateMode(v string) *GroupUpdateOne {
+	_u.mutation.SetRateMode(v)
+	return _u
+}
+
+// SetNillableRateMode sets the "rate_mode" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableRateMode(v *string) *GroupUpdateOne {
+	if v != nil {
+		_u.SetRateMode(*v)
+	}
+	return _u
+}
+
+// SetDynamicRateMarkupPercent sets the "dynamic_rate_markup_percent" field.
+func (_u *GroupUpdateOne) SetDynamicRateMarkupPercent(v float64) *GroupUpdateOne {
+	_u.mutation.ResetDynamicRateMarkupPercent()
+	_u.mutation.SetDynamicRateMarkupPercent(v)
+	return _u
+}
+
+// SetNillableDynamicRateMarkupPercent sets the "dynamic_rate_markup_percent" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableDynamicRateMarkupPercent(v *float64) *GroupUpdateOne {
+	if v != nil {
+		_u.SetDynamicRateMarkupPercent(*v)
+	}
+	return _u
+}
+
+// AddDynamicRateMarkupPercent adds value to the "dynamic_rate_markup_percent" field.
+func (_u *GroupUpdateOne) AddDynamicRateMarkupPercent(v float64) *GroupUpdateOne {
+	_u.mutation.AddDynamicRateMarkupPercent(v)
+	return _u
+}
+
+// SetDynamicRateSourceMultiplier sets the "dynamic_rate_source_multiplier" field.
+func (_u *GroupUpdateOne) SetDynamicRateSourceMultiplier(v float64) *GroupUpdateOne {
+	_u.mutation.ResetDynamicRateSourceMultiplier()
+	_u.mutation.SetDynamicRateSourceMultiplier(v)
+	return _u
+}
+
+// SetNillableDynamicRateSourceMultiplier sets the "dynamic_rate_source_multiplier" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableDynamicRateSourceMultiplier(v *float64) *GroupUpdateOne {
+	if v != nil {
+		_u.SetDynamicRateSourceMultiplier(*v)
+	}
+	return _u
+}
+
+// AddDynamicRateSourceMultiplier adds value to the "dynamic_rate_source_multiplier" field.
+func (_u *GroupUpdateOne) AddDynamicRateSourceMultiplier(v float64) *GroupUpdateOne {
+	_u.mutation.AddDynamicRateSourceMultiplier(v)
+	return _u
+}
+
+// ClearDynamicRateSourceMultiplier clears the value of the "dynamic_rate_source_multiplier" field.
+func (_u *GroupUpdateOne) ClearDynamicRateSourceMultiplier() *GroupUpdateOne {
+	_u.mutation.ClearDynamicRateSourceMultiplier()
+	return _u
+}
+
+// SetDynamicRateStatus sets the "dynamic_rate_status" field.
+func (_u *GroupUpdateOne) SetDynamicRateStatus(v string) *GroupUpdateOne {
+	_u.mutation.SetDynamicRateStatus(v)
+	return _u
+}
+
+// SetNillableDynamicRateStatus sets the "dynamic_rate_status" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableDynamicRateStatus(v *string) *GroupUpdateOne {
+	if v != nil {
+		_u.SetDynamicRateStatus(*v)
+	}
+	return _u
+}
+
+// SetDynamicRateLastDirection sets the "dynamic_rate_last_direction" field.
+func (_u *GroupUpdateOne) SetDynamicRateLastDirection(v string) *GroupUpdateOne {
+	_u.mutation.SetDynamicRateLastDirection(v)
+	return _u
+}
+
+// SetNillableDynamicRateLastDirection sets the "dynamic_rate_last_direction" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableDynamicRateLastDirection(v *string) *GroupUpdateOne {
+	if v != nil {
+		_u.SetDynamicRateLastDirection(*v)
+	}
+	return _u
+}
+
+// SetDynamicRateLastEvaluatedAt sets the "dynamic_rate_last_evaluated_at" field.
+func (_u *GroupUpdateOne) SetDynamicRateLastEvaluatedAt(v time.Time) *GroupUpdateOne {
+	_u.mutation.SetDynamicRateLastEvaluatedAt(v)
+	return _u
+}
+
+// SetNillableDynamicRateLastEvaluatedAt sets the "dynamic_rate_last_evaluated_at" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableDynamicRateLastEvaluatedAt(v *time.Time) *GroupUpdateOne {
+	if v != nil {
+		_u.SetDynamicRateLastEvaluatedAt(*v)
+	}
+	return _u
+}
+
+// ClearDynamicRateLastEvaluatedAt clears the value of the "dynamic_rate_last_evaluated_at" field.
+func (_u *GroupUpdateOne) ClearDynamicRateLastEvaluatedAt() *GroupUpdateOne {
+	_u.mutation.ClearDynamicRateLastEvaluatedAt()
+	return _u
+}
+
+// SetDynamicRateLastAdjustedAt sets the "dynamic_rate_last_adjusted_at" field.
+func (_u *GroupUpdateOne) SetDynamicRateLastAdjustedAt(v time.Time) *GroupUpdateOne {
+	_u.mutation.SetDynamicRateLastAdjustedAt(v)
+	return _u
+}
+
+// SetNillableDynamicRateLastAdjustedAt sets the "dynamic_rate_last_adjusted_at" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableDynamicRateLastAdjustedAt(v *time.Time) *GroupUpdateOne {
+	if v != nil {
+		_u.SetDynamicRateLastAdjustedAt(*v)
+	}
+	return _u
+}
+
+// ClearDynamicRateLastAdjustedAt clears the value of the "dynamic_rate_last_adjusted_at" field.
+func (_u *GroupUpdateOne) ClearDynamicRateLastAdjustedAt() *GroupUpdateOne {
+	_u.mutation.ClearDynamicRateLastAdjustedAt()
 	return _u
 }
 
@@ -3487,6 +3798,21 @@ func (_u *GroupUpdateOne) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "Group.name": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.RateMode(); ok {
+		if err := group.RateModeValidator(v); err != nil {
+			return &ValidationError{Name: "rate_mode", err: fmt.Errorf(`ent: validator failed for field "Group.rate_mode": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.DynamicRateStatus(); ok {
+		if err := group.DynamicRateStatusValidator(v); err != nil {
+			return &ValidationError{Name: "dynamic_rate_status", err: fmt.Errorf(`ent: validator failed for field "Group.dynamic_rate_status": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.DynamicRateLastDirection(); ok {
+		if err := group.DynamicRateLastDirectionValidator(v); err != nil {
+			return &ValidationError{Name: "dynamic_rate_last_direction", err: fmt.Errorf(`ent: validator failed for field "Group.dynamic_rate_last_direction": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.PeakStart(); ok {
 		if err := group.PeakStartValidator(v); err != nil {
 			return &ValidationError{Name: "peak_start", err: fmt.Errorf(`ent: validator failed for field "Group.peak_start": %w`, err)}
@@ -3597,6 +3923,42 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if value, ok := _u.mutation.AddedRateMultiplier(); ok {
 		_spec.AddField(group.FieldRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.RateMode(); ok {
+		_spec.SetField(group.FieldRateMode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DynamicRateMarkupPercent(); ok {
+		_spec.SetField(group.FieldDynamicRateMarkupPercent, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedDynamicRateMarkupPercent(); ok {
+		_spec.AddField(group.FieldDynamicRateMarkupPercent, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.DynamicRateSourceMultiplier(); ok {
+		_spec.SetField(group.FieldDynamicRateSourceMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedDynamicRateSourceMultiplier(); ok {
+		_spec.AddField(group.FieldDynamicRateSourceMultiplier, field.TypeFloat64, value)
+	}
+	if _u.mutation.DynamicRateSourceMultiplierCleared() {
+		_spec.ClearField(group.FieldDynamicRateSourceMultiplier, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.DynamicRateStatus(); ok {
+		_spec.SetField(group.FieldDynamicRateStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DynamicRateLastDirection(); ok {
+		_spec.SetField(group.FieldDynamicRateLastDirection, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DynamicRateLastEvaluatedAt(); ok {
+		_spec.SetField(group.FieldDynamicRateLastEvaluatedAt, field.TypeTime, value)
+	}
+	if _u.mutation.DynamicRateLastEvaluatedAtCleared() {
+		_spec.ClearField(group.FieldDynamicRateLastEvaluatedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.DynamicRateLastAdjustedAt(); ok {
+		_spec.SetField(group.FieldDynamicRateLastAdjustedAt, field.TypeTime, value)
+	}
+	if _u.mutation.DynamicRateLastAdjustedAtCleared() {
+		_spec.ClearField(group.FieldDynamicRateLastAdjustedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.PeakRateEnabled(); ok {
 		_spec.SetField(group.FieldPeakRateEnabled, field.TypeBool, value)

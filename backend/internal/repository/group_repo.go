@@ -61,6 +61,10 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		SetDescription(groupIn.Description).
 		SetPlatform(groupIn.Platform).
 		SetRateMultiplier(groupIn.RateMultiplier).
+		SetRateMode(groupIn.RateMode).
+		SetDynamicRateMarkupPercent(groupIn.DynamicRateMarkupPercent).
+		SetDynamicRateStatus(groupIn.DynamicRateStatus).
+		SetDynamicRateLastDirection(groupIn.DynamicRateLastDirection).
 		SetSortOrder(groupIn.SortOrder).
 		SetIsExclusive(groupIn.IsExclusive).
 		SetStatus(groupIn.Status).
@@ -111,6 +115,15 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		SetProfitControlEnabled(groupIn.ProfitControlEnabled).
 		SetProfitMinMargin(groupIn.ProfitMinMargin).
 		SetProfitSafetyBuffer(groupIn.ProfitSafetyBuffer)
+	if groupIn.DynamicRateSourceMultiplier != nil {
+		builder = builder.SetDynamicRateSourceMultiplier(*groupIn.DynamicRateSourceMultiplier)
+	}
+	if groupIn.DynamicRateLastEvaluatedAt != nil {
+		builder = builder.SetDynamicRateLastEvaluatedAt(*groupIn.DynamicRateLastEvaluatedAt)
+	}
+	if groupIn.DynamicRateLastAdjustedAt != nil {
+		builder = builder.SetDynamicRateLastAdjustedAt(*groupIn.DynamicRateLastAdjustedAt)
+	}
 	if groupIn.DuplicateOperationID != "" {
 		builder = builder.SetDuplicateOperationID(groupIn.DuplicateOperationID)
 	}
@@ -239,6 +252,10 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		SetDescription(groupIn.Description).
 		SetPlatform(groupIn.Platform).
 		SetRateMultiplier(groupIn.RateMultiplier).
+		SetRateMode(groupIn.RateMode).
+		SetDynamicRateMarkupPercent(groupIn.DynamicRateMarkupPercent).
+		SetDynamicRateStatus(groupIn.DynamicRateStatus).
+		SetDynamicRateLastDirection(groupIn.DynamicRateLastDirection).
 		SetIsExclusive(groupIn.IsExclusive).
 		SetStatus(groupIn.Status).
 		SetSubscriptionType(groupIn.SubscriptionType).
@@ -281,6 +298,21 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		SetProfitControlEnabled(groupIn.ProfitControlEnabled).
 		SetProfitMinMargin(groupIn.ProfitMinMargin).
 		SetProfitSafetyBuffer(groupIn.ProfitSafetyBuffer)
+	if groupIn.DynamicRateSourceMultiplier != nil {
+		builder = builder.SetDynamicRateSourceMultiplier(*groupIn.DynamicRateSourceMultiplier)
+	} else {
+		builder = builder.ClearDynamicRateSourceMultiplier()
+	}
+	if groupIn.DynamicRateLastEvaluatedAt != nil {
+		builder = builder.SetDynamicRateLastEvaluatedAt(*groupIn.DynamicRateLastEvaluatedAt)
+	} else {
+		builder = builder.ClearDynamicRateLastEvaluatedAt()
+	}
+	if groupIn.DynamicRateLastAdjustedAt != nil {
+		builder = builder.SetDynamicRateLastAdjustedAt(*groupIn.DynamicRateLastAdjustedAt)
+	} else {
+		builder = builder.ClearDynamicRateLastAdjustedAt()
+	}
 
 	// 显式处理可空字段：nil 需要 clear，非 nil 需要 set。
 	if groupIn.DailyLimitUSD != nil {
@@ -386,6 +418,95 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group update failed: group=%d err=%v", groupIn.ID, err)
 	}
 	return nil
+}
+
+func (r *groupRepository) ApplyDynamicRateEvaluation(
+	ctx context.Context,
+	groupID int64,
+	expectedMarkup float64,
+	evaluation service.DynamicGroupRateEvaluation,
+) (*service.DynamicGroupRateApplyResult, error) {
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	client := tx.Client()
+	applyTarget := evaluation.TargetMultiplier != nil
+	var target any
+	if applyTarget {
+		target = *evaluation.TargetMultiplier
+	}
+	var source any
+	if evaluation.SourceMultiplier != nil {
+		source = *evaluation.SourceMultiplier
+	}
+	rows, err := client.QueryContext(ctx, `
+		WITH current AS (
+			SELECT id, rate_multiplier AS old_rate
+			FROM groups
+			WHERE id = $1
+			  AND deleted_at IS NULL
+			  AND rate_mode = 'dynamic'
+			  AND dynamic_rate_markup_percent = $2
+			FOR UPDATE
+		), updated AS (
+			UPDATE groups AS g
+			SET dynamic_rate_source_multiplier = $3,
+				dynamic_rate_status = $4,
+				dynamic_rate_last_evaluated_at = $5,
+				rate_multiplier = CASE WHEN $7 THEN $6::double precision ELSE g.rate_multiplier END,
+				dynamic_rate_last_direction = CASE
+					WHEN $7 AND $6::double precision > current.old_rate THEN 'increase'
+					WHEN $7 AND $6::double precision < current.old_rate THEN 'decrease'
+					ELSE g.dynamic_rate_last_direction
+				END,
+				dynamic_rate_last_adjusted_at = CASE
+					WHEN $7 AND $6::double precision <> current.old_rate THEN $5
+					ELSE g.dynamic_rate_last_adjusted_at
+				END,
+				updated_at = CASE
+					WHEN $7 AND $6::double precision <> current.old_rate THEN $5
+					ELSE g.updated_at
+				END
+			FROM current
+			WHERE g.id = current.id
+			RETURNING g.rate_multiplier, g.dynamic_rate_last_direction
+		)
+		SELECT current.old_rate, updated.rate_multiplier,
+		       updated.dynamic_rate_last_direction,
+		       updated.rate_multiplier <> current.old_rate
+		FROM current JOIN updated ON TRUE
+	`, groupID, expectedMarkup, source, evaluation.Status, evaluation.EvaluatedAt, target, applyTarget)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
+		return &service.DynamicGroupRateApplyResult{}, nil
+	}
+	result := &service.DynamicGroupRateApplyResult{}
+	if err := rows.Scan(&result.OldMultiplier, &result.NewMultiplier, &result.Direction, &result.Applied); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if result.Applied {
+		if err := enqueueSchedulerOutbox(ctx, client, service.SchedulerOutboxEventGroupChanged, nil, &groupID, nil); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (r *groupRepository) Delete(ctx context.Context, id int64) error {

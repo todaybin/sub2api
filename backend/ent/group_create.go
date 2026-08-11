@@ -105,6 +105,104 @@ func (_c *GroupCreate) SetNillableRateMultiplier(v *float64) *GroupCreate {
 	return _c
 }
 
+// SetRateMode sets the "rate_mode" field.
+func (_c *GroupCreate) SetRateMode(v string) *GroupCreate {
+	_c.mutation.SetRateMode(v)
+	return _c
+}
+
+// SetNillableRateMode sets the "rate_mode" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableRateMode(v *string) *GroupCreate {
+	if v != nil {
+		_c.SetRateMode(*v)
+	}
+	return _c
+}
+
+// SetDynamicRateMarkupPercent sets the "dynamic_rate_markup_percent" field.
+func (_c *GroupCreate) SetDynamicRateMarkupPercent(v float64) *GroupCreate {
+	_c.mutation.SetDynamicRateMarkupPercent(v)
+	return _c
+}
+
+// SetNillableDynamicRateMarkupPercent sets the "dynamic_rate_markup_percent" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableDynamicRateMarkupPercent(v *float64) *GroupCreate {
+	if v != nil {
+		_c.SetDynamicRateMarkupPercent(*v)
+	}
+	return _c
+}
+
+// SetDynamicRateSourceMultiplier sets the "dynamic_rate_source_multiplier" field.
+func (_c *GroupCreate) SetDynamicRateSourceMultiplier(v float64) *GroupCreate {
+	_c.mutation.SetDynamicRateSourceMultiplier(v)
+	return _c
+}
+
+// SetNillableDynamicRateSourceMultiplier sets the "dynamic_rate_source_multiplier" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableDynamicRateSourceMultiplier(v *float64) *GroupCreate {
+	if v != nil {
+		_c.SetDynamicRateSourceMultiplier(*v)
+	}
+	return _c
+}
+
+// SetDynamicRateStatus sets the "dynamic_rate_status" field.
+func (_c *GroupCreate) SetDynamicRateStatus(v string) *GroupCreate {
+	_c.mutation.SetDynamicRateStatus(v)
+	return _c
+}
+
+// SetNillableDynamicRateStatus sets the "dynamic_rate_status" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableDynamicRateStatus(v *string) *GroupCreate {
+	if v != nil {
+		_c.SetDynamicRateStatus(*v)
+	}
+	return _c
+}
+
+// SetDynamicRateLastDirection sets the "dynamic_rate_last_direction" field.
+func (_c *GroupCreate) SetDynamicRateLastDirection(v string) *GroupCreate {
+	_c.mutation.SetDynamicRateLastDirection(v)
+	return _c
+}
+
+// SetNillableDynamicRateLastDirection sets the "dynamic_rate_last_direction" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableDynamicRateLastDirection(v *string) *GroupCreate {
+	if v != nil {
+		_c.SetDynamicRateLastDirection(*v)
+	}
+	return _c
+}
+
+// SetDynamicRateLastEvaluatedAt sets the "dynamic_rate_last_evaluated_at" field.
+func (_c *GroupCreate) SetDynamicRateLastEvaluatedAt(v time.Time) *GroupCreate {
+	_c.mutation.SetDynamicRateLastEvaluatedAt(v)
+	return _c
+}
+
+// SetNillableDynamicRateLastEvaluatedAt sets the "dynamic_rate_last_evaluated_at" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableDynamicRateLastEvaluatedAt(v *time.Time) *GroupCreate {
+	if v != nil {
+		_c.SetDynamicRateLastEvaluatedAt(*v)
+	}
+	return _c
+}
+
+// SetDynamicRateLastAdjustedAt sets the "dynamic_rate_last_adjusted_at" field.
+func (_c *GroupCreate) SetDynamicRateLastAdjustedAt(v time.Time) *GroupCreate {
+	_c.mutation.SetDynamicRateLastAdjustedAt(v)
+	return _c
+}
+
+// SetNillableDynamicRateLastAdjustedAt sets the "dynamic_rate_last_adjusted_at" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableDynamicRateLastAdjustedAt(v *time.Time) *GroupCreate {
+	if v != nil {
+		_c.SetDynamicRateLastAdjustedAt(*v)
+	}
+	return _c
+}
+
 // SetPeakRateEnabled sets the "peak_rate_enabled" field.
 func (_c *GroupCreate) SetPeakRateEnabled(v bool) *GroupCreate {
 	_c.mutation.SetPeakRateEnabled(v)
@@ -974,6 +1072,22 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultRateMultiplier
 		_c.mutation.SetRateMultiplier(v)
 	}
+	if _, ok := _c.mutation.RateMode(); !ok {
+		v := group.DefaultRateMode
+		_c.mutation.SetRateMode(v)
+	}
+	if _, ok := _c.mutation.DynamicRateMarkupPercent(); !ok {
+		v := group.DefaultDynamicRateMarkupPercent
+		_c.mutation.SetDynamicRateMarkupPercent(v)
+	}
+	if _, ok := _c.mutation.DynamicRateStatus(); !ok {
+		v := group.DefaultDynamicRateStatus
+		_c.mutation.SetDynamicRateStatus(v)
+	}
+	if _, ok := _c.mutation.DynamicRateLastDirection(); !ok {
+		v := group.DefaultDynamicRateLastDirection
+		_c.mutation.SetDynamicRateLastDirection(v)
+	}
 	if _, ok := _c.mutation.PeakRateEnabled(); !ok {
 		v := group.DefaultPeakRateEnabled
 		_c.mutation.SetPeakRateEnabled(v)
@@ -1135,6 +1249,33 @@ func (_c *GroupCreate) check() error {
 	}
 	if _, ok := _c.mutation.RateMultiplier(); !ok {
 		return &ValidationError{Name: "rate_multiplier", err: errors.New(`ent: missing required field "Group.rate_multiplier"`)}
+	}
+	if _, ok := _c.mutation.RateMode(); !ok {
+		return &ValidationError{Name: "rate_mode", err: errors.New(`ent: missing required field "Group.rate_mode"`)}
+	}
+	if v, ok := _c.mutation.RateMode(); ok {
+		if err := group.RateModeValidator(v); err != nil {
+			return &ValidationError{Name: "rate_mode", err: fmt.Errorf(`ent: validator failed for field "Group.rate_mode": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.DynamicRateMarkupPercent(); !ok {
+		return &ValidationError{Name: "dynamic_rate_markup_percent", err: errors.New(`ent: missing required field "Group.dynamic_rate_markup_percent"`)}
+	}
+	if _, ok := _c.mutation.DynamicRateStatus(); !ok {
+		return &ValidationError{Name: "dynamic_rate_status", err: errors.New(`ent: missing required field "Group.dynamic_rate_status"`)}
+	}
+	if v, ok := _c.mutation.DynamicRateStatus(); ok {
+		if err := group.DynamicRateStatusValidator(v); err != nil {
+			return &ValidationError{Name: "dynamic_rate_status", err: fmt.Errorf(`ent: validator failed for field "Group.dynamic_rate_status": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.DynamicRateLastDirection(); !ok {
+		return &ValidationError{Name: "dynamic_rate_last_direction", err: errors.New(`ent: missing required field "Group.dynamic_rate_last_direction"`)}
+	}
+	if v, ok := _c.mutation.DynamicRateLastDirection(); ok {
+		if err := group.DynamicRateLastDirectionValidator(v); err != nil {
+			return &ValidationError{Name: "dynamic_rate_last_direction", err: fmt.Errorf(`ent: validator failed for field "Group.dynamic_rate_last_direction": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.PeakRateEnabled(); !ok {
 		return &ValidationError{Name: "peak_rate_enabled", err: errors.New(`ent: missing required field "Group.peak_rate_enabled"`)}
@@ -1351,6 +1492,34 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RateMultiplier(); ok {
 		_spec.SetField(group.FieldRateMultiplier, field.TypeFloat64, value)
 		_node.RateMultiplier = value
+	}
+	if value, ok := _c.mutation.RateMode(); ok {
+		_spec.SetField(group.FieldRateMode, field.TypeString, value)
+		_node.RateMode = value
+	}
+	if value, ok := _c.mutation.DynamicRateMarkupPercent(); ok {
+		_spec.SetField(group.FieldDynamicRateMarkupPercent, field.TypeFloat64, value)
+		_node.DynamicRateMarkupPercent = value
+	}
+	if value, ok := _c.mutation.DynamicRateSourceMultiplier(); ok {
+		_spec.SetField(group.FieldDynamicRateSourceMultiplier, field.TypeFloat64, value)
+		_node.DynamicRateSourceMultiplier = &value
+	}
+	if value, ok := _c.mutation.DynamicRateStatus(); ok {
+		_spec.SetField(group.FieldDynamicRateStatus, field.TypeString, value)
+		_node.DynamicRateStatus = value
+	}
+	if value, ok := _c.mutation.DynamicRateLastDirection(); ok {
+		_spec.SetField(group.FieldDynamicRateLastDirection, field.TypeString, value)
+		_node.DynamicRateLastDirection = value
+	}
+	if value, ok := _c.mutation.DynamicRateLastEvaluatedAt(); ok {
+		_spec.SetField(group.FieldDynamicRateLastEvaluatedAt, field.TypeTime, value)
+		_node.DynamicRateLastEvaluatedAt = &value
+	}
+	if value, ok := _c.mutation.DynamicRateLastAdjustedAt(); ok {
+		_spec.SetField(group.FieldDynamicRateLastAdjustedAt, field.TypeTime, value)
+		_node.DynamicRateLastAdjustedAt = &value
 	}
 	if value, ok := _c.mutation.PeakRateEnabled(); ok {
 		_spec.SetField(group.FieldPeakRateEnabled, field.TypeBool, value)
@@ -1799,6 +1968,120 @@ func (u *GroupUpsert) UpdateRateMultiplier() *GroupUpsert {
 // AddRateMultiplier adds v to the "rate_multiplier" field.
 func (u *GroupUpsert) AddRateMultiplier(v float64) *GroupUpsert {
 	u.Add(group.FieldRateMultiplier, v)
+	return u
+}
+
+// SetRateMode sets the "rate_mode" field.
+func (u *GroupUpsert) SetRateMode(v string) *GroupUpsert {
+	u.Set(group.FieldRateMode, v)
+	return u
+}
+
+// UpdateRateMode sets the "rate_mode" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateRateMode() *GroupUpsert {
+	u.SetExcluded(group.FieldRateMode)
+	return u
+}
+
+// SetDynamicRateMarkupPercent sets the "dynamic_rate_markup_percent" field.
+func (u *GroupUpsert) SetDynamicRateMarkupPercent(v float64) *GroupUpsert {
+	u.Set(group.FieldDynamicRateMarkupPercent, v)
+	return u
+}
+
+// UpdateDynamicRateMarkupPercent sets the "dynamic_rate_markup_percent" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateDynamicRateMarkupPercent() *GroupUpsert {
+	u.SetExcluded(group.FieldDynamicRateMarkupPercent)
+	return u
+}
+
+// AddDynamicRateMarkupPercent adds v to the "dynamic_rate_markup_percent" field.
+func (u *GroupUpsert) AddDynamicRateMarkupPercent(v float64) *GroupUpsert {
+	u.Add(group.FieldDynamicRateMarkupPercent, v)
+	return u
+}
+
+// SetDynamicRateSourceMultiplier sets the "dynamic_rate_source_multiplier" field.
+func (u *GroupUpsert) SetDynamicRateSourceMultiplier(v float64) *GroupUpsert {
+	u.Set(group.FieldDynamicRateSourceMultiplier, v)
+	return u
+}
+
+// UpdateDynamicRateSourceMultiplier sets the "dynamic_rate_source_multiplier" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateDynamicRateSourceMultiplier() *GroupUpsert {
+	u.SetExcluded(group.FieldDynamicRateSourceMultiplier)
+	return u
+}
+
+// AddDynamicRateSourceMultiplier adds v to the "dynamic_rate_source_multiplier" field.
+func (u *GroupUpsert) AddDynamicRateSourceMultiplier(v float64) *GroupUpsert {
+	u.Add(group.FieldDynamicRateSourceMultiplier, v)
+	return u
+}
+
+// ClearDynamicRateSourceMultiplier clears the value of the "dynamic_rate_source_multiplier" field.
+func (u *GroupUpsert) ClearDynamicRateSourceMultiplier() *GroupUpsert {
+	u.SetNull(group.FieldDynamicRateSourceMultiplier)
+	return u
+}
+
+// SetDynamicRateStatus sets the "dynamic_rate_status" field.
+func (u *GroupUpsert) SetDynamicRateStatus(v string) *GroupUpsert {
+	u.Set(group.FieldDynamicRateStatus, v)
+	return u
+}
+
+// UpdateDynamicRateStatus sets the "dynamic_rate_status" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateDynamicRateStatus() *GroupUpsert {
+	u.SetExcluded(group.FieldDynamicRateStatus)
+	return u
+}
+
+// SetDynamicRateLastDirection sets the "dynamic_rate_last_direction" field.
+func (u *GroupUpsert) SetDynamicRateLastDirection(v string) *GroupUpsert {
+	u.Set(group.FieldDynamicRateLastDirection, v)
+	return u
+}
+
+// UpdateDynamicRateLastDirection sets the "dynamic_rate_last_direction" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateDynamicRateLastDirection() *GroupUpsert {
+	u.SetExcluded(group.FieldDynamicRateLastDirection)
+	return u
+}
+
+// SetDynamicRateLastEvaluatedAt sets the "dynamic_rate_last_evaluated_at" field.
+func (u *GroupUpsert) SetDynamicRateLastEvaluatedAt(v time.Time) *GroupUpsert {
+	u.Set(group.FieldDynamicRateLastEvaluatedAt, v)
+	return u
+}
+
+// UpdateDynamicRateLastEvaluatedAt sets the "dynamic_rate_last_evaluated_at" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateDynamicRateLastEvaluatedAt() *GroupUpsert {
+	u.SetExcluded(group.FieldDynamicRateLastEvaluatedAt)
+	return u
+}
+
+// ClearDynamicRateLastEvaluatedAt clears the value of the "dynamic_rate_last_evaluated_at" field.
+func (u *GroupUpsert) ClearDynamicRateLastEvaluatedAt() *GroupUpsert {
+	u.SetNull(group.FieldDynamicRateLastEvaluatedAt)
+	return u
+}
+
+// SetDynamicRateLastAdjustedAt sets the "dynamic_rate_last_adjusted_at" field.
+func (u *GroupUpsert) SetDynamicRateLastAdjustedAt(v time.Time) *GroupUpsert {
+	u.Set(group.FieldDynamicRateLastAdjustedAt, v)
+	return u
+}
+
+// UpdateDynamicRateLastAdjustedAt sets the "dynamic_rate_last_adjusted_at" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateDynamicRateLastAdjustedAt() *GroupUpsert {
+	u.SetExcluded(group.FieldDynamicRateLastAdjustedAt)
+	return u
+}
+
+// ClearDynamicRateLastAdjustedAt clears the value of the "dynamic_rate_last_adjusted_at" field.
+func (u *GroupUpsert) ClearDynamicRateLastAdjustedAt() *GroupUpsert {
+	u.SetNull(group.FieldDynamicRateLastAdjustedAt)
 	return u
 }
 
@@ -2838,6 +3121,139 @@ func (u *GroupUpsertOne) AddRateMultiplier(v float64) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdateRateMultiplier() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateRateMultiplier()
+	})
+}
+
+// SetRateMode sets the "rate_mode" field.
+func (u *GroupUpsertOne) SetRateMode(v string) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetRateMode(v)
+	})
+}
+
+// UpdateRateMode sets the "rate_mode" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateRateMode() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateRateMode()
+	})
+}
+
+// SetDynamicRateMarkupPercent sets the "dynamic_rate_markup_percent" field.
+func (u *GroupUpsertOne) SetDynamicRateMarkupPercent(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetDynamicRateMarkupPercent(v)
+	})
+}
+
+// AddDynamicRateMarkupPercent adds v to the "dynamic_rate_markup_percent" field.
+func (u *GroupUpsertOne) AddDynamicRateMarkupPercent(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddDynamicRateMarkupPercent(v)
+	})
+}
+
+// UpdateDynamicRateMarkupPercent sets the "dynamic_rate_markup_percent" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateDynamicRateMarkupPercent() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateDynamicRateMarkupPercent()
+	})
+}
+
+// SetDynamicRateSourceMultiplier sets the "dynamic_rate_source_multiplier" field.
+func (u *GroupUpsertOne) SetDynamicRateSourceMultiplier(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetDynamicRateSourceMultiplier(v)
+	})
+}
+
+// AddDynamicRateSourceMultiplier adds v to the "dynamic_rate_source_multiplier" field.
+func (u *GroupUpsertOne) AddDynamicRateSourceMultiplier(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddDynamicRateSourceMultiplier(v)
+	})
+}
+
+// UpdateDynamicRateSourceMultiplier sets the "dynamic_rate_source_multiplier" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateDynamicRateSourceMultiplier() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateDynamicRateSourceMultiplier()
+	})
+}
+
+// ClearDynamicRateSourceMultiplier clears the value of the "dynamic_rate_source_multiplier" field.
+func (u *GroupUpsertOne) ClearDynamicRateSourceMultiplier() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearDynamicRateSourceMultiplier()
+	})
+}
+
+// SetDynamicRateStatus sets the "dynamic_rate_status" field.
+func (u *GroupUpsertOne) SetDynamicRateStatus(v string) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetDynamicRateStatus(v)
+	})
+}
+
+// UpdateDynamicRateStatus sets the "dynamic_rate_status" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateDynamicRateStatus() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateDynamicRateStatus()
+	})
+}
+
+// SetDynamicRateLastDirection sets the "dynamic_rate_last_direction" field.
+func (u *GroupUpsertOne) SetDynamicRateLastDirection(v string) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetDynamicRateLastDirection(v)
+	})
+}
+
+// UpdateDynamicRateLastDirection sets the "dynamic_rate_last_direction" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateDynamicRateLastDirection() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateDynamicRateLastDirection()
+	})
+}
+
+// SetDynamicRateLastEvaluatedAt sets the "dynamic_rate_last_evaluated_at" field.
+func (u *GroupUpsertOne) SetDynamicRateLastEvaluatedAt(v time.Time) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetDynamicRateLastEvaluatedAt(v)
+	})
+}
+
+// UpdateDynamicRateLastEvaluatedAt sets the "dynamic_rate_last_evaluated_at" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateDynamicRateLastEvaluatedAt() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateDynamicRateLastEvaluatedAt()
+	})
+}
+
+// ClearDynamicRateLastEvaluatedAt clears the value of the "dynamic_rate_last_evaluated_at" field.
+func (u *GroupUpsertOne) ClearDynamicRateLastEvaluatedAt() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearDynamicRateLastEvaluatedAt()
+	})
+}
+
+// SetDynamicRateLastAdjustedAt sets the "dynamic_rate_last_adjusted_at" field.
+func (u *GroupUpsertOne) SetDynamicRateLastAdjustedAt(v time.Time) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetDynamicRateLastAdjustedAt(v)
+	})
+}
+
+// UpdateDynamicRateLastAdjustedAt sets the "dynamic_rate_last_adjusted_at" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateDynamicRateLastAdjustedAt() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateDynamicRateLastAdjustedAt()
+	})
+}
+
+// ClearDynamicRateLastAdjustedAt clears the value of the "dynamic_rate_last_adjusted_at" field.
+func (u *GroupUpsertOne) ClearDynamicRateLastAdjustedAt() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearDynamicRateLastAdjustedAt()
 	})
 }
 
@@ -4193,6 +4609,139 @@ func (u *GroupUpsertBulk) AddRateMultiplier(v float64) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdateRateMultiplier() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateRateMultiplier()
+	})
+}
+
+// SetRateMode sets the "rate_mode" field.
+func (u *GroupUpsertBulk) SetRateMode(v string) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetRateMode(v)
+	})
+}
+
+// UpdateRateMode sets the "rate_mode" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateRateMode() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateRateMode()
+	})
+}
+
+// SetDynamicRateMarkupPercent sets the "dynamic_rate_markup_percent" field.
+func (u *GroupUpsertBulk) SetDynamicRateMarkupPercent(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetDynamicRateMarkupPercent(v)
+	})
+}
+
+// AddDynamicRateMarkupPercent adds v to the "dynamic_rate_markup_percent" field.
+func (u *GroupUpsertBulk) AddDynamicRateMarkupPercent(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddDynamicRateMarkupPercent(v)
+	})
+}
+
+// UpdateDynamicRateMarkupPercent sets the "dynamic_rate_markup_percent" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateDynamicRateMarkupPercent() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateDynamicRateMarkupPercent()
+	})
+}
+
+// SetDynamicRateSourceMultiplier sets the "dynamic_rate_source_multiplier" field.
+func (u *GroupUpsertBulk) SetDynamicRateSourceMultiplier(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetDynamicRateSourceMultiplier(v)
+	})
+}
+
+// AddDynamicRateSourceMultiplier adds v to the "dynamic_rate_source_multiplier" field.
+func (u *GroupUpsertBulk) AddDynamicRateSourceMultiplier(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddDynamicRateSourceMultiplier(v)
+	})
+}
+
+// UpdateDynamicRateSourceMultiplier sets the "dynamic_rate_source_multiplier" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateDynamicRateSourceMultiplier() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateDynamicRateSourceMultiplier()
+	})
+}
+
+// ClearDynamicRateSourceMultiplier clears the value of the "dynamic_rate_source_multiplier" field.
+func (u *GroupUpsertBulk) ClearDynamicRateSourceMultiplier() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearDynamicRateSourceMultiplier()
+	})
+}
+
+// SetDynamicRateStatus sets the "dynamic_rate_status" field.
+func (u *GroupUpsertBulk) SetDynamicRateStatus(v string) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetDynamicRateStatus(v)
+	})
+}
+
+// UpdateDynamicRateStatus sets the "dynamic_rate_status" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateDynamicRateStatus() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateDynamicRateStatus()
+	})
+}
+
+// SetDynamicRateLastDirection sets the "dynamic_rate_last_direction" field.
+func (u *GroupUpsertBulk) SetDynamicRateLastDirection(v string) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetDynamicRateLastDirection(v)
+	})
+}
+
+// UpdateDynamicRateLastDirection sets the "dynamic_rate_last_direction" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateDynamicRateLastDirection() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateDynamicRateLastDirection()
+	})
+}
+
+// SetDynamicRateLastEvaluatedAt sets the "dynamic_rate_last_evaluated_at" field.
+func (u *GroupUpsertBulk) SetDynamicRateLastEvaluatedAt(v time.Time) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetDynamicRateLastEvaluatedAt(v)
+	})
+}
+
+// UpdateDynamicRateLastEvaluatedAt sets the "dynamic_rate_last_evaluated_at" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateDynamicRateLastEvaluatedAt() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateDynamicRateLastEvaluatedAt()
+	})
+}
+
+// ClearDynamicRateLastEvaluatedAt clears the value of the "dynamic_rate_last_evaluated_at" field.
+func (u *GroupUpsertBulk) ClearDynamicRateLastEvaluatedAt() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearDynamicRateLastEvaluatedAt()
+	})
+}
+
+// SetDynamicRateLastAdjustedAt sets the "dynamic_rate_last_adjusted_at" field.
+func (u *GroupUpsertBulk) SetDynamicRateLastAdjustedAt(v time.Time) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetDynamicRateLastAdjustedAt(v)
+	})
+}
+
+// UpdateDynamicRateLastAdjustedAt sets the "dynamic_rate_last_adjusted_at" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateDynamicRateLastAdjustedAt() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateDynamicRateLastAdjustedAt()
+	})
+}
+
+// ClearDynamicRateLastAdjustedAt clears the value of the "dynamic_rate_last_adjusted_at" field.
+func (u *GroupUpsertBulk) ClearDynamicRateLastAdjustedAt() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearDynamicRateLastAdjustedAt()
 	})
 }
 

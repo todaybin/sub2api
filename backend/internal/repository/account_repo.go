@@ -3596,6 +3596,25 @@ func (r *accountRepository) ListDueUpstreamBillingProbeAccounts(ctx context.Cont
 	return out, nil
 }
 
+func (r *accountRepository) EnableUpstreamBillingProbeForGroup(ctx context.Context, groupID int64) error {
+	if groupID <= 0 || r.sql == nil {
+		return nil
+	}
+	_, err := r.sql.ExecContext(ctx, `
+		UPDATE accounts AS a
+		SET extra = jsonb_set(COALESCE(a.extra, '{}'::jsonb), '{upstream_billing_probe_enabled}', 'true'::jsonb, true)
+		FROM account_groups AS ag
+		WHERE ag.account_id = a.id
+		  AND ag.group_id = $1
+		  AND a.deleted_at IS NULL
+		  AND a.type = $2
+		  AND a.status = $3
+		  AND a.schedulable = TRUE
+		  AND COALESCE((a.extra ->> 'upstream_billing_probe_enabled')::boolean, FALSE) = FALSE
+	`, groupID, service.AccountTypeAPIKey, service.StatusActive)
+	return err
+}
+
 // nowUTC is a SQL expression to generate a UTC RFC3339 timestamp string.
 const nowUTC = `to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`
 

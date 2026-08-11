@@ -41,4 +41,44 @@ describe('GroupOptionItem description layout', () => {
     expect(descriptionElement?.classes()).toContain('line-clamp-3')
     expect(wrapper.find('[title]').attributes('title')).toBe(description)
   })
+
+  it('shows dynamic direction unless a user-specific rate overrides the group rate', () => {
+    const dynamic = mount(GroupOptionItem, {
+      props: {
+        name: 'Dynamic group',
+        platform: 'openai',
+        rateMultiplier: 0.96,
+        rateMode: 'dynamic',
+        dynamicRateLastDirection: 'increase',
+      },
+      global: { stubs: { GroupBadge: true } },
+    })
+    expect(dynamic.text()).toContain('groups.dynamicRateIncrease')
+
+    const overridden = mount(GroupOptionItem, {
+      props: {
+        name: 'Dynamic group',
+        platform: 'openai',
+        rateMultiplier: 0.96,
+        userRateMultiplier: 0.7,
+        rateMode: 'dynamic',
+        dynamicRateLastDirection: 'increase',
+      },
+      global: { stubs: { GroupBadge: true } },
+    })
+    expect(overridden.text()).not.toContain('groups.dynamicRateIncrease')
+
+    const equalOverride = mount(GroupOptionItem, {
+      props: {
+        name: 'Dynamic group',
+        platform: 'openai',
+        rateMultiplier: 0.96,
+        userRateMultiplier: 0.96,
+        rateMode: 'dynamic',
+        dynamicRateLastDirection: 'increase',
+      },
+      global: { stubs: { GroupBadge: true } },
+    })
+    expect(equalOverride.text()).not.toContain('groups.dynamicRateIncrease')
+  })
 })

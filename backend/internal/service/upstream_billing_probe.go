@@ -253,6 +253,7 @@ type UpstreamBillingProbeService struct {
 	lockCache    LeaderLockCache
 	db           *sql.DB
 	instanceID   string
+	dynamicRate  *DynamicGroupRateService
 }
 
 type upstreamBillingProbeSnapshotWriter interface {
@@ -289,6 +290,12 @@ func (s *UpstreamBillingProbeService) SetLeaderLock(lockCache LeaderLockCache, d
 	s.db = db
 }
 
+func (s *UpstreamBillingProbeService) SetDynamicGroupRateService(dynamicRate *DynamicGroupRateService) {
+	if s != nil {
+		s.dynamicRate = dynamicRate
+	}
+}
+
 // ProvideUpstreamBillingProbeService starts the process-wide periodic runner.
 func ProvideUpstreamBillingProbeService(
 	accountRepo AccountRepository,
@@ -296,9 +303,11 @@ func ProvideUpstreamBillingProbeService(
 	settingService *SettingService,
 	lockCache LeaderLockCache,
 	db *sql.DB,
+	dynamicRate *DynamicGroupRateService,
 ) *UpstreamBillingProbeService {
 	svc := NewUpstreamBillingProbeService(accountRepo, accountTestService, settingService)
 	svc.SetLeaderLock(lockCache, db)
+	svc.SetDynamicGroupRateService(dynamicRate)
 	svc.Start()
 	return svc
 }
@@ -358,13 +367,6 @@ func (s *UpstreamBillingProbeService) RunDue(ctx context.Context) error {
 	s.cycleMu.Lock()
 	defer s.cycleMu.Unlock()
 
-	settings, err := s.getSettings(ctx)
-	if err != nil {
-		return err
-	}
-	if !settings.Enabled {
-		return nil
-	}
 	runRelease, acquired, lockErr := s.tryAcquireLeaderLock(ctx, upstreamBillingProbeLeaderLockKey)
 	if lockErr != nil {
 		return fmt.Errorf("acquire upstream billing probe leader lock: %w", lockErr)
@@ -383,6 +385,19 @@ func (s *UpstreamBillingProbeService) RunDue(ctx context.Context) error {
 		return nil
 	}
 	defer releaseUpstreamBillingProbeLeaderLock(cadenceRelease, lockNow.Truncate(upstreamBillingProbeCycleInterval).Add(upstreamBillingProbeCycleInterval))
+
+	if s.dynamicRate != nil {
+		if err := s.dynamicRate.ReconcileAll(ctx); err != nil {
+			logger.LegacyPrintf("service.upstream_billing_probe", "dynamic_rate_reconcile_failed: err=%v", err)
+		}
+	}
+	settings, err := s.getSettings(ctx)
+	if err != nil {
+		return err
+	}
+	if !settings.Enabled {
+		return nil
+	}
 
 	now := s.currentTime()
 	accounts, err := s.listDueAccounts(ctx, now)
@@ -1074,7 +1089,15 @@ func (s *UpstreamBillingProbeService) updateSnapshot(
 	if !ok {
 		return ErrUpstreamBillingProbeUnavailable
 	}
-	return writer.UpdateUpstreamBillingProbeSnapshot(ctx, account, snapshot, rateMultiplier)
+	if err := writer.UpdateUpstreamBillingProbeSnapshot(ctx, account, snapshot, rateMultiplier); err != nil {
+		return err
+	}
+	if s.dynamicRate != nil {
+		if err := s.dynamicRate.ReconcileForAccount(ctx, account); err != nil {
+			logger.LegacyPrintf("service.upstream_billing_probe", "dynamic_rate_account_reconcile_failed: account_id=%d err=%v", account.ID, err)
+		}
+	}
+	return nil
 }
 
 func parseUpstreamBillingProbeResponse(body []byte) (map[string]any, error) {

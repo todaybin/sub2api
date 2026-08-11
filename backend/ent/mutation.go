@@ -21854,6 +21854,15 @@ type GroupMutation struct {
 	description                             *string
 	rate_multiplier                         *float64
 	addrate_multiplier                      *float64
+	rate_mode                               *string
+	dynamic_rate_markup_percent             *float64
+	adddynamic_rate_markup_percent          *float64
+	dynamic_rate_source_multiplier          *float64
+	adddynamic_rate_source_multiplier       *float64
+	dynamic_rate_status                     *string
+	dynamic_rate_last_direction             *string
+	dynamic_rate_last_evaluated_at          *time.Time
+	dynamic_rate_last_adjusted_at           *time.Time
 	peak_rate_enabled                       *bool
 	peak_start                              *string
 	peak_end                                *string
@@ -22318,6 +22327,338 @@ func (m *GroupMutation) AddedRateMultiplier() (r float64, exists bool) {
 func (m *GroupMutation) ResetRateMultiplier() {
 	m.rate_multiplier = nil
 	m.addrate_multiplier = nil
+}
+
+// SetRateMode sets the "rate_mode" field.
+func (m *GroupMutation) SetRateMode(s string) {
+	m.rate_mode = &s
+}
+
+// RateMode returns the value of the "rate_mode" field in the mutation.
+func (m *GroupMutation) RateMode() (r string, exists bool) {
+	v := m.rate_mode
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRateMode returns the old "rate_mode" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldRateMode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRateMode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRateMode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRateMode: %w", err)
+	}
+	return oldValue.RateMode, nil
+}
+
+// ResetRateMode resets all changes to the "rate_mode" field.
+func (m *GroupMutation) ResetRateMode() {
+	m.rate_mode = nil
+}
+
+// SetDynamicRateMarkupPercent sets the "dynamic_rate_markup_percent" field.
+func (m *GroupMutation) SetDynamicRateMarkupPercent(f float64) {
+	m.dynamic_rate_markup_percent = &f
+	m.adddynamic_rate_markup_percent = nil
+}
+
+// DynamicRateMarkupPercent returns the value of the "dynamic_rate_markup_percent" field in the mutation.
+func (m *GroupMutation) DynamicRateMarkupPercent() (r float64, exists bool) {
+	v := m.dynamic_rate_markup_percent
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDynamicRateMarkupPercent returns the old "dynamic_rate_markup_percent" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldDynamicRateMarkupPercent(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDynamicRateMarkupPercent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDynamicRateMarkupPercent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDynamicRateMarkupPercent: %w", err)
+	}
+	return oldValue.DynamicRateMarkupPercent, nil
+}
+
+// AddDynamicRateMarkupPercent adds f to the "dynamic_rate_markup_percent" field.
+func (m *GroupMutation) AddDynamicRateMarkupPercent(f float64) {
+	if m.adddynamic_rate_markup_percent != nil {
+		*m.adddynamic_rate_markup_percent += f
+	} else {
+		m.adddynamic_rate_markup_percent = &f
+	}
+}
+
+// AddedDynamicRateMarkupPercent returns the value that was added to the "dynamic_rate_markup_percent" field in this mutation.
+func (m *GroupMutation) AddedDynamicRateMarkupPercent() (r float64, exists bool) {
+	v := m.adddynamic_rate_markup_percent
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetDynamicRateMarkupPercent resets all changes to the "dynamic_rate_markup_percent" field.
+func (m *GroupMutation) ResetDynamicRateMarkupPercent() {
+	m.dynamic_rate_markup_percent = nil
+	m.adddynamic_rate_markup_percent = nil
+}
+
+// SetDynamicRateSourceMultiplier sets the "dynamic_rate_source_multiplier" field.
+func (m *GroupMutation) SetDynamicRateSourceMultiplier(f float64) {
+	m.dynamic_rate_source_multiplier = &f
+	m.adddynamic_rate_source_multiplier = nil
+}
+
+// DynamicRateSourceMultiplier returns the value of the "dynamic_rate_source_multiplier" field in the mutation.
+func (m *GroupMutation) DynamicRateSourceMultiplier() (r float64, exists bool) {
+	v := m.dynamic_rate_source_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDynamicRateSourceMultiplier returns the old "dynamic_rate_source_multiplier" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldDynamicRateSourceMultiplier(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDynamicRateSourceMultiplier is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDynamicRateSourceMultiplier requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDynamicRateSourceMultiplier: %w", err)
+	}
+	return oldValue.DynamicRateSourceMultiplier, nil
+}
+
+// AddDynamicRateSourceMultiplier adds f to the "dynamic_rate_source_multiplier" field.
+func (m *GroupMutation) AddDynamicRateSourceMultiplier(f float64) {
+	if m.adddynamic_rate_source_multiplier != nil {
+		*m.adddynamic_rate_source_multiplier += f
+	} else {
+		m.adddynamic_rate_source_multiplier = &f
+	}
+}
+
+// AddedDynamicRateSourceMultiplier returns the value that was added to the "dynamic_rate_source_multiplier" field in this mutation.
+func (m *GroupMutation) AddedDynamicRateSourceMultiplier() (r float64, exists bool) {
+	v := m.adddynamic_rate_source_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearDynamicRateSourceMultiplier clears the value of the "dynamic_rate_source_multiplier" field.
+func (m *GroupMutation) ClearDynamicRateSourceMultiplier() {
+	m.dynamic_rate_source_multiplier = nil
+	m.adddynamic_rate_source_multiplier = nil
+	m.clearedFields[group.FieldDynamicRateSourceMultiplier] = struct{}{}
+}
+
+// DynamicRateSourceMultiplierCleared returns if the "dynamic_rate_source_multiplier" field was cleared in this mutation.
+func (m *GroupMutation) DynamicRateSourceMultiplierCleared() bool {
+	_, ok := m.clearedFields[group.FieldDynamicRateSourceMultiplier]
+	return ok
+}
+
+// ResetDynamicRateSourceMultiplier resets all changes to the "dynamic_rate_source_multiplier" field.
+func (m *GroupMutation) ResetDynamicRateSourceMultiplier() {
+	m.dynamic_rate_source_multiplier = nil
+	m.adddynamic_rate_source_multiplier = nil
+	delete(m.clearedFields, group.FieldDynamicRateSourceMultiplier)
+}
+
+// SetDynamicRateStatus sets the "dynamic_rate_status" field.
+func (m *GroupMutation) SetDynamicRateStatus(s string) {
+	m.dynamic_rate_status = &s
+}
+
+// DynamicRateStatus returns the value of the "dynamic_rate_status" field in the mutation.
+func (m *GroupMutation) DynamicRateStatus() (r string, exists bool) {
+	v := m.dynamic_rate_status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDynamicRateStatus returns the old "dynamic_rate_status" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldDynamicRateStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDynamicRateStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDynamicRateStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDynamicRateStatus: %w", err)
+	}
+	return oldValue.DynamicRateStatus, nil
+}
+
+// ResetDynamicRateStatus resets all changes to the "dynamic_rate_status" field.
+func (m *GroupMutation) ResetDynamicRateStatus() {
+	m.dynamic_rate_status = nil
+}
+
+// SetDynamicRateLastDirection sets the "dynamic_rate_last_direction" field.
+func (m *GroupMutation) SetDynamicRateLastDirection(s string) {
+	m.dynamic_rate_last_direction = &s
+}
+
+// DynamicRateLastDirection returns the value of the "dynamic_rate_last_direction" field in the mutation.
+func (m *GroupMutation) DynamicRateLastDirection() (r string, exists bool) {
+	v := m.dynamic_rate_last_direction
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDynamicRateLastDirection returns the old "dynamic_rate_last_direction" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldDynamicRateLastDirection(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDynamicRateLastDirection is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDynamicRateLastDirection requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDynamicRateLastDirection: %w", err)
+	}
+	return oldValue.DynamicRateLastDirection, nil
+}
+
+// ResetDynamicRateLastDirection resets all changes to the "dynamic_rate_last_direction" field.
+func (m *GroupMutation) ResetDynamicRateLastDirection() {
+	m.dynamic_rate_last_direction = nil
+}
+
+// SetDynamicRateLastEvaluatedAt sets the "dynamic_rate_last_evaluated_at" field.
+func (m *GroupMutation) SetDynamicRateLastEvaluatedAt(t time.Time) {
+	m.dynamic_rate_last_evaluated_at = &t
+}
+
+// DynamicRateLastEvaluatedAt returns the value of the "dynamic_rate_last_evaluated_at" field in the mutation.
+func (m *GroupMutation) DynamicRateLastEvaluatedAt() (r time.Time, exists bool) {
+	v := m.dynamic_rate_last_evaluated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDynamicRateLastEvaluatedAt returns the old "dynamic_rate_last_evaluated_at" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldDynamicRateLastEvaluatedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDynamicRateLastEvaluatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDynamicRateLastEvaluatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDynamicRateLastEvaluatedAt: %w", err)
+	}
+	return oldValue.DynamicRateLastEvaluatedAt, nil
+}
+
+// ClearDynamicRateLastEvaluatedAt clears the value of the "dynamic_rate_last_evaluated_at" field.
+func (m *GroupMutation) ClearDynamicRateLastEvaluatedAt() {
+	m.dynamic_rate_last_evaluated_at = nil
+	m.clearedFields[group.FieldDynamicRateLastEvaluatedAt] = struct{}{}
+}
+
+// DynamicRateLastEvaluatedAtCleared returns if the "dynamic_rate_last_evaluated_at" field was cleared in this mutation.
+func (m *GroupMutation) DynamicRateLastEvaluatedAtCleared() bool {
+	_, ok := m.clearedFields[group.FieldDynamicRateLastEvaluatedAt]
+	return ok
+}
+
+// ResetDynamicRateLastEvaluatedAt resets all changes to the "dynamic_rate_last_evaluated_at" field.
+func (m *GroupMutation) ResetDynamicRateLastEvaluatedAt() {
+	m.dynamic_rate_last_evaluated_at = nil
+	delete(m.clearedFields, group.FieldDynamicRateLastEvaluatedAt)
+}
+
+// SetDynamicRateLastAdjustedAt sets the "dynamic_rate_last_adjusted_at" field.
+func (m *GroupMutation) SetDynamicRateLastAdjustedAt(t time.Time) {
+	m.dynamic_rate_last_adjusted_at = &t
+}
+
+// DynamicRateLastAdjustedAt returns the value of the "dynamic_rate_last_adjusted_at" field in the mutation.
+func (m *GroupMutation) DynamicRateLastAdjustedAt() (r time.Time, exists bool) {
+	v := m.dynamic_rate_last_adjusted_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDynamicRateLastAdjustedAt returns the old "dynamic_rate_last_adjusted_at" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldDynamicRateLastAdjustedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDynamicRateLastAdjustedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDynamicRateLastAdjustedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDynamicRateLastAdjustedAt: %w", err)
+	}
+	return oldValue.DynamicRateLastAdjustedAt, nil
+}
+
+// ClearDynamicRateLastAdjustedAt clears the value of the "dynamic_rate_last_adjusted_at" field.
+func (m *GroupMutation) ClearDynamicRateLastAdjustedAt() {
+	m.dynamic_rate_last_adjusted_at = nil
+	m.clearedFields[group.FieldDynamicRateLastAdjustedAt] = struct{}{}
+}
+
+// DynamicRateLastAdjustedAtCleared returns if the "dynamic_rate_last_adjusted_at" field was cleared in this mutation.
+func (m *GroupMutation) DynamicRateLastAdjustedAtCleared() bool {
+	_, ok := m.clearedFields[group.FieldDynamicRateLastAdjustedAt]
+	return ok
+}
+
+// ResetDynamicRateLastAdjustedAt resets all changes to the "dynamic_rate_last_adjusted_at" field.
+func (m *GroupMutation) ResetDynamicRateLastAdjustedAt() {
+	m.dynamic_rate_last_adjusted_at = nil
+	delete(m.clearedFields, group.FieldDynamicRateLastAdjustedAt)
 }
 
 // SetPeakRateEnabled sets the "peak_rate_enabled" field.
@@ -25435,7 +25776,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 60)
+	fields := make([]string, 0, 67)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -25453,6 +25794,27 @@ func (m *GroupMutation) Fields() []string {
 	}
 	if m.rate_multiplier != nil {
 		fields = append(fields, group.FieldRateMultiplier)
+	}
+	if m.rate_mode != nil {
+		fields = append(fields, group.FieldRateMode)
+	}
+	if m.dynamic_rate_markup_percent != nil {
+		fields = append(fields, group.FieldDynamicRateMarkupPercent)
+	}
+	if m.dynamic_rate_source_multiplier != nil {
+		fields = append(fields, group.FieldDynamicRateSourceMultiplier)
+	}
+	if m.dynamic_rate_status != nil {
+		fields = append(fields, group.FieldDynamicRateStatus)
+	}
+	if m.dynamic_rate_last_direction != nil {
+		fields = append(fields, group.FieldDynamicRateLastDirection)
+	}
+	if m.dynamic_rate_last_evaluated_at != nil {
+		fields = append(fields, group.FieldDynamicRateLastEvaluatedAt)
+	}
+	if m.dynamic_rate_last_adjusted_at != nil {
+		fields = append(fields, group.FieldDynamicRateLastAdjustedAt)
 	}
 	if m.peak_rate_enabled != nil {
 		fields = append(fields, group.FieldPeakRateEnabled)
@@ -25636,6 +25998,20 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.Description()
 	case group.FieldRateMultiplier:
 		return m.RateMultiplier()
+	case group.FieldRateMode:
+		return m.RateMode()
+	case group.FieldDynamicRateMarkupPercent:
+		return m.DynamicRateMarkupPercent()
+	case group.FieldDynamicRateSourceMultiplier:
+		return m.DynamicRateSourceMultiplier()
+	case group.FieldDynamicRateStatus:
+		return m.DynamicRateStatus()
+	case group.FieldDynamicRateLastDirection:
+		return m.DynamicRateLastDirection()
+	case group.FieldDynamicRateLastEvaluatedAt:
+		return m.DynamicRateLastEvaluatedAt()
+	case group.FieldDynamicRateLastAdjustedAt:
+		return m.DynamicRateLastAdjustedAt()
 	case group.FieldPeakRateEnabled:
 		return m.PeakRateEnabled()
 	case group.FieldPeakStart:
@@ -25765,6 +26141,20 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldDescription(ctx)
 	case group.FieldRateMultiplier:
 		return m.OldRateMultiplier(ctx)
+	case group.FieldRateMode:
+		return m.OldRateMode(ctx)
+	case group.FieldDynamicRateMarkupPercent:
+		return m.OldDynamicRateMarkupPercent(ctx)
+	case group.FieldDynamicRateSourceMultiplier:
+		return m.OldDynamicRateSourceMultiplier(ctx)
+	case group.FieldDynamicRateStatus:
+		return m.OldDynamicRateStatus(ctx)
+	case group.FieldDynamicRateLastDirection:
+		return m.OldDynamicRateLastDirection(ctx)
+	case group.FieldDynamicRateLastEvaluatedAt:
+		return m.OldDynamicRateLastEvaluatedAt(ctx)
+	case group.FieldDynamicRateLastAdjustedAt:
+		return m.OldDynamicRateLastAdjustedAt(ctx)
 	case group.FieldPeakRateEnabled:
 		return m.OldPeakRateEnabled(ctx)
 	case group.FieldPeakStart:
@@ -25923,6 +26313,55 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRateMultiplier(v)
+		return nil
+	case group.FieldRateMode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRateMode(v)
+		return nil
+	case group.FieldDynamicRateMarkupPercent:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDynamicRateMarkupPercent(v)
+		return nil
+	case group.FieldDynamicRateSourceMultiplier:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDynamicRateSourceMultiplier(v)
+		return nil
+	case group.FieldDynamicRateStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDynamicRateStatus(v)
+		return nil
+	case group.FieldDynamicRateLastDirection:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDynamicRateLastDirection(v)
+		return nil
+	case group.FieldDynamicRateLastEvaluatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDynamicRateLastEvaluatedAt(v)
+		return nil
+	case group.FieldDynamicRateLastAdjustedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDynamicRateLastAdjustedAt(v)
 		return nil
 	case group.FieldPeakRateEnabled:
 		v, ok := value.(bool)
@@ -26313,6 +26752,12 @@ func (m *GroupMutation) AddedFields() []string {
 	if m.addrate_multiplier != nil {
 		fields = append(fields, group.FieldRateMultiplier)
 	}
+	if m.adddynamic_rate_markup_percent != nil {
+		fields = append(fields, group.FieldDynamicRateMarkupPercent)
+	}
+	if m.adddynamic_rate_source_multiplier != nil {
+		fields = append(fields, group.FieldDynamicRateSourceMultiplier)
+	}
 	if m.addpeak_rate_multiplier != nil {
 		fields = append(fields, group.FieldPeakRateMultiplier)
 	}
@@ -26401,6 +26846,10 @@ func (m *GroupMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
 	case group.FieldRateMultiplier:
 		return m.AddedRateMultiplier()
+	case group.FieldDynamicRateMarkupPercent:
+		return m.AddedDynamicRateMarkupPercent()
+	case group.FieldDynamicRateSourceMultiplier:
+		return m.AddedDynamicRateSourceMultiplier()
 	case group.FieldPeakRateMultiplier:
 		return m.AddedPeakRateMultiplier()
 	case group.FieldDailyLimitUsd:
@@ -26468,6 +26917,20 @@ func (m *GroupMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddRateMultiplier(v)
+		return nil
+	case group.FieldDynamicRateMarkupPercent:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDynamicRateMarkupPercent(v)
+		return nil
+	case group.FieldDynamicRateSourceMultiplier:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDynamicRateSourceMultiplier(v)
 		return nil
 	case group.FieldPeakRateMultiplier:
 		v, ok := value.(float64)
@@ -26665,6 +27128,15 @@ func (m *GroupMutation) ClearedFields() []string {
 	if m.FieldCleared(group.FieldDescription) {
 		fields = append(fields, group.FieldDescription)
 	}
+	if m.FieldCleared(group.FieldDynamicRateSourceMultiplier) {
+		fields = append(fields, group.FieldDynamicRateSourceMultiplier)
+	}
+	if m.FieldCleared(group.FieldDynamicRateLastEvaluatedAt) {
+		fields = append(fields, group.FieldDynamicRateLastEvaluatedAt)
+	}
+	if m.FieldCleared(group.FieldDynamicRateLastAdjustedAt) {
+		fields = append(fields, group.FieldDynamicRateLastAdjustedAt)
+	}
 	if m.FieldCleared(group.FieldDuplicateOperationID) {
 		fields = append(fields, group.FieldDuplicateOperationID)
 	}
@@ -26741,6 +27213,15 @@ func (m *GroupMutation) ClearField(name string) error {
 		return nil
 	case group.FieldDescription:
 		m.ClearDescription()
+		return nil
+	case group.FieldDynamicRateSourceMultiplier:
+		m.ClearDynamicRateSourceMultiplier()
+		return nil
+	case group.FieldDynamicRateLastEvaluatedAt:
+		m.ClearDynamicRateLastEvaluatedAt()
+		return nil
+	case group.FieldDynamicRateLastAdjustedAt:
+		m.ClearDynamicRateLastAdjustedAt()
 		return nil
 	case group.FieldDuplicateOperationID:
 		m.ClearDuplicateOperationID()
@@ -26824,6 +27305,27 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldRateMultiplier:
 		m.ResetRateMultiplier()
+		return nil
+	case group.FieldRateMode:
+		m.ResetRateMode()
+		return nil
+	case group.FieldDynamicRateMarkupPercent:
+		m.ResetDynamicRateMarkupPercent()
+		return nil
+	case group.FieldDynamicRateSourceMultiplier:
+		m.ResetDynamicRateSourceMultiplier()
+		return nil
+	case group.FieldDynamicRateStatus:
+		m.ResetDynamicRateStatus()
+		return nil
+	case group.FieldDynamicRateLastDirection:
+		m.ResetDynamicRateLastDirection()
+		return nil
+	case group.FieldDynamicRateLastEvaluatedAt:
+		m.ResetDynamicRateLastEvaluatedAt()
+		return nil
+	case group.FieldDynamicRateLastAdjustedAt:
+		m.ResetDynamicRateLastAdjustedAt()
 		return nil
 	case group.FieldPeakRateEnabled:
 		m.ResetPeakRateEnabled()

@@ -798,6 +798,7 @@ var ProviderSet = wire.NewSet(
 	ProvideRateLimitService,
 	ProvideAccountUsageService,
 	ProvideAccountTestService,
+	NewDynamicGroupRateService,
 	ProvideUpstreamBillingProbeService,
 	ProvideOllamaCloudUsageService,
 	ProvideSettingService,
