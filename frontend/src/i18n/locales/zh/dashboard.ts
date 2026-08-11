@@ -63,8 +63,8 @@ export default {
   groups: {
     subscription: '订阅',
     dynamicRate: '动态涨跌',
-    dynamicRateIncrease: '动态涨价',
-    dynamicRateDecrease: '动态降价'
+    dynamicRateIncrease: '动态涨跌 ↑',
+    dynamicRateDecrease: '动态涨跌 ↓'
   },
 
   // API Keys

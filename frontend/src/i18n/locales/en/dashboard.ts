@@ -63,8 +63,8 @@ export default {
   groups: {
     subscription: 'Sub',
     dynamicRate: 'Dynamic change',
-    dynamicRateIncrease: 'Rate increased',
-    dynamicRateDecrease: 'Rate decreased'
+    dynamicRateIncrease: 'Dynamic change ↑',
+    dynamicRateDecrease: 'Dynamic change ↓'
   },
 
   // API Keys
