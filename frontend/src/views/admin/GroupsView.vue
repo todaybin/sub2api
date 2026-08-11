@@ -266,8 +266,19 @@
                   <span class="mx-1">·</span>
                   <span>{{ t(`admin.groups.dynamicRateStatus.${row.dynamic_rate_status || 'waiting'}`) }}</span>
                 </div>
-                <div v-if="row.dynamic_rate_last_adjusted_at && row.dynamic_rate_last_direction !== 'none'" class="text-xs text-gray-400 dark:text-gray-500">
+                <div
+                  v-if="row.dynamic_rate_last_adjusted_at && row.dynamic_rate_last_direction !== 'none'"
+                  :class="[
+                    'text-xs font-medium',
+                    row.dynamic_rate_last_direction === 'increase'
+                      ? 'text-rose-600 dark:text-rose-300'
+                      : 'text-emerald-700 dark:text-emerald-300'
+                  ]"
+                >
                   {{ row.dynamic_rate_last_direction === 'increase' ? t('admin.groups.dynamicRateIncrease') : t('admin.groups.dynamicRateDecrease') }}
+                  <span v-if="row.dynamic_rate_last_change != null" class="font-medium">
+                    {{ row.dynamic_rate_last_direction === 'increase' ? '+' : '-' }}{{ Math.abs(row.dynamic_rate_last_change) }}x
+                  </span>
                   · {{ new Date(row.dynamic_rate_last_adjusted_at).toLocaleString() }}
                 </div>
               </template>

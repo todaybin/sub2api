@@ -95,6 +95,7 @@ type Group struct {
 	RateMultiplier            float64    `json:"rate_multiplier"`
 	RateMode                  string     `json:"rate_mode"`
 	DynamicRateLastDirection  string     `json:"dynamic_rate_last_direction"`
+	DynamicRateLastChange     *float64   `json:"dynamic_rate_last_change"`
 	DynamicRateLastAdjustedAt *time.Time `json:"dynamic_rate_last_adjusted_at"`
 	IsExclusive               bool       `json:"is_exclusive"`
 	Status                    string     `json:"status"`

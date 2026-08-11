@@ -25,7 +25,7 @@
     </span>
     <span
       v-if="showDynamicRate"
-      class="rounded bg-cyan-100 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300"
+      :class="dynamicRateClass"
       :title="dynamicRateTitle"
     >
       {{ dynamicRateText }}
@@ -61,6 +61,7 @@ interface Props {
   alwaysShowRate?: boolean
   rateMode?: GroupRateMode
   dynamicRateLastDirection?: DynamicRateDirection
+  dynamicRateLastChange?: number | null
   dynamicRateLastAdjustedAt?: string | null
 }
 
@@ -72,7 +73,8 @@ const props = withDefaults(defineProps<Props>(), {
   peakRateEnabled: false,
   alwaysShowRate: false,
   rateMode: 'fixed',
-  dynamicRateLastDirection: 'none'
+  dynamicRateLastDirection: 'none',
+  dynamicRateLastChange: null
 })
 
 const { t } = useI18n()
@@ -97,14 +99,35 @@ const hasPeakRate = computed(() => {
 })
 
 const showDynamicRate = computed(() => props.showRate && props.rateMode === 'dynamic' && !hasUserRateOverride.value)
+const dynamicRateClass = computed(() => {
+  const base = 'rounded px-1.5 py-0.5 text-[10px] font-semibold'
+  if (props.dynamicRateLastDirection === 'increase') {
+    return `${base} bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300`
+  }
+  if (props.dynamicRateLastDirection === 'decrease') {
+    return `${base} bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300`
+  }
+  return `${base} bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300`
+})
+const dynamicRateChangeText = computed(() => {
+  if (props.dynamicRateLastChange == null || props.dynamicRateLastDirection === 'none') return ''
+  const amount = Math.abs(props.dynamicRateLastChange).toFixed(4).replace(/0+$/, '').replace(/\.$/, '')
+  return `${props.dynamicRateLastDirection === 'increase' ? '+' : '-'}${amount}x`
+})
 const dynamicRateText = computed(() => {
-  if (props.dynamicRateLastDirection === 'increase') return t('groups.dynamicRateIncrease')
-  if (props.dynamicRateLastDirection === 'decrease') return t('groups.dynamicRateDecrease')
-  return t('groups.dynamicRate')
+  const label = props.dynamicRateLastDirection === 'increase'
+    ? t('groups.dynamicRateIncrease')
+    : props.dynamicRateLastDirection === 'decrease'
+      ? t('groups.dynamicRateDecrease')
+      : t('groups.dynamicRate')
+  const adjustedAt = props.dynamicRateLastAdjustedAt
+    ? ` · ${new Date(props.dynamicRateLastAdjustedAt).toLocaleString()}`
+    : ''
+  return `${label}${dynamicRateChangeText.value ? ` ${dynamicRateChangeText.value}` : ''}${adjustedAt}`
 })
 const dynamicRateTitle = computed(() => {
   if (!props.dynamicRateLastAdjustedAt) return t('groups.dynamicRate')
-  return `${dynamicRateText.value} · ${new Date(props.dynamicRateLastAdjustedAt).toLocaleString()}`
+  return dynamicRateText.value
 })
 
 const peakRateText = computed(() => {

@@ -50,10 +50,14 @@ describe('GroupOptionItem description layout', () => {
         rateMultiplier: 0.96,
         rateMode: 'dynamic',
         dynamicRateLastDirection: 'increase',
+        dynamicRateLastChange: 0.16,
+        dynamicRateLastAdjustedAt: '2026-08-11T12:30:00Z',
       },
       global: { stubs: { GroupBadge: true } },
     })
     expect(dynamic.text()).toContain('groups.dynamicRateIncrease')
+    expect(dynamic.text()).toContain('+0.16x')
+    expect(dynamic.text()).toContain('2026')
 
     const overridden = mount(GroupOptionItem, {
       props: {

@@ -63,6 +63,11 @@ func (Group) Fields() []ent.Field {
 		field.String("dynamic_rate_last_direction").
 			MaxLen(16).
 			Default("none"),
+		field.Float("dynamic_rate_last_change").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
+			Comment("absolute multiplier change from the last dynamic rate adjustment"),
 		field.Time("dynamic_rate_last_evaluated_at").
 			Optional().
 			Nillable().

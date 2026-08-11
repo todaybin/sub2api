@@ -44,7 +44,7 @@
         </span>
         <span
           v-if="rateMode === 'dynamic' && !hasUserRateOverride"
-          class="inline-flex items-center whitespace-nowrap rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700 dark:bg-cyan-900/20 dark:text-cyan-300"
+          :class="dynamicRateClass"
           :title="dynamicRateTitle"
         >
           {{ dynamicRateText }}
@@ -90,6 +90,7 @@ interface Props {
   showCheckmark?: boolean
   rateMode?: GroupRateMode
   dynamicRateLastDirection?: DynamicRateDirection
+  dynamicRateLastChange?: number | null
   dynamicRateLastAdjustedAt?: string | null
 }
 
@@ -100,7 +101,8 @@ const props = withDefaults(defineProps<Props>(), {
   userRateMultiplier: null,
   peakRateEnabled: false,
   rateMode: 'fixed',
-  dynamicRateLastDirection: 'none'
+  dynamicRateLastDirection: 'none',
+  dynamicRateLastChange: null
 })
 
 // Whether user has a custom rate different from default
@@ -136,13 +138,33 @@ const peakRateTitle = computed(() => {
   return t('common.peakRateTooltip', { window: peakRateText.value })
 })
 
+const dynamicRateClass = computed(() => {
+  const base = 'inline-flex items-center whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold'
+  if (props.dynamicRateLastDirection === 'increase') {
+    return `${base} bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300`
+  }
+  if (props.dynamicRateLastDirection === 'decrease') {
+    return `${base} bg-emerald-50 text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300`
+  }
+  return `${base} bg-cyan-50 text-cyan-700 dark:bg-cyan-900/20 dark:text-cyan-300`
+})
+
 const dynamicRateText = computed(() => {
-  if (props.dynamicRateLastDirection === 'increase') return t('groups.dynamicRateIncrease')
-  if (props.dynamicRateLastDirection === 'decrease') return t('groups.dynamicRateDecrease')
-  return t('groups.dynamicRate')
+  const amount = props.dynamicRateLastChange == null || props.dynamicRateLastDirection === 'none'
+    ? ''
+    : `${props.dynamicRateLastDirection === 'increase' ? '+' : '-'}${Math.abs(props.dynamicRateLastChange).toFixed(4).replace(/0+$/, '').replace(/\.$/, '')}x`
+  const label = props.dynamicRateLastDirection === 'increase'
+    ? t('groups.dynamicRateIncrease')
+    : props.dynamicRateLastDirection === 'decrease'
+      ? t('groups.dynamicRateDecrease')
+      : t('groups.dynamicRate')
+  const adjustedAt = props.dynamicRateLastAdjustedAt
+    ? ` · ${new Date(props.dynamicRateLastAdjustedAt).toLocaleString()}`
+    : ''
+  return `${label}${amount ? ` ${amount}` : ''}${adjustedAt}`
 })
 const dynamicRateTitle = computed(() => props.dynamicRateLastAdjustedAt
-  ? `${dynamicRateText.value} · ${new Date(props.dynamicRateLastAdjustedAt).toLocaleString()}`
+  ? dynamicRateText.value
   : t('groups.dynamicRate'))
 
 // Rate pill color matches platform badge color

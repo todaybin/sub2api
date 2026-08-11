@@ -62,7 +62,7 @@ export default {
   // Groups (shared)
   groups: {
     subscription: '订阅',
-    dynamicRate: '动态倍率',
+    dynamicRate: '动态涨跌',
     dynamicRateIncrease: '动态涨价',
     dynamicRateDecrease: '动态降价'
   },

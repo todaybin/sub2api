@@ -154,6 +154,7 @@
                   :peak-rate-multiplier="row.group.peak_rate_multiplier"
                   :rate-mode="row.group.rate_mode"
                   :dynamic-rate-last-direction="row.group.dynamic_rate_last_direction"
+                  :dynamic-rate-last-change="row.group.dynamic_rate_last_change"
                   :dynamic-rate-last-adjusted-at="row.group.dynamic_rate_last_adjusted_at"
                 />
                 <span v-else class="text-sm text-gray-400 dark:text-dark-500">{{
@@ -491,6 +492,7 @@
                 :peak-rate-multiplier="(option as unknown as GroupOption).peakRateMultiplier"
                 :rate-mode="(option as unknown as GroupOption).rateMode"
                 :dynamic-rate-last-direction="(option as unknown as GroupOption).dynamicRateLastDirection"
+                :dynamic-rate-last-change="(option as unknown as GroupOption).dynamicRateLastChange"
                 :dynamic-rate-last-adjusted-at="(option as unknown as GroupOption).dynamicRateLastAdjustedAt"
               />
               <span v-else class="text-gray-400">{{ t('keys.selectGroup') }}</span>
@@ -510,6 +512,7 @@
                 :selected="selected"
                 :rate-mode="(option as unknown as GroupOption).rateMode"
                 :dynamic-rate-last-direction="(option as unknown as GroupOption).dynamicRateLastDirection"
+                :dynamic-rate-last-change="(option as unknown as GroupOption).dynamicRateLastChange"
                 :dynamic-rate-last-adjusted-at="(option as unknown as GroupOption).dynamicRateLastAdjustedAt"
               />
             </template>
@@ -1111,6 +1114,7 @@
               :description="option.description"
               :rate-mode="option.rateMode"
               :dynamic-rate-last-direction="option.dynamicRateLastDirection"
+              :dynamic-rate-last-change="option.dynamicRateLastChange"
               :dynamic-rate-last-adjusted-at="option.dynamicRateLastAdjustedAt"
               :selected="
                 selectedKeyForGroup?.group_id === option.value ||
@@ -1182,6 +1186,7 @@ interface GroupOption {
   subscriptionType: SubscriptionType
   rateMode: Group['rate_mode']
   dynamicRateLastDirection: Group['dynamic_rate_last_direction']
+  dynamicRateLastChange: number | null
   dynamicRateLastAdjustedAt: string | null
   platform: GroupPlatform
 }
@@ -1437,6 +1442,7 @@ const groupOptions = computed(() =>
     subscriptionType: group.subscription_type,
     rateMode: group.rate_mode,
     dynamicRateLastDirection: group.dynamic_rate_last_direction,
+    dynamicRateLastChange: group.dynamic_rate_last_change,
     dynamicRateLastAdjustedAt: group.dynamic_rate_last_adjusted_at,
     platform: group.platform
   }))

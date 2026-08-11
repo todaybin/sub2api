@@ -41,6 +41,8 @@ type Group struct {
 	DynamicRateStatus string `json:"dynamic_rate_status,omitempty"`
 	// DynamicRateLastDirection holds the value of the "dynamic_rate_last_direction" field.
 	DynamicRateLastDirection string `json:"dynamic_rate_last_direction,omitempty"`
+	// absolute multiplier change from the last dynamic rate adjustment
+	DynamicRateLastChange *float64 `json:"dynamic_rate_last_change,omitempty"`
 	// DynamicRateLastEvaluatedAt holds the value of the "dynamic_rate_last_evaluated_at" field.
 	DynamicRateLastEvaluatedAt *time.Time `json:"dynamic_rate_last_evaluated_at,omitempty"`
 	// DynamicRateLastAdjustedAt holds the value of the "dynamic_rate_last_adjusted_at" field.
@@ -263,7 +265,7 @@ func (*Group) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case group.FieldPeakRateEnabled, group.FieldIsExclusive, group.FieldAllowImageGeneration, group.FieldAllowBatchImageGeneration, group.FieldImageRateIndependent, group.FieldVideoRateIndependent, group.FieldClaudeCodeOnly, group.FieldModelRoutingEnabled, group.FieldMcpXMLInject, group.FieldAllowMessagesDispatch, group.FieldAllowLive, group.FieldRequireOauthOnly, group.FieldRequirePrivacySet, group.FieldProfitControlEnabled:
 			values[i] = new(sql.NullBool)
-		case group.FieldRateMultiplier, group.FieldDynamicRateMarkupPercent, group.FieldDynamicRateSourceMultiplier, group.FieldPeakRateMultiplier, group.FieldDailyLimitUsd, group.FieldWeeklyLimitUsd, group.FieldMonthlyLimitUsd, group.FieldImageRateMultiplier, group.FieldImagePrice1k, group.FieldImagePrice2k, group.FieldImagePrice4k, group.FieldBatchImageDiscountMultiplier, group.FieldBatchImageHoldMultiplier, group.FieldVideoRateMultiplier, group.FieldVideoPrice480p, group.FieldVideoPrice720p, group.FieldVideoPrice1080p, group.FieldWebSearchPricePerCall, group.FieldSearchPricePer1k, group.FieldAudioRealtimePricePerMin, group.FieldAudioTtsPricePerMillionChars, group.FieldAudioSttPricePerHour, group.FieldProfitMinMargin, group.FieldProfitSafetyBuffer:
+		case group.FieldRateMultiplier, group.FieldDynamicRateMarkupPercent, group.FieldDynamicRateSourceMultiplier, group.FieldDynamicRateLastChange, group.FieldPeakRateMultiplier, group.FieldDailyLimitUsd, group.FieldWeeklyLimitUsd, group.FieldMonthlyLimitUsd, group.FieldImageRateMultiplier, group.FieldImagePrice1k, group.FieldImagePrice2k, group.FieldImagePrice4k, group.FieldBatchImageDiscountMultiplier, group.FieldBatchImageHoldMultiplier, group.FieldVideoRateMultiplier, group.FieldVideoPrice480p, group.FieldVideoPrice720p, group.FieldVideoPrice1080p, group.FieldWebSearchPricePerCall, group.FieldSearchPricePer1k, group.FieldAudioRealtimePricePerMin, group.FieldAudioTtsPricePerMillionChars, group.FieldAudioSttPricePerHour, group.FieldProfitMinMargin, group.FieldProfitSafetyBuffer:
 			values[i] = new(sql.NullFloat64)
 		case group.FieldID, group.FieldDefaultValidityDays, group.FieldFallbackGroupID, group.FieldFallbackGroupIDOnInvalidRequest, group.FieldSortOrder, group.FieldRpmLimit:
 			values[i] = new(sql.NullInt64)
@@ -360,6 +362,13 @@ func (_m *Group) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field dynamic_rate_last_direction", values[i])
 			} else if value.Valid {
 				_m.DynamicRateLastDirection = value.String
+			}
+		case group.FieldDynamicRateLastChange:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field dynamic_rate_last_change", values[i])
+			} else if value.Valid {
+				_m.DynamicRateLastChange = new(float64)
+				*_m.DynamicRateLastChange = value.Float64
 			}
 		case group.FieldDynamicRateLastEvaluatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -842,6 +851,11 @@ func (_m *Group) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("dynamic_rate_last_direction=")
 	builder.WriteString(_m.DynamicRateLastDirection)
+	builder.WriteString(", ")
+	if v := _m.DynamicRateLastChange; v != nil {
+		builder.WriteString("dynamic_rate_last_change=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
 	if v := _m.DynamicRateLastEvaluatedAt; v != nil {
 		builder.WriteString("dynamic_rate_last_evaluated_at=")

@@ -38,6 +38,8 @@ const (
 	FieldDynamicRateStatus = "dynamic_rate_status"
 	// FieldDynamicRateLastDirection holds the string denoting the dynamic_rate_last_direction field in the database.
 	FieldDynamicRateLastDirection = "dynamic_rate_last_direction"
+	// FieldDynamicRateLastChange holds the string denoting the dynamic_rate_last_change field in the database.
+	FieldDynamicRateLastChange = "dynamic_rate_last_change"
 	// FieldDynamicRateLastEvaluatedAt holds the string denoting the dynamic_rate_last_evaluated_at field in the database.
 	FieldDynamicRateLastEvaluatedAt = "dynamic_rate_last_evaluated_at"
 	// FieldDynamicRateLastAdjustedAt holds the string denoting the dynamic_rate_last_adjusted_at field in the database.
@@ -236,6 +238,7 @@ var Columns = []string{
 	FieldDynamicRateSourceMultiplier,
 	FieldDynamicRateStatus,
 	FieldDynamicRateLastDirection,
+	FieldDynamicRateLastChange,
 	FieldDynamicRateLastEvaluatedAt,
 	FieldDynamicRateLastAdjustedAt,
 	FieldPeakRateEnabled,
@@ -502,6 +505,11 @@ func ByDynamicRateStatus(opts ...sql.OrderTermOption) OrderOption {
 // ByDynamicRateLastDirection orders the results by the dynamic_rate_last_direction field.
 func ByDynamicRateLastDirection(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldDynamicRateLastDirection, opts...).ToFunc()
+}
+
+// ByDynamicRateLastChange orders the results by the dynamic_rate_last_change field.
+func ByDynamicRateLastChange(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDynamicRateLastChange, opts...).ToFunc()
 }
 
 // ByDynamicRateLastEvaluatedAt orders the results by the dynamic_rate_last_evaluated_at field.

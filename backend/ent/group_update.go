@@ -207,6 +207,33 @@ func (_u *GroupUpdate) SetNillableDynamicRateLastDirection(v *string) *GroupUpda
 	return _u
 }
 
+// SetDynamicRateLastChange sets the "dynamic_rate_last_change" field.
+func (_u *GroupUpdate) SetDynamicRateLastChange(v float64) *GroupUpdate {
+	_u.mutation.ResetDynamicRateLastChange()
+	_u.mutation.SetDynamicRateLastChange(v)
+	return _u
+}
+
+// SetNillableDynamicRateLastChange sets the "dynamic_rate_last_change" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableDynamicRateLastChange(v *float64) *GroupUpdate {
+	if v != nil {
+		_u.SetDynamicRateLastChange(*v)
+	}
+	return _u
+}
+
+// AddDynamicRateLastChange adds value to the "dynamic_rate_last_change" field.
+func (_u *GroupUpdate) AddDynamicRateLastChange(v float64) *GroupUpdate {
+	_u.mutation.AddDynamicRateLastChange(v)
+	return _u
+}
+
+// ClearDynamicRateLastChange clears the value of the "dynamic_rate_last_change" field.
+func (_u *GroupUpdate) ClearDynamicRateLastChange() *GroupUpdate {
+	_u.mutation.ClearDynamicRateLastChange()
+	return _u
+}
+
 // SetDynamicRateLastEvaluatedAt sets the "dynamic_rate_last_evaluated_at" field.
 func (_u *GroupUpdate) SetDynamicRateLastEvaluatedAt(v time.Time) *GroupUpdate {
 	_u.mutation.SetDynamicRateLastEvaluatedAt(v)
@@ -1662,6 +1689,15 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.DynamicRateLastDirection(); ok {
 		_spec.SetField(group.FieldDynamicRateLastDirection, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.DynamicRateLastChange(); ok {
+		_spec.SetField(group.FieldDynamicRateLastChange, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedDynamicRateLastChange(); ok {
+		_spec.AddField(group.FieldDynamicRateLastChange, field.TypeFloat64, value)
+	}
+	if _u.mutation.DynamicRateLastChangeCleared() {
+		_spec.ClearField(group.FieldDynamicRateLastChange, field.TypeFloat64)
+	}
 	if value, ok := _u.mutation.DynamicRateLastEvaluatedAt(); ok {
 		_spec.SetField(group.FieldDynamicRateLastEvaluatedAt, field.TypeTime, value)
 	}
@@ -2460,6 +2496,33 @@ func (_u *GroupUpdateOne) SetNillableDynamicRateLastDirection(v *string) *GroupU
 	if v != nil {
 		_u.SetDynamicRateLastDirection(*v)
 	}
+	return _u
+}
+
+// SetDynamicRateLastChange sets the "dynamic_rate_last_change" field.
+func (_u *GroupUpdateOne) SetDynamicRateLastChange(v float64) *GroupUpdateOne {
+	_u.mutation.ResetDynamicRateLastChange()
+	_u.mutation.SetDynamicRateLastChange(v)
+	return _u
+}
+
+// SetNillableDynamicRateLastChange sets the "dynamic_rate_last_change" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableDynamicRateLastChange(v *float64) *GroupUpdateOne {
+	if v != nil {
+		_u.SetDynamicRateLastChange(*v)
+	}
+	return _u
+}
+
+// AddDynamicRateLastChange adds value to the "dynamic_rate_last_change" field.
+func (_u *GroupUpdateOne) AddDynamicRateLastChange(v float64) *GroupUpdateOne {
+	_u.mutation.AddDynamicRateLastChange(v)
+	return _u
+}
+
+// ClearDynamicRateLastChange clears the value of the "dynamic_rate_last_change" field.
+func (_u *GroupUpdateOne) ClearDynamicRateLastChange() *GroupUpdateOne {
+	_u.mutation.ClearDynamicRateLastChange()
 	return _u
 }
 
@@ -3947,6 +4010,15 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if value, ok := _u.mutation.DynamicRateLastDirection(); ok {
 		_spec.SetField(group.FieldDynamicRateLastDirection, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DynamicRateLastChange(); ok {
+		_spec.SetField(group.FieldDynamicRateLastChange, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedDynamicRateLastChange(); ok {
+		_spec.AddField(group.FieldDynamicRateLastChange, field.TypeFloat64, value)
+	}
+	if _u.mutation.DynamicRateLastChangeCleared() {
+		_spec.ClearField(group.FieldDynamicRateLastChange, field.TypeFloat64)
 	}
 	if value, ok := _u.mutation.DynamicRateLastEvaluatedAt(); ok {
 		_spec.SetField(group.FieldDynamicRateLastEvaluatedAt, field.TypeTime, value)

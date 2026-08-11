@@ -62,7 +62,7 @@ export default {
   // Groups (shared)
   groups: {
     subscription: 'Sub',
-    dynamicRate: 'Dynamic rate',
+    dynamicRate: 'Dynamic change',
     dynamicRateIncrease: 'Rate increased',
     dynamicRateDecrease: 'Rate decreased'
   },

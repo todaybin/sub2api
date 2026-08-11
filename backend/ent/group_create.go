@@ -175,6 +175,20 @@ func (_c *GroupCreate) SetNillableDynamicRateLastDirection(v *string) *GroupCrea
 	return _c
 }
 
+// SetDynamicRateLastChange sets the "dynamic_rate_last_change" field.
+func (_c *GroupCreate) SetDynamicRateLastChange(v float64) *GroupCreate {
+	_c.mutation.SetDynamicRateLastChange(v)
+	return _c
+}
+
+// SetNillableDynamicRateLastChange sets the "dynamic_rate_last_change" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableDynamicRateLastChange(v *float64) *GroupCreate {
+	if v != nil {
+		_c.SetDynamicRateLastChange(*v)
+	}
+	return _c
+}
+
 // SetDynamicRateLastEvaluatedAt sets the "dynamic_rate_last_evaluated_at" field.
 func (_c *GroupCreate) SetDynamicRateLastEvaluatedAt(v time.Time) *GroupCreate {
 	_c.mutation.SetDynamicRateLastEvaluatedAt(v)
@@ -1513,6 +1527,10 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 		_spec.SetField(group.FieldDynamicRateLastDirection, field.TypeString, value)
 		_node.DynamicRateLastDirection = value
 	}
+	if value, ok := _c.mutation.DynamicRateLastChange(); ok {
+		_spec.SetField(group.FieldDynamicRateLastChange, field.TypeFloat64, value)
+		_node.DynamicRateLastChange = &value
+	}
 	if value, ok := _c.mutation.DynamicRateLastEvaluatedAt(); ok {
 		_spec.SetField(group.FieldDynamicRateLastEvaluatedAt, field.TypeTime, value)
 		_node.DynamicRateLastEvaluatedAt = &value
@@ -2046,6 +2064,30 @@ func (u *GroupUpsert) SetDynamicRateLastDirection(v string) *GroupUpsert {
 // UpdateDynamicRateLastDirection sets the "dynamic_rate_last_direction" field to the value that was provided on create.
 func (u *GroupUpsert) UpdateDynamicRateLastDirection() *GroupUpsert {
 	u.SetExcluded(group.FieldDynamicRateLastDirection)
+	return u
+}
+
+// SetDynamicRateLastChange sets the "dynamic_rate_last_change" field.
+func (u *GroupUpsert) SetDynamicRateLastChange(v float64) *GroupUpsert {
+	u.Set(group.FieldDynamicRateLastChange, v)
+	return u
+}
+
+// UpdateDynamicRateLastChange sets the "dynamic_rate_last_change" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateDynamicRateLastChange() *GroupUpsert {
+	u.SetExcluded(group.FieldDynamicRateLastChange)
+	return u
+}
+
+// AddDynamicRateLastChange adds v to the "dynamic_rate_last_change" field.
+func (u *GroupUpsert) AddDynamicRateLastChange(v float64) *GroupUpsert {
+	u.Add(group.FieldDynamicRateLastChange, v)
+	return u
+}
+
+// ClearDynamicRateLastChange clears the value of the "dynamic_rate_last_change" field.
+func (u *GroupUpsert) ClearDynamicRateLastChange() *GroupUpsert {
+	u.SetNull(group.FieldDynamicRateLastChange)
 	return u
 }
 
@@ -3212,6 +3254,34 @@ func (u *GroupUpsertOne) SetDynamicRateLastDirection(v string) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdateDynamicRateLastDirection() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateDynamicRateLastDirection()
+	})
+}
+
+// SetDynamicRateLastChange sets the "dynamic_rate_last_change" field.
+func (u *GroupUpsertOne) SetDynamicRateLastChange(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetDynamicRateLastChange(v)
+	})
+}
+
+// AddDynamicRateLastChange adds v to the "dynamic_rate_last_change" field.
+func (u *GroupUpsertOne) AddDynamicRateLastChange(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddDynamicRateLastChange(v)
+	})
+}
+
+// UpdateDynamicRateLastChange sets the "dynamic_rate_last_change" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateDynamicRateLastChange() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateDynamicRateLastChange()
+	})
+}
+
+// ClearDynamicRateLastChange clears the value of the "dynamic_rate_last_change" field.
+func (u *GroupUpsertOne) ClearDynamicRateLastChange() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearDynamicRateLastChange()
 	})
 }
 
@@ -4700,6 +4770,34 @@ func (u *GroupUpsertBulk) SetDynamicRateLastDirection(v string) *GroupUpsertBulk
 func (u *GroupUpsertBulk) UpdateDynamicRateLastDirection() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateDynamicRateLastDirection()
+	})
+}
+
+// SetDynamicRateLastChange sets the "dynamic_rate_last_change" field.
+func (u *GroupUpsertBulk) SetDynamicRateLastChange(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetDynamicRateLastChange(v)
+	})
+}
+
+// AddDynamicRateLastChange adds v to the "dynamic_rate_last_change" field.
+func (u *GroupUpsertBulk) AddDynamicRateLastChange(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddDynamicRateLastChange(v)
+	})
+}
+
+// UpdateDynamicRateLastChange sets the "dynamic_rate_last_change" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateDynamicRateLastChange() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateDynamicRateLastChange()
+	})
+}
+
+// ClearDynamicRateLastChange clears the value of the "dynamic_rate_last_change" field.
+func (u *GroupUpsertBulk) ClearDynamicRateLastChange() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearDynamicRateLastChange()
 	})
 }
 

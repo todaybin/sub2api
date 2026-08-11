@@ -184,6 +184,7 @@ func groupFromServiceBase(g *service.Group) Group {
 		RateMultiplier:                  g.RateMultiplier,
 		RateMode:                        g.RateMode,
 		DynamicRateLastDirection:        g.DynamicRateLastDirection,
+		DynamicRateLastChange:           g.DynamicRateLastChange,
 		DynamicRateLastAdjustedAt:       g.DynamicRateLastAdjustedAt,
 		IsExclusive:                     g.IsExclusive,
 		Status:                          g.Status,

@@ -21861,6 +21861,8 @@ type GroupMutation struct {
 	adddynamic_rate_source_multiplier       *float64
 	dynamic_rate_status                     *string
 	dynamic_rate_last_direction             *string
+	dynamic_rate_last_change                *float64
+	adddynamic_rate_last_change             *float64
 	dynamic_rate_last_evaluated_at          *time.Time
 	dynamic_rate_last_adjusted_at           *time.Time
 	peak_rate_enabled                       *bool
@@ -22561,6 +22563,76 @@ func (m *GroupMutation) OldDynamicRateLastDirection(ctx context.Context) (v stri
 // ResetDynamicRateLastDirection resets all changes to the "dynamic_rate_last_direction" field.
 func (m *GroupMutation) ResetDynamicRateLastDirection() {
 	m.dynamic_rate_last_direction = nil
+}
+
+// SetDynamicRateLastChange sets the "dynamic_rate_last_change" field.
+func (m *GroupMutation) SetDynamicRateLastChange(f float64) {
+	m.dynamic_rate_last_change = &f
+	m.adddynamic_rate_last_change = nil
+}
+
+// DynamicRateLastChange returns the value of the "dynamic_rate_last_change" field in the mutation.
+func (m *GroupMutation) DynamicRateLastChange() (r float64, exists bool) {
+	v := m.dynamic_rate_last_change
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDynamicRateLastChange returns the old "dynamic_rate_last_change" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldDynamicRateLastChange(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDynamicRateLastChange is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDynamicRateLastChange requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDynamicRateLastChange: %w", err)
+	}
+	return oldValue.DynamicRateLastChange, nil
+}
+
+// AddDynamicRateLastChange adds f to the "dynamic_rate_last_change" field.
+func (m *GroupMutation) AddDynamicRateLastChange(f float64) {
+	if m.adddynamic_rate_last_change != nil {
+		*m.adddynamic_rate_last_change += f
+	} else {
+		m.adddynamic_rate_last_change = &f
+	}
+}
+
+// AddedDynamicRateLastChange returns the value that was added to the "dynamic_rate_last_change" field in this mutation.
+func (m *GroupMutation) AddedDynamicRateLastChange() (r float64, exists bool) {
+	v := m.adddynamic_rate_last_change
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearDynamicRateLastChange clears the value of the "dynamic_rate_last_change" field.
+func (m *GroupMutation) ClearDynamicRateLastChange() {
+	m.dynamic_rate_last_change = nil
+	m.adddynamic_rate_last_change = nil
+	m.clearedFields[group.FieldDynamicRateLastChange] = struct{}{}
+}
+
+// DynamicRateLastChangeCleared returns if the "dynamic_rate_last_change" field was cleared in this mutation.
+func (m *GroupMutation) DynamicRateLastChangeCleared() bool {
+	_, ok := m.clearedFields[group.FieldDynamicRateLastChange]
+	return ok
+}
+
+// ResetDynamicRateLastChange resets all changes to the "dynamic_rate_last_change" field.
+func (m *GroupMutation) ResetDynamicRateLastChange() {
+	m.dynamic_rate_last_change = nil
+	m.adddynamic_rate_last_change = nil
+	delete(m.clearedFields, group.FieldDynamicRateLastChange)
 }
 
 // SetDynamicRateLastEvaluatedAt sets the "dynamic_rate_last_evaluated_at" field.
@@ -25776,7 +25848,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 67)
+	fields := make([]string, 0, 68)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -25809,6 +25881,9 @@ func (m *GroupMutation) Fields() []string {
 	}
 	if m.dynamic_rate_last_direction != nil {
 		fields = append(fields, group.FieldDynamicRateLastDirection)
+	}
+	if m.dynamic_rate_last_change != nil {
+		fields = append(fields, group.FieldDynamicRateLastChange)
 	}
 	if m.dynamic_rate_last_evaluated_at != nil {
 		fields = append(fields, group.FieldDynamicRateLastEvaluatedAt)
@@ -26008,6 +26083,8 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.DynamicRateStatus()
 	case group.FieldDynamicRateLastDirection:
 		return m.DynamicRateLastDirection()
+	case group.FieldDynamicRateLastChange:
+		return m.DynamicRateLastChange()
 	case group.FieldDynamicRateLastEvaluatedAt:
 		return m.DynamicRateLastEvaluatedAt()
 	case group.FieldDynamicRateLastAdjustedAt:
@@ -26151,6 +26228,8 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldDynamicRateStatus(ctx)
 	case group.FieldDynamicRateLastDirection:
 		return m.OldDynamicRateLastDirection(ctx)
+	case group.FieldDynamicRateLastChange:
+		return m.OldDynamicRateLastChange(ctx)
 	case group.FieldDynamicRateLastEvaluatedAt:
 		return m.OldDynamicRateLastEvaluatedAt(ctx)
 	case group.FieldDynamicRateLastAdjustedAt:
@@ -26348,6 +26427,13 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetDynamicRateLastDirection(v)
+		return nil
+	case group.FieldDynamicRateLastChange:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDynamicRateLastChange(v)
 		return nil
 	case group.FieldDynamicRateLastEvaluatedAt:
 		v, ok := value.(time.Time)
@@ -26758,6 +26844,9 @@ func (m *GroupMutation) AddedFields() []string {
 	if m.adddynamic_rate_source_multiplier != nil {
 		fields = append(fields, group.FieldDynamicRateSourceMultiplier)
 	}
+	if m.adddynamic_rate_last_change != nil {
+		fields = append(fields, group.FieldDynamicRateLastChange)
+	}
 	if m.addpeak_rate_multiplier != nil {
 		fields = append(fields, group.FieldPeakRateMultiplier)
 	}
@@ -26850,6 +26939,8 @@ func (m *GroupMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedDynamicRateMarkupPercent()
 	case group.FieldDynamicRateSourceMultiplier:
 		return m.AddedDynamicRateSourceMultiplier()
+	case group.FieldDynamicRateLastChange:
+		return m.AddedDynamicRateLastChange()
 	case group.FieldPeakRateMultiplier:
 		return m.AddedPeakRateMultiplier()
 	case group.FieldDailyLimitUsd:
@@ -26931,6 +27022,13 @@ func (m *GroupMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddDynamicRateSourceMultiplier(v)
+		return nil
+	case group.FieldDynamicRateLastChange:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDynamicRateLastChange(v)
 		return nil
 	case group.FieldPeakRateMultiplier:
 		v, ok := value.(float64)
@@ -27131,6 +27229,9 @@ func (m *GroupMutation) ClearedFields() []string {
 	if m.FieldCleared(group.FieldDynamicRateSourceMultiplier) {
 		fields = append(fields, group.FieldDynamicRateSourceMultiplier)
 	}
+	if m.FieldCleared(group.FieldDynamicRateLastChange) {
+		fields = append(fields, group.FieldDynamicRateLastChange)
+	}
 	if m.FieldCleared(group.FieldDynamicRateLastEvaluatedAt) {
 		fields = append(fields, group.FieldDynamicRateLastEvaluatedAt)
 	}
@@ -27216,6 +27317,9 @@ func (m *GroupMutation) ClearField(name string) error {
 		return nil
 	case group.FieldDynamicRateSourceMultiplier:
 		m.ClearDynamicRateSourceMultiplier()
+		return nil
+	case group.FieldDynamicRateLastChange:
+		m.ClearDynamicRateLastChange()
 		return nil
 	case group.FieldDynamicRateLastEvaluatedAt:
 		m.ClearDynamicRateLastEvaluatedAt()
@@ -27320,6 +27424,9 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldDynamicRateLastDirection:
 		m.ResetDynamicRateLastDirection()
+		return nil
+	case group.FieldDynamicRateLastChange:
+		m.ResetDynamicRateLastChange()
 		return nil
 	case group.FieldDynamicRateLastEvaluatedAt:
 		m.ResetDynamicRateLastEvaluatedAt()

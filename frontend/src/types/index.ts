@@ -554,6 +554,7 @@ export interface Group {
   rate_multiplier: number
   rate_mode: GroupRateMode
   dynamic_rate_last_direction: DynamicRateDirection
+  dynamic_rate_last_change: number | null
   dynamic_rate_last_adjusted_at: string | null
   rpm_limit?: number // Group-level RPM cap (0 = unlimited); overrides user-level rpm_limit when set
   max_reasoning_effort?: string // OpenAI/Codex reasoning ceiling; empty means unlimited

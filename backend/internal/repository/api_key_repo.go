@@ -957,6 +957,7 @@ func groupEntityToService(g *dbent.Group) *service.Group {
 		DynamicRateSourceMultiplier:     g.DynamicRateSourceMultiplier,
 		DynamicRateStatus:               g.DynamicRateStatus,
 		DynamicRateLastDirection:        g.DynamicRateLastDirection,
+		DynamicRateLastChange:           g.DynamicRateLastChange,
 		DynamicRateLastEvaluatedAt:      g.DynamicRateLastEvaluatedAt,
 		DynamicRateLastAdjustedAt:       g.DynamicRateLastAdjustedAt,
 		IsExclusive:                     g.IsExclusive,

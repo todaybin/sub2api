@@ -121,6 +121,9 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 	if groupIn.DynamicRateLastEvaluatedAt != nil {
 		builder = builder.SetDynamicRateLastEvaluatedAt(*groupIn.DynamicRateLastEvaluatedAt)
 	}
+	if groupIn.DynamicRateLastChange != nil {
+		builder = builder.SetDynamicRateLastChange(*groupIn.DynamicRateLastChange)
+	}
 	if groupIn.DynamicRateLastAdjustedAt != nil {
 		builder = builder.SetDynamicRateLastAdjustedAt(*groupIn.DynamicRateLastAdjustedAt)
 	}
@@ -308,6 +311,11 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 	} else {
 		builder = builder.ClearDynamicRateLastEvaluatedAt()
 	}
+	if groupIn.DynamicRateLastChange != nil {
+		builder = builder.SetDynamicRateLastChange(*groupIn.DynamicRateLastChange)
+	} else {
+		builder = builder.ClearDynamicRateLastChange()
+	}
 	if groupIn.DynamicRateLastAdjustedAt != nil {
 		builder = builder.SetDynamicRateLastAdjustedAt(*groupIn.DynamicRateLastAdjustedAt)
 	} else {
@@ -460,6 +468,10 @@ func (r *groupRepository) ApplyDynamicRateEvaluation(
 					WHEN $7 AND $6::double precision > current.old_rate THEN 'increase'
 					WHEN $7 AND $6::double precision < current.old_rate THEN 'decrease'
 					ELSE g.dynamic_rate_last_direction
+				END,
+				dynamic_rate_last_change = CASE
+					WHEN $7 AND $6::double precision <> current.old_rate THEN ABS($6::double precision - current.old_rate)
+					ELSE g.dynamic_rate_last_change
 				END,
 				dynamic_rate_last_adjusted_at = CASE
 					WHEN $7 AND $6::double precision <> current.old_rate THEN $5

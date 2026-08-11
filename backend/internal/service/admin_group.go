@@ -698,7 +698,10 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	} else {
 		group.DynamicRateStatus = DynamicRateStatusIdle
 		group.DynamicRateSourceMultiplier = nil
+		group.DynamicRateLastDirection = DynamicRateDirectionNone
+		group.DynamicRateLastChange = nil
 		group.DynamicRateLastEvaluatedAt = nil
+		group.DynamicRateLastAdjustedAt = nil
 	}
 	// 限额字段：nil/负数 表示"无限制"，0 表示"不允许用量"，正数表示具体限额
 	// 前端始终发送这三个字段，无需 nil 守卫

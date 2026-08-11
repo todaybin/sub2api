@@ -110,6 +110,11 @@ func DynamicRateLastDirection(v string) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldDynamicRateLastDirection, v))
 }
 
+// DynamicRateLastChange applies equality check predicate on the "dynamic_rate_last_change" field. It's identical to DynamicRateLastChangeEQ.
+func DynamicRateLastChange(v float64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldDynamicRateLastChange, v))
+}
+
 // DynamicRateLastEvaluatedAt applies equality check predicate on the "dynamic_rate_last_evaluated_at" field. It's identical to DynamicRateLastEvaluatedAtEQ.
 func DynamicRateLastEvaluatedAt(v time.Time) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldDynamicRateLastEvaluatedAt, v))
@@ -953,6 +958,56 @@ func DynamicRateLastDirectionEqualFold(v string) predicate.Group {
 // DynamicRateLastDirectionContainsFold applies the ContainsFold predicate on the "dynamic_rate_last_direction" field.
 func DynamicRateLastDirectionContainsFold(v string) predicate.Group {
 	return predicate.Group(sql.FieldContainsFold(FieldDynamicRateLastDirection, v))
+}
+
+// DynamicRateLastChangeEQ applies the EQ predicate on the "dynamic_rate_last_change" field.
+func DynamicRateLastChangeEQ(v float64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldDynamicRateLastChange, v))
+}
+
+// DynamicRateLastChangeNEQ applies the NEQ predicate on the "dynamic_rate_last_change" field.
+func DynamicRateLastChangeNEQ(v float64) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldDynamicRateLastChange, v))
+}
+
+// DynamicRateLastChangeIn applies the In predicate on the "dynamic_rate_last_change" field.
+func DynamicRateLastChangeIn(vs ...float64) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldDynamicRateLastChange, vs...))
+}
+
+// DynamicRateLastChangeNotIn applies the NotIn predicate on the "dynamic_rate_last_change" field.
+func DynamicRateLastChangeNotIn(vs ...float64) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldDynamicRateLastChange, vs...))
+}
+
+// DynamicRateLastChangeGT applies the GT predicate on the "dynamic_rate_last_change" field.
+func DynamicRateLastChangeGT(v float64) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldDynamicRateLastChange, v))
+}
+
+// DynamicRateLastChangeGTE applies the GTE predicate on the "dynamic_rate_last_change" field.
+func DynamicRateLastChangeGTE(v float64) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldDynamicRateLastChange, v))
+}
+
+// DynamicRateLastChangeLT applies the LT predicate on the "dynamic_rate_last_change" field.
+func DynamicRateLastChangeLT(v float64) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldDynamicRateLastChange, v))
+}
+
+// DynamicRateLastChangeLTE applies the LTE predicate on the "dynamic_rate_last_change" field.
+func DynamicRateLastChangeLTE(v float64) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldDynamicRateLastChange, v))
+}
+
+// DynamicRateLastChangeIsNil applies the IsNil predicate on the "dynamic_rate_last_change" field.
+func DynamicRateLastChangeIsNil() predicate.Group {
+	return predicate.Group(sql.FieldIsNull(FieldDynamicRateLastChange))
+}
+
+// DynamicRateLastChangeNotNil applies the NotNil predicate on the "dynamic_rate_last_change" field.
+func DynamicRateLastChangeNotNil() predicate.Group {
+	return predicate.Group(sql.FieldNotNull(FieldDynamicRateLastChange))
 }
 
 // DynamicRateLastEvaluatedAtEQ applies the EQ predicate on the "dynamic_rate_last_evaluated_at" field.

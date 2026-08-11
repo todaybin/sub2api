@@ -26,6 +26,7 @@ type Group struct {
 	DynamicRateSourceMultiplier *float64
 	DynamicRateStatus           string
 	DynamicRateLastDirection    string
+	DynamicRateLastChange       *float64
 	DynamicRateLastEvaluatedAt  *time.Time
 	DynamicRateLastAdjustedAt   *time.Time
 	// 高峰时段倍率：peak_rate_enabled 为 true 且当前时刻处于 [PeakStart, PeakEnd) 时，
