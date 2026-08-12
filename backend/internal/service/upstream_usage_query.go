@@ -223,11 +223,14 @@ func NormalizeUpstreamUsageQueryExtra(extra map[string]any) (map[string]any, err
 			return nil, infraerrors.BadRequest("INVALID_UPSTREAM_BALANCE_PROBE_ENABLED", "upstream_billing_balance_probe_enabled must be a boolean")
 		}
 	}
-	mode, _ := extra[UpstreamBillingBalanceQueryModeExtraKey].(string)
+	rawMode, hasMode := extra[UpstreamBillingBalanceQueryModeExtraKey]
+	mode, _ := rawMode.(string)
 	mode = strings.ToLower(strings.TrimSpace(mode))
 	if mode == "" {
 		mode = "auto"
-		extra[UpstreamBillingBalanceQueryModeExtraKey] = mode
+		if hasMode {
+			extra[UpstreamBillingBalanceQueryModeExtraKey] = mode
+		}
 	}
 	if mode != "auto" && mode != "generic" && mode != "new_api" && mode != "custom" {
 		return nil, infraerrors.BadRequest("INVALID_UPSTREAM_BALANCE_QUERY_MODE", "upstream_billing_balance_query_mode must be auto, generic, new_api, or custom")

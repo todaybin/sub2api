@@ -884,17 +884,17 @@ const refreshTodayStatsBatch = async () => {
     const result = await adminAPI.accounts.getBatchTodayStats(accountIDs)
     if (reqSeq !== todayStatsReqSeq.value) return
     const serverStats = result.stats ?? {}
-	const upstreamBilling = result.upstream_billing ?? {}
+    const upstreamBilling = result.upstream_billing ?? {}
     const nextStats: Record<string, WindowStats> = {}
     for (const accountID of accountIDs) {
       const key = String(accountID)
       nextStats[key] = serverStats[key] ?? buildDefaultTodayStats()
     }
     todayStatsByAccountId.value = nextStats
-	for (const accountID of accountIDs) {
-		const snapshot = upstreamBilling[String(accountID)]
-		if (snapshot) patchUpstreamBillingSnapshot(accountID, snapshot)
-	}
+    for (const accountID of accountIDs) {
+      const snapshot = upstreamBilling[String(accountID)]
+      if (snapshot) patchUpstreamBillingSnapshot(accountID, snapshot)
+    }
   } catch (error) {
     if (reqSeq !== todayStatsReqSeq.value) return
     todayStatsError.value = 'Failed'

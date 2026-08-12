@@ -187,12 +187,12 @@ func (h *BackupHandler) GetDownloadURL(c *gin.Context) {
 		response.BadRequest(c, "backup ID is required")
 		return
 	}
-	url, err := h.backupService.GetBackupDownloadURL(c.Request.Context(), backupID)
+	download, err := h.backupService.GetBackupDownloadURL(c.Request.Context(), backupID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, gin.H{"url": url})
+	response.Success(c, download)
 }
 
 func (h *BackupHandler) Download(c *gin.Context) {
