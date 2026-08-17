@@ -209,17 +209,19 @@ type AdminBoundAuthIdentityChannel struct {
 }
 
 type CreateGroupInput struct {
-	Name                     string
-	Description              string
-	Platform                 string
-	RateMultiplier           float64
-	RateMode                 string
-	DynamicRateMarkupPercent float64
-	IsExclusive              bool
-	SubscriptionType         string   // standard/subscription
-	DailyLimitUSD            *float64 // 日限额 (USD)
-	WeeklyLimitUSD           *float64 // 周限额 (USD)
-	MonthlyLimitUSD          *float64 // 月限额 (USD)
+	Name                      string
+	Description               string
+	Platform                  string
+	RateMultiplier            float64
+	RateMode                  string
+	DynamicRateMarkupPercent  float64
+	LongContextPricingEnabled bool
+	ModelPricing              []ChannelModelPricing
+	IsExclusive               bool
+	SubscriptionType          string   // standard/subscription
+	DailyLimitUSD             *float64 // 日限额 (USD)
+	WeeklyLimitUSD            *float64 // 周限额 (USD)
+	MonthlyLimitUSD           *float64 // 月限额 (USD)
 	// 图片生成计费配置（仅 antigravity 平台使用）
 	AllowImageGeneration         bool
 	AllowBatchImageGeneration    bool
@@ -283,18 +285,20 @@ type CreateGroupInput struct {
 }
 
 type UpdateGroupInput struct {
-	Name                     string
-	Description              *string
-	Platform                 string
-	RateMultiplier           *float64 // 使用指针以支持设置为0
-	RateMode                 *string
-	DynamicRateMarkupPercent *float64
-	IsExclusive              *bool
-	Status                   string
-	SubscriptionType         string   // standard/subscription
-	DailyLimitUSD            *float64 // 日限额 (USD)
-	WeeklyLimitUSD           *float64 // 周限额 (USD)
-	MonthlyLimitUSD          *float64 // 月限额 (USD)
+	Name                      string
+	Description               *string
+	Platform                  string
+	RateMultiplier            *float64 // 使用指针以支持设置为0
+	RateMode                  *string
+	DynamicRateMarkupPercent  *float64
+	LongContextPricingEnabled *bool
+	ModelPricing              *[]ChannelModelPricing
+	IsExclusive               *bool
+	Status                    string
+	SubscriptionType          string   // standard/subscription
+	DailyLimitUSD             *float64 // 日限额 (USD)
+	WeeklyLimitUSD            *float64 // 周限额 (USD)
+	MonthlyLimitUSD           *float64 // 月限额 (USD)
 	// 图片生成计费配置（仅 antigravity 平台使用）
 	AllowImageGeneration         *bool
 	AllowBatchImageGeneration    *bool
@@ -642,31 +646,37 @@ var ErrRPMStatusUnavailable = infraerrors.New(http.StatusNotImplemented, "RPM_ST
 
 // adminServiceImpl implements AdminService
 type adminServiceImpl struct {
-	userRepo             UserRepository
-	groupRepo            GroupRepository
-	groupDuplicateRepo   GroupDuplicateRepository
-	accountRepo          AccountRepository
-	accountDuplicateRepo AccountDuplicateRepository
-	accountBillingRepo   AccountBillingSettingsRepository
-	proxyRepo            ProxyRepository
-	apiKeyRepo           APIKeyRepository
-	redeemCodeRepo       RedeemCodeRepository
-	userGroupRateRepo    UserGroupRateRepository
-	userRPMCache         UserRPMCache
-	billingCacheService  *BillingCacheService
-	proxyProber          ProxyExitInfoProber
-	proxyLatencyCache    ProxyLatencyCache
-	authCacheInvalidator APIKeyAuthCacheInvalidator
-	entClient            *dbent.Client // 用于开启数据库事务
-	settingService       *SettingService
-	defaultSubAssigner   DefaultSubscriptionAssigner
-	userSubRepo          UserSubscriptionRepository
-	privacyClientFactory PrivacyClientFactory
-	runtimeBlocker       AccountRuntimeBlocker
-	affiliateService     adminRechargeAffiliateAccruer
-	compositeRouteRepo   CompositeModelRouteRepository
-	compositeResolver    *CompositeRouteResolver
-	dynamicGroupRate     *DynamicGroupRateService
+	userRepo                UserRepository
+	groupRepo               GroupRepository
+	groupDuplicateRepo      GroupDuplicateRepository
+	accountRepo             AccountRepository
+	accountDuplicateRepo    AccountDuplicateRepository
+	accountBillingRepo      AccountBillingSettingsRepository
+	proxyRepo               ProxyRepository
+	apiKeyRepo              APIKeyRepository
+	redeemCodeRepo          RedeemCodeRepository
+	userGroupRateRepo       UserGroupRateRepository
+	userRPMCache            UserRPMCache
+	billingCacheService     *BillingCacheService
+	proxyProber             ProxyExitInfoProber
+	proxyLatencyCache       ProxyLatencyCache
+	authCacheInvalidator    APIKeyAuthCacheInvalidator
+	entClient               *dbent.Client // 用于开启数据库事务
+	settingService          *SettingService
+	defaultSubAssigner      DefaultSubscriptionAssigner
+	userSubRepo             UserSubscriptionRepository
+	privacyClientFactory    PrivacyClientFactory
+	runtimeBlocker          AccountRuntimeBlocker
+	affiliateService        adminRechargeAffiliateAccruer
+	compositeRouteRepo      CompositeModelRouteRepository
+	compositeResolver       *CompositeRouteResolver
+	dynamicGroupRate        *DynamicGroupRateService
+	channelCacheInvalidator ChannelCacheInvalidator
+}
+
+// ChannelCacheInvalidator 失效渠道缓存。
+type ChannelCacheInvalidator interface {
+	InvalidateCache()
 }
 
 type adminRechargeAffiliateAccruer interface {
@@ -701,32 +711,34 @@ func NewAdminService(
 	compositeRouteRepo CompositeModelRouteRepository,
 	compositeResolver *CompositeRouteResolver,
 	dynamicGroupRate *DynamicGroupRateService,
+	channelCacheInvalidator ChannelCacheInvalidator,
 ) AdminService {
 	return &adminServiceImpl{
-		userRepo:             userRepo,
-		groupRepo:            groupRepo,
-		groupDuplicateRepo:   groupRepo,
-		accountRepo:          accountRepo,
-		accountDuplicateRepo: accountRepo,
-		accountBillingRepo:   accountRepo,
-		proxyRepo:            proxyRepo,
-		apiKeyRepo:           apiKeyRepo,
-		redeemCodeRepo:       redeemCodeRepo,
-		userGroupRateRepo:    userGroupRateRepo,
-		userRPMCache:         userRPMCache,
-		billingCacheService:  billingCacheService,
-		proxyProber:          proxyProber,
-		proxyLatencyCache:    proxyLatencyCache,
-		authCacheInvalidator: authCacheInvalidator,
-		entClient:            entClient,
-		settingService:       settingService,
-		defaultSubAssigner:   defaultSubAssigner,
-		userSubRepo:          userSubRepo,
-		privacyClientFactory: privacyClientFactory,
-		runtimeBlocker:       runtimeBlocker,
-		affiliateService:     affiliateService,
-		compositeRouteRepo:   compositeRouteRepo,
-		compositeResolver:    compositeResolver,
-		dynamicGroupRate:     dynamicGroupRate,
+		userRepo:                userRepo,
+		groupRepo:               groupRepo,
+		groupDuplicateRepo:      groupRepo,
+		accountRepo:             accountRepo,
+		accountDuplicateRepo:    accountRepo,
+		accountBillingRepo:      accountRepo,
+		proxyRepo:               proxyRepo,
+		apiKeyRepo:              apiKeyRepo,
+		redeemCodeRepo:          redeemCodeRepo,
+		userGroupRateRepo:       userGroupRateRepo,
+		userRPMCache:            userRPMCache,
+		billingCacheService:     billingCacheService,
+		proxyProber:             proxyProber,
+		proxyLatencyCache:       proxyLatencyCache,
+		authCacheInvalidator:    authCacheInvalidator,
+		entClient:               entClient,
+		settingService:          settingService,
+		defaultSubAssigner:      defaultSubAssigner,
+		userSubRepo:             userSubRepo,
+		privacyClientFactory:    privacyClientFactory,
+		runtimeBlocker:          runtimeBlocker,
+		affiliateService:        affiliateService,
+		compositeRouteRepo:      compositeRouteRepo,
+		compositeResolver:       compositeResolver,
+		dynamicGroupRate:        dynamicGroupRate,
+		channelCacheInvalidator: channelCacheInvalidator,
 	}
 }
