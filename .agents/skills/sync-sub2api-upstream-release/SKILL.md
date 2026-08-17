@@ -19,10 +19,24 @@ description: 安全地将 Wei-Shaw/sub2api 官方更新合并到当前仓库的�
 
 ## 第一阶段：预检
 
-在仓库根目录执行随技能提供的只读脚本：
+在仓库根目录执行跨平台只读脚本。
+
+Windows PowerShell：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\.agents\skills\sync-sub2api-upstream-release\scripts\preflight.ps1
+```
+
+Windows 也可以直接执行：
+
+```powershell
+python .\.agents\skills\sync-sub2api-upstream-release\scripts\preflight.py
+```
+
+Linux 或 macOS：
+
+```bash
+python3 ./.agents/skills/sync-sub2api-upstream-release/scripts/preflight.py
 ```
 
 检查输出的 JSON。出现以下任一情况时，在修改仓库前停止：
