@@ -1,0 +1,4 @@
+interface:
+  display_name: "同步 sub2api 官方更新并发布"
+  short_description: "合并官方更新、验证构建、生成自定义版本并安全发布"
+  default_prompt: "使用 $sync-sub2api-upstream-release 合并最新官方版本到自定义分支，完成验证，并发布下一个自定义标签。"
