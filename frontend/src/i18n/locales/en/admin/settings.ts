@@ -31,6 +31,9 @@ export default {
           hideThroughput: 'Hide throughput rates from users (RPM / TPM)',
           hideThroughputHint:
             'When on, the user Channel Monitor page and user APIs omit RPM and TPM so fleet volume cannot be reverse-estimated from rates × window. Admins still see full metrics. Error rates, latency, and cache rates remain visible.',
+          showQuota: 'Show channel usage/balance to users',
+          showQuotaHint:
+            'When on, quota-mode channel monitors expose the linked account usage windows/balance on the user Channel Status page. Disabled by default; admins always see it.',
         },
         availableChannels: {
           title: 'Available Channels',
@@ -650,12 +653,6 @@ export default {
           '⚠️ iframe note: Some websites block embedding via X-Frame-Options or CSP (frame-ancestors). If the page is blank, provide an "Open in new tab" alternative.',
         integrationDoc: 'Payment Integration Docs',
         integrationDocHint: 'Covers endpoint specs, idempotency semantics, and code samples'
-      },
-      soraClient: {
-        title: 'Sora Client',
-        description: 'Control whether to show the Sora client entry in the sidebar',
-        enabled: 'Enable Sora Client',
-        enabledHint: 'When enabled, the Sora entry will be shown in the sidebar for users to access Sora features'
       },
       customMenu: {
         title: 'Custom Menu Pages',

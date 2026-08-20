@@ -273,13 +273,14 @@ func TestContentModerationRuntimeSnapshotRefreshFailureKeepsStaleConfig(t *testi
 	require.True(t, decision.Blocked)
 
 	repo.failMultiple(errors.New("database unavailable"))
+	_, err = svc.refreshRuntimeSnapshot(context.Background())
+	require.Error(t, err)
+
 	decision, err = svc.Check(context.Background(), input)
 	require.NoError(t, err)
 	require.True(t, decision.Blocked)
-	require.Eventually(t, func() bool {
-		_, calls := repo.calls()
-		return calls >= 2
-	}, time.Second, time.Millisecond)
+	_, calls := repo.calls()
+	require.GreaterOrEqual(t, calls, 2)
 }
 
 func TestContentModerationRuntimeSnapshotRefreshFailureBacksOff(t *testing.T) {
