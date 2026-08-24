@@ -145,6 +145,7 @@ docs/*
 frontend/coverage/
 aicodex
 output/
+.codegraph/
 
 # Local portable PostgreSQL clients used for backup/restore
 tools/postgresql/*
