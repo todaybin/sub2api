@@ -838,7 +838,7 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	}
 
 	// 计算费用
-	cost := s.calculateRecordUsageCost(ctx, result, apiKey, billingModel, multiplier, imageMultiplier, pricingAt, opts)
+	cost := s.calculateRecordUsageCost(ctx, result, apiKey, account, billingModel, multiplier, imageMultiplier, pricingAt, opts)
 	// response_model：按上游成功响应自报的模型计费（渠道显式开启才生效）。
 	// 采纳条件见 responseModelBillingDeclaration + hasIdentifiedResponseModelPricing
 	// + responseModelBillingAdoptable。任一条件不满足都静默回落基线，即开启本模式前的
@@ -850,7 +850,7 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		result.ImageCount > 0 || result.AudioUsage != nil || result.SearchCount > 0,
 	); responseModel != "" && !strings.EqualFold(responseModel, strings.TrimSpace(billingModel)) {
 		if identified, responseChannelPriced := s.hasIdentifiedResponseModelPricing(ctx, responseModel, apiKey); identified {
-			responseCost := s.calculateRecordUsageCost(ctx, result, apiKey, responseModel, multiplier, imageMultiplier, pricingAt, opts)
+			responseCost := s.calculateRecordUsageCost(ctx, result, apiKey, account, responseModel, multiplier, imageMultiplier, pricingAt, opts)
 			baselineChannelPriced := s.resolveChannelPricing(ctx, billingModel, apiKey) != nil
 			if responseModelBillingAdoptable(cost, responseCost, baselineChannelPriced, responseChannelPriced) {
 				// billingModel 到此为止只是定价查表的入参，后续流程只消费 cost，
@@ -936,18 +936,32 @@ func (s *GatewayService) calculateRecordUsageCost(
 	ctx context.Context,
 	result *ForwardResult,
 	apiKey *APIKey,
+	account *Account,
 	billingModel string,
 	multiplier float64,
 	imageMultiplier float64,
 	pricingAt time.Time,
 	opts *recordUsageOpts,
 ) *CostBreakdown {
+	modelCandidates := []string{billingModel, result.UpstreamModel, result.UpstreamResponseModel, result.Model}
+	finalize := func(cost, baseCost *CostBreakdown) *CostBreakdown {
+		if cost == nil || baseCost == nil || account == nil || account.Platform != PlatformCodeBuddy {
+			return cost
+		}
+		configuredBase := CodeBuddyBillingSettingsForAccount(account).BaseCostPerToken
+		providerMultiplier := CodeBuddyProviderCostMultiplierWithBase(account, baseCost.TotalCost, result.Usage, configuredBase, modelCandidates...)
+		applyCostBreakdownMultiplier(cost, providerMultiplier)
+		return cost
+	}
+
 	// 图片生成：渠道定价为 token 计费时走 token 路径，否则走图片计费
 	if result.ImageCount > 0 {
 		if resolved := s.resolveChannelPricing(ctx, billingModel, apiKey); resolved != nil && resolved.Mode == BillingModeToken {
-			return s.calculateTokenCost(ctx, result, apiKey, billingModel, multiplier, pricingAt, opts)
+			cost := s.calculateTokenCost(ctx, result, apiKey, billingModel, multiplier, pricingAt, opts)
+			baseCost := s.calculateTokenCost(ctx, result, apiKey, billingModel, 1, pricingAt, opts)
+			return finalize(cost, baseCost)
 		}
-		return s.calculateImageCost(ctx, result, apiKey, billingModel, imageMultiplier)
+		return finalize(s.calculateImageCost(ctx, result, apiKey, billingModel, imageMultiplier), nil)
 	}
 
 	// Voice audio (TTS / STT / realtime) when present on the forward result.
@@ -961,15 +975,16 @@ func (s *GatewayService) calculateRecordUsageCost(
 				RateMultiplier: multiplier, Resolver: s.resolver, Resolved: resolved,
 			})
 			if err == nil {
-				return cost
+				return finalize(cost, nil)
 			}
 		}
 		cfg := groupAudioPriceConfigFromAPIKey(apiKey)
-		return s.billingService.CalculateAudioCost(result.AudioUsage.Mode, result.AudioUsage.DurationOrUnits, cfg, multiplier)
+		return finalize(s.billingService.CalculateAudioCost(result.AudioUsage.Mode, result.AudioUsage.DurationOrUnits, cfg, multiplier), nil)
 	}
 
 	// Token 计费；SearchCount 为叠加 surcharge（不替代 token）。
 	tokenCost := s.calculateTokenCost(ctx, result, apiKey, billingModel, multiplier, pricingAt, opts)
+	baseTokenCost := s.calculateTokenCost(ctx, result, apiKey, billingModel, 1, pricingAt, opts)
 	if result.SearchCount > 0 {
 		price := groupSearchPricePer1kFromAPIKey(apiKey)
 		if price != nil && *price == 0 {
@@ -978,13 +993,13 @@ func (s *GatewayService) calculateRecordUsageCost(
 		searchCost := s.billingService.CalculateSearchCost(result.SearchCount, price, multiplier)
 		if searchCost != nil && (searchCost.TotalCost > 0 || searchCost.ActualCost > 0) {
 			if tokenCost == nil {
-				return searchCost
+				return finalize(searchCost, baseTokenCost)
 			}
 			tokenCost.TotalCost += searchCost.TotalCost
 			tokenCost.ActualCost += searchCost.ActualCost
 		}
 	}
-	return tokenCost
+	return finalize(tokenCost, baseTokenCost)
 }
 
 // compositeBillableModel 决定 composite 分组请求的计费模型：来源覆盖把计费模型

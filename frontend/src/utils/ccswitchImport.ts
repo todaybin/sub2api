@@ -3,7 +3,9 @@ import type { GroupPlatform } from '@/types'
 export const OPENAI_CC_SWITCH_CODEX_MODEL = 'gpt-5.5'
 export const GROK_CC_SWITCH_MODEL = 'grok-4.5'
 
-export type CcSwitchClientType = 'claude' | 'gemini'
+// CCSwitch identifies OpenAI-compatible clients as Codex. CodeBuddy exposes
+// the same Chat Completions protocol, so it must never fall through to Claude.
+export type CcSwitchClientType = 'claude' | 'gemini' | 'codex'
 
 export interface CcSwitchImportConfig {
   app: string
@@ -41,6 +43,12 @@ export function resolveCcSwitchImportConfig(
         app: 'codex',
         endpoint: baseUrl,
         model: OPENAI_CC_SWITCH_CODEX_MODEL
+      }
+    case 'codebuddy':
+      return {
+        app: 'codex',
+        endpoint: withV1Endpoint(baseUrl),
+        model: 'auto'
       }
     case 'gemini':
       return {

@@ -619,13 +619,27 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	} else if len(input.Credentials) > 0 {
 		// 敏感子键采用"incoming 没提供就保留"的合并语义：前端响应已脱敏，
 		// 全对象 PUT 编辑时不会再带回 token，避免覆盖时清空已有凭证。
-		account.Credentials = MergePreservingSensitiveCreds(account.Credentials, input.Credentials)
+		existingCredentials := account.Credentials
+		account.Credentials = MergePreservingSensitiveCreds(existingCredentials, input.Credentials)
 		// 校验并规范化请求头覆写配置（header 名小写化、格式检查）
 		if err := NormalizeHeaderOverrideCredentials(account.Credentials); err != nil {
 			return nil, err
 		}
 		// Strip SSO/password residue that must never sit next to OAuth tokens.
 		account.Credentials = SanitizeStoredCredentials(account.Platform, account.Credentials)
+		// CodeBuddy model metadata is populated by the upstream catalog sync and
+		// is not editable in the ordinary account form. Preserve it when an edit
+		// submits a redacted/stale credentials snapshot that omits these fields.
+		if account.Platform == PlatformCodeBuddy {
+			for _, key := range []string{"models", "model_catalog", "uid", "enterprise_id", "region", CodeBuddyCredentialReferenceCostUnits, CodeBuddyCredentialReferenceCredits, CodeBuddyCredentialTokensPerCredit} {
+				if _, provided := input.Credentials[key]; provided {
+					continue
+				}
+				if value, exists := existingCredentials[key]; exists {
+					account.Credentials[key] = value
+				}
+			}
+		}
 	}
 	if input.Extra != nil {
 		if err := ProtectUpstreamUsageQuerySecrets(normalizedExtra, account.Credentials); err != nil {
@@ -671,6 +685,18 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		} {
 			if v, ok := account.Extra[key]; ok {
 				normalizedExtra[key] = v
+			}
+		}
+		// The CodeBuddy catalog is provider-managed state. Keep it across an
+		// unrelated account edit when the caller sends only a partial extra map.
+		if account.Platform == PlatformCodeBuddy {
+			for _, key := range []string{"codebuddy_region", "codebuddy_models", "codebuddy_model_catalog", "codebuddy_model_source"} {
+				if _, provided := normalizedExtra[key]; provided {
+					continue
+				}
+				if value, exists := account.Extra[key]; exists {
+					normalizedExtra[key] = value
+				}
 			}
 		}
 		normalizedExtra = prepareCodexFingerprintExtraForUpdate(account, normalizedExtra)
@@ -1287,6 +1313,21 @@ func (s *adminServiceImpl) SetAccountSchedulable(ctx context.Context, id int64, 
 	updated, err := s.accountRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	// A direct administrator change is an explicit override. Clear the
+	// CodeBuddy auto-disable marker so a later credit probe cannot undo it.
+	if updated != nil && updated.Platform == PlatformCodeBuddy && updated.Type == AccountTypeOAuth {
+		settings := CodeBuddyCheckinSettingsForAccount(updated)
+		if settings.AutoDisabledByBalance {
+			settings.AutoDisabledByBalance = false
+			if err := s.accountRepo.UpdateExtra(ctx, id, map[string]any{CodeBuddyCheckinExtraKey: settings}); err != nil {
+				return nil, err
+			}
+			if updated.Extra == nil {
+				updated.Extra = make(map[string]any)
+			}
+			updated.Extra[CodeBuddyCheckinExtraKey] = settings
+		}
 	}
 	return updated, nil
 }

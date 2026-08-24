@@ -120,6 +120,10 @@ const (
 	openAIGPT54LongContextOutputMultiplier = 1.5
 )
 
+func codeBuddyTokenCostUnitPerToken(unitsPerMillion float64) float64 {
+	return unitsPerMillion / 1_000_000
+}
+
 func normalizeBillingServiceTier(serviceTier string) string {
 	return strings.ToLower(strings.TrimSpace(serviceTier))
 }
@@ -481,6 +485,41 @@ func (s *BillingService) initFallbackPricing() {
 		SupportsCacheBreakdown: false,
 	}
 
+	// CodeBuddy cards use the same abstract local pricing unit as the rest of
+	// the gateway. They are not converted from CNY or any other currency.
+	// Dynamic/channel pricing keeps its existing precedence.
+	// Hy3 is the current production model. hy3-preview is retained as a
+	// compatibility alias until the upstream retirement date.
+	s.fallbackPrices["hy3"] = &ModelPricing{
+		InputPricePerToken:     codeBuddyTokenCostUnitPerToken(1.0),
+		OutputPricePerToken:    codeBuddyTokenCostUnitPerToken(4.0),
+		CacheReadPricePerToken: codeBuddyTokenCostUnitPerToken(0.25),
+		SupportsCacheBreakdown: false,
+	}
+	s.fallbackPrices["hy3-preview"] = &ModelPricing{
+		InputPricePerToken:            codeBuddyTokenCostUnitPerToken(1.2),
+		OutputPricePerToken:           codeBuddyTokenCostUnitPerToken(4.0),
+		CacheReadPricePerToken:        codeBuddyTokenCostUnitPerToken(0.4),
+		LongContextInputThreshold:     16000,
+		LongContextThresholdInclusive: true,
+		LongContextInputMultiplier:    1.6 / 1.2,
+		LongContextOutputMultiplier:   6.4 / 4.0,
+		SupportsCacheBreakdown:        false,
+	}
+	s.fallbackPrices["hy3-preview-agent"] = s.fallbackPrices["hy3-preview"]
+	// GLM-5V-Turbo is the CodeBuddy domestic multimodal card. The official
+	// 32K+ tier is represented by the existing long-context pricing fields.
+	s.fallbackPrices["glm-5v-turbo"] = &ModelPricing{
+		InputPricePerToken:            codeBuddyTokenCostUnitPerToken(5.0),
+		OutputPricePerToken:           codeBuddyTokenCostUnitPerToken(22.0),
+		CacheReadPricePerToken:        codeBuddyTokenCostUnitPerToken(1.2),
+		LongContextInputThreshold:     32000,
+		LongContextThresholdInclusive: true,
+		LongContextInputMultiplier:    7.0 / 5.0,
+		LongContextOutputMultiplier:   26.0 / 22.0,
+		SupportsCacheBreakdown:        false,
+	}
+
 	// ---- 智谱 GLM（Z.AI）----
 	// Source: https://docs.z.ai/guides/overview/pricing (USD per 1M tokens)
 	// 注意：CacheReadPricePerToken 即"缓存命中"价格，CacheCreationPricePerToken 留空（智谱未公开写入价，按 0 处理）。
@@ -779,6 +818,18 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 		return s.fallbackPrices["deepseek-v4-flash"]
 	}
 
+	// CodeBuddy Hy3 aliases must resolve before the generic domestic model
+	// families. hy3-preview-agent is the upstream Agent alias of hy3-preview.
+	if modelLower == "hy3" {
+		return s.fallbackPrices["hy3"]
+	}
+	if strings.Contains(modelLower, "hy3-preview-agent") {
+		return s.fallbackPrices["hy3-preview-agent"]
+	}
+	if strings.Contains(modelLower, "hy3-preview") {
+		return s.fallbackPrices["hy3-preview"]
+	}
+
 	// ---- 国产 LLM 兜底匹配 ----
 	// 匹配策略：长 key 优先（具体模型 → 系列 / 厂商），未知型号不回退以避免误计价。
 	// 与 DeepSeek 一样采用"白名单"语义：未在本表命中的国产模型 alias 一律不返回兜底价。
@@ -786,6 +837,9 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	// 智谱 GLM（z.ai 公开 SKU：glm-5.2 / glm-5.1 / glm-5 / glm-5-turbo / glm-4.7 / glm-4.6 / glm-4.5 等）
 	// 匹配顺序：先判别最高 tier，再依次降级。
 	// 注意：带小数点的型号必须排在裸 "glm-5" 之前，否则会被 strings.Contains 抢走。
+	if strings.Contains(modelLower, "glm-5v-turbo") || strings.Contains(modelLower, "glm-5v") {
+		return s.fallbackPrices["glm-5v-turbo"]
+	}
 	if strings.Contains(modelLower, "glm-5.2") {
 		return s.fallbackPrices["glm-5.2"]
 	}

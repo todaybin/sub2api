@@ -112,6 +112,25 @@ func TestGetModelPricing_FallbackMatchesByFamily(t *testing.T) {
 	}
 }
 
+func TestGetModelPricing_CodeBuddyOfficialFallbackCards(t *testing.T) {
+	svc := newTestBillingService()
+
+	hy3, err := svc.GetModelPricing("hy3")
+	require.NoError(t, err)
+	require.InDelta(t, 1.0/1e6, hy3.InputPricePerToken, 1e-15)
+	require.InDelta(t, 4.0/1e6, hy3.OutputPricePerToken, 1e-15)
+	require.InDelta(t, 0.25/1e6, hy3.CacheReadPricePerToken, 1e-15)
+
+	preview, err := svc.GetModelPricing("hy3-preview-agent")
+	require.NoError(t, err)
+	require.Equal(t, 16000, preview.LongContextInputThreshold)
+
+	glm, err := svc.GetModelPricing("glm-5v-turbo")
+	require.NoError(t, err)
+	require.InDelta(t, 5.0/1e6, glm.InputPricePerToken, 1e-15)
+	require.Equal(t, 32000, glm.LongContextInputThreshold)
+}
+
 func TestGetModelPricing_CaseInsensitive(t *testing.T) {
 	svc := newTestBillingService()
 

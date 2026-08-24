@@ -29,6 +29,15 @@ func NewScheduledTestService(
 
 // CreatePlan validates the cron expression, computes next_run_at, and persists the plan.
 func (s *ScheduledTestService) CreatePlan(ctx context.Context, plan *ScheduledTestPlan) (*ScheduledTestPlan, error) {
+	if plan.TaskType == "" {
+		plan.TaskType = "test"
+	}
+	if plan.TaskType != "test" && plan.TaskType != "checkin" {
+		return nil, fmt.Errorf("invalid scheduled task type: %s", plan.TaskType)
+	}
+	if plan.TaskType == "test" && plan.ModelID == "" {
+		return nil, fmt.Errorf("model_id is required for test plans")
+	}
 	nextRun, err := computeNextRun(plan.CronExpression, time.Now())
 	if err != nil {
 		return nil, fmt.Errorf("invalid cron expression: %w", err)
@@ -54,6 +63,15 @@ func (s *ScheduledTestService) ListPlansByAccount(ctx context.Context, accountID
 
 // UpdatePlan validates cron and updates the plan.
 func (s *ScheduledTestService) UpdatePlan(ctx context.Context, plan *ScheduledTestPlan) (*ScheduledTestPlan, error) {
+	if plan.TaskType == "" {
+		plan.TaskType = "test"
+	}
+	if plan.TaskType != "test" && plan.TaskType != "checkin" {
+		return nil, fmt.Errorf("invalid scheduled task type: %s", plan.TaskType)
+	}
+	if plan.TaskType == "test" && plan.ModelID == "" {
+		return nil, fmt.Errorf("model_id is required for test plans")
+	}
 	nextRun, err := computeNextRun(plan.CronExpression, time.Now())
 	if err != nil {
 		return nil, fmt.Errorf("invalid cron expression: %w", err)

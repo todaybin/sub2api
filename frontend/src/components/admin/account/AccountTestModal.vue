@@ -375,6 +375,7 @@ import { useClipboard } from '@/composables/useClipboard'
 import { buildApiUrl } from '@/api/client'
 import { ADMIN_UI_REQUEST_HEADER } from '@/api/adminUIRequest'
 import { adminAPI } from '@/api/admin'
+import { extractApiErrorMessage } from '@/utils/apiError'
 import type { Account, ClaudeModel } from '@/types'
 
 const { t } = useI18n()
@@ -932,7 +933,7 @@ const startTest = async () => {
       return
     }
     status.value = 'error'
-    const msg = error instanceof Error ? error.message : t('common.unknownError')
+    const msg = extractApiErrorMessage(error, t('common.unknownError'))
     errorMessage.value = msg
     addLine(t('admin.accounts.errorPrefix', { message: msg }), 'text-red-400')
   }

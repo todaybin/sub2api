@@ -184,3 +184,33 @@ func TestDynamicGroupRateReconcilePausesWhenGlobalProbeIsDisabled(t *testing.T) 
 		t.Fatal("account probes must not be enabled while global probing is disabled")
 	}
 }
+
+func TestDynamicGroupRateReconcileCodeBuddyUsesMarkupOnly(t *testing.T) {
+	now := time.Date(2026, 8, 10, 8, 0, 0, 0, time.UTC)
+	group := &Group{
+		ID:                       9,
+		Platform:                 PlatformCodeBuddy,
+		Status:                   StatusActive,
+		RateMode:                 GroupRateModeDynamic,
+		RateMultiplier:           0.8,
+		DynamicRateMarkupPercent: 20,
+	}
+	service, repo, accountRepo := newDynamicRateTestService(now, group)
+	service.settingService = NewSettingService(&dynamicGroupRateSettingRepoStub{value: `{"enabled":false}`}, nil)
+
+	if err := service.ReconcileGroup(context.Background(), group.ID); err != nil {
+		t.Fatal(err)
+	}
+	if accountRepo.enabled {
+		t.Fatal("CodeBuddy groups must not enable the API-key billing probe")
+	}
+	if repo.evaluation.Status != DynamicRateStatusReady {
+		t.Fatalf("status = %q, want ready", repo.evaluation.Status)
+	}
+	if repo.evaluation.SourceMultiplier == nil || *repo.evaluation.SourceMultiplier != 1 {
+		t.Fatalf("source = %v, want 1", repo.evaluation.SourceMultiplier)
+	}
+	if repo.evaluation.TargetMultiplier == nil || *repo.evaluation.TargetMultiplier != 1.2 {
+		t.Fatalf("target = %v, want 1.2", repo.evaluation.TargetMultiplier)
+	}
+}

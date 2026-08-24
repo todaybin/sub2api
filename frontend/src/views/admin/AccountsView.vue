@@ -456,7 +456,7 @@
     <ReAuthAccountModal :show="showReAuth" :account="reAuthAcc" @close="closeReAuthModal" @reauthorized="handleAccountUpdated" />
     <AccountTestModal :show="showTest" :account="testingAcc" @close="closeTestModal" />
     <AccountStatsModal :show="showStats" :account="statsAcc" @close="closeStatsModal" />
-    <ScheduledTestsPanel :show="showSchedulePanel" :account-id="scheduleAcc?.id ?? null" :model-options="scheduleModelOptions" @close="closeSchedulePanel" />
+    <ScheduledTestsPanel :show="showSchedulePanel" :account-id="scheduleAcc?.id ?? null" :account-platform="scheduleAcc?.platform" :account-type="scheduleAcc?.type" :model-options="scheduleModelOptions" @close="closeSchedulePanel" />
     <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @schedule="handleSchedule" @duplicate="handleDuplicateAccount" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" />
     <SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="reload" />
     <ImportDataModal :show="showImportData" @close="showImportData = false" @imported="handleDataImported" />
@@ -1813,7 +1813,7 @@ const handleBulkDelete = async () => {
     await reload()
   } catch (error) {
     console.error('Failed to bulk delete accounts:', error)
-    appStore.showError(String(error))
+    appStore.showError(extractApiErrorMessage(error, t('common.error')))
   }
 }
 const handleBulkResetStatus = async () => {
@@ -1829,7 +1829,7 @@ const handleBulkResetStatus = async () => {
     reload()
   } catch (error) {
     console.error('Failed to bulk reset status:', error)
-    appStore.showError(String(error))
+    appStore.showError(extractApiErrorMessage(error, t('common.error')))
   }
 }
 const handleBulkRefreshToken = async () => {
@@ -1845,7 +1845,7 @@ const handleBulkRefreshToken = async () => {
     reload()
   } catch (error) {
     console.error('Failed to bulk refresh token:', error)
-    appStore.showError(String(error))
+    appStore.showError(extractApiErrorMessage(error, t('common.error')))
   }
 }
 const handleBulkProbeUpstreamBilling = async () => {
@@ -2178,6 +2178,11 @@ const handleProbeUpstreamBilling = async (account: Account) => {
   if (probingUpstreamBilling.has(account.id)) return
   probingUpstreamBilling.add(account.id)
   try {
+    if (account.platform === 'codebuddy' && account.type === 'oauth') {
+      const updated = await adminAPI.accounts.runCodeBuddyCheckin(account.id)
+      patchAccountInList(updated)
+      return
+    }
     const result = await adminAPI.accounts.probeUpstreamBilling(account.id)
     if (result.snapshot) {
       patchUpstreamBillingSnapshot(account.id, result.snapshot)
@@ -2289,6 +2294,7 @@ const handleRefresh = async (a: Account) => {
     enterAutoRefreshSilentWindow()
   } catch (error) {
     console.error('Failed to refresh credentials:', error)
+    appStore.showError(extractApiErrorMessage(error, t('admin.accounts.failedToRefresh')))
   }
 }
 const handleRecoverState = async (a: Account) => {
@@ -2310,6 +2316,7 @@ const handleResetQuota = async (a: Account) => {
     appStore.showSuccess(t('common.success'))
   } catch (error) {
     console.error('Failed to reset quota:', error)
+    appStore.showError(extractApiErrorMessage(error, t('common.error')))
   }
 }
 

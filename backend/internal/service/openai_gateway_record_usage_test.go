@@ -2745,11 +2745,12 @@ func TestGatewayServiceCalculateRecordUsageCost_ChannelImageBillingUsesImageCoun
 		context.Background(),
 		&ForwardResult{Model: "gemini-image", ImageCount: 2, ImageSize: "1K"},
 		&APIKey{GroupID: i64p(groupID), Group: &Group{ID: groupID}},
+		nil,
 		"gemini-image",
 		0.15,
 		1.0,
 		time.Time{},
-		nil,
+		&recordUsageOpts{},
 	)
 
 	require.NotNil(t, cost)
@@ -2785,6 +2786,7 @@ func TestGatewayServiceCalculateRecordUsageCost_ChannelImageBillingUsesSizeTier(
 		context.Background(),
 		&ForwardResult{Model: "gemini-image", ImageCount: 2, ImageSize: "4K"},
 		&APIKey{GroupID: i64p(groupID), Group: &Group{ID: groupID}},
+		nil,
 		"gemini-image",
 		1.0,
 		1.0,
@@ -2818,6 +2820,7 @@ func TestGatewayServiceCalculateRecordUsageCost_GroupImagePriceOverridesChannelI
 				ImagePrice2K: &groupImagePrice2K,
 			},
 		},
+		nil,
 		"gemini-image",
 		1.0,
 		1.0,
@@ -2829,6 +2832,39 @@ func TestGatewayServiceCalculateRecordUsageCost_GroupImagePriceOverridesChannelI
 	require.Equal(t, string(BillingModeImage), cost.BillingMode)
 	require.InDelta(t, 0.042, cost.TotalCost, 1e-12)
 	require.InDelta(t, 0.042, cost.ActualCost, 1e-12)
+}
+
+func TestGatewayServiceCalculateRecordUsageCost_CodeBuddyCreditsMultiplier(t *testing.T) {
+	billing := NewBillingService(&config.Config{}, nil)
+	svc := &GatewayService{
+		billingService: billing,
+		resolver:       NewModelPricingResolver(nil, billing),
+	}
+	account := &Account{
+		Platform: PlatformCodeBuddy,
+		Extra: map[string]any{
+			"codebuddy_model_catalog": []any{
+				map[string]any{"id": "hy3", "credits_multiplier": 0.79},
+			},
+		},
+	}
+	cost := svc.calculateRecordUsageCost(
+		context.Background(),
+		&ForwardResult{Model: "hy3", Usage: ClaudeUsage{InputTokens: 1000, OutputTokens: 500}},
+		&APIKey{GroupID: i64p(1), Group: &Group{ID: 1}},
+		account,
+		"hy3",
+		1.0,
+		1.0,
+		time.Time{},
+		&recordUsageOpts{},
+	)
+
+	require.NotNil(t, cost)
+	usage := ClaudeUsage{InputTokens: 1000, OutputTokens: 500}
+	expected := float64(CodeBuddyBillableTokens(usage)) * CodeBuddyUpstreamCostPerToken(0.79)
+	require.InDelta(t, expected, cost.TotalCost, 1e-15)
+	require.InDelta(t, expected, cost.ActualCost, 1e-15)
 }
 
 func TestRecordUsageMarksCyberRequestType(t *testing.T) {
@@ -2882,6 +2918,7 @@ func TestGatewayServiceCalculateRecordUsageCost_ChannelImageBillingNormalizesMis
 		context.Background(),
 		&ForwardResult{Model: "gemini-image", ImageCount: 2, ImageSize: ""},
 		&APIKey{GroupID: i64p(groupID), Group: &Group{ID: groupID}},
+		nil,
 		"gemini-image",
 		1.0,
 		1.0,

@@ -8,8 +8,9 @@
 interface ApiErrorLike {
   status?: number
   code?: number | string
-  message?: string
-  error?: string
+  message?: unknown
+  detail?: unknown
+  error?: unknown
   reason?: string
   metadata?: Record<string, unknown>
   response?: {
@@ -133,15 +134,34 @@ export function extractApiErrorMessage(
     if (code && i18nMap[code]) return i18nMap[code]
   }
 
+  const stringifyMessage = (value: unknown): string | undefined => {
+    if (typeof value === 'string' && value.trim()) return value.trim()
+    if (value instanceof Error && value.message) return value.message
+    if (value && typeof value === 'object') {
+      const nested = value as Record<string, unknown>
+      for (const key of ['message', 'detail', 'error', 'reason']) {
+        const message = stringifyMessage(nested[key])
+        if (message) return message
+      }
+      try {
+        const serialized = JSON.stringify(value)
+        if (serialized && serialized !== '{}') return serialized
+      } catch {
+        // Ignore circular error payloads and continue to the fallback.
+      }
+    }
+    return undefined
+  }
+
   // Plain object from API client interceptor (most common case)
   if (typeof err === 'object' && err !== null) {
     const e = err as ApiErrorLike
-    // Interceptor shape: { message, error }
-    if (e.message) return e.message
-    if (e.error) return e.error
+    // Interceptor shape: { message, error, detail }
+    const direct = stringifyMessage(e.message) || stringifyMessage(e.detail) || stringifyMessage(e.error) || stringifyMessage(e.reason)
+    if (direct) return direct
     // Legacy axios shape: { response.data.detail }
-    if (e.response?.data?.detail) return e.response.data.detail
-    if (e.response?.data?.message) return e.response.data.message
+    const responseMessage = stringifyMessage(e.response?.data?.detail) || stringifyMessage(e.response?.data?.message)
+    if (responseMessage) return responseMessage
   }
 
   // Standard Error

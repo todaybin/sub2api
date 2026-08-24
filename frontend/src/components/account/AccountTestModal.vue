@@ -251,6 +251,7 @@ import { Icon } from '@/components/icons'
 import { useClipboard } from '@/composables/useClipboard'
 import { buildApiUrl } from '@/api/client'
 import { adminAPI } from '@/api/admin'
+import { extractApiErrorMessage } from '@/utils/apiError'
 import type { Account, ClaudeModel } from '@/types'
 
 const { t } = useI18n()
@@ -476,7 +477,7 @@ const startTest = async () => {
       return
     }
     status.value = 'error'
-    const msg = error instanceof Error ? error.message : 'Unknown error'
+    const msg = extractApiErrorMessage(error, t('common.unknownError'))
     errorMessage.value = msg
     addLine(`Error: ${msg}`, 'text-red-400')
   }

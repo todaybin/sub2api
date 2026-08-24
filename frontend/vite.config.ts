@@ -166,6 +166,38 @@ export default defineConfig(({ mode }) => {
           target: backendUrl,
           changeOrigin: true
         },
+        // Codex treats the configured base URL as the API root and appends
+        // /responses, /models, or /backend-api/codex directly.
+        '/responses': {
+          target: backendUrl,
+          changeOrigin: true,
+          rewrite: (path) => `/v1${path}`
+        },
+        '/models': {
+          target: backendUrl,
+          changeOrigin: true,
+          rewrite: (path) => `/v1${path}`
+        },
+        '/backend-api': {
+          target: backendUrl,
+          changeOrigin: true,
+          rewrite: (path) => `/v1${path}`
+        },
+        '/alpha': {
+          target: backendUrl,
+          changeOrigin: true,
+          rewrite: (path) => `/v1${path}`
+        },
+        '/chat': {
+          target: backendUrl,
+          changeOrigin: true,
+          rewrite: (path) => `/v1${path}`
+        },
+        '/messages': {
+          target: backendUrl,
+          changeOrigin: true,
+          rewrite: (path) => `/v1${path}`
+        },
         '/setup': {
           target: backendUrl,
           changeOrigin: true

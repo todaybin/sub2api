@@ -193,12 +193,15 @@ curl -X POST "${BASE}${GATEWAY}" \
 POST /api/v1/integrations/admin/users/provision
 ```
 
-原管理员路径为 `POST /api/v1/admin/users/provision`。用途：一次请求创建普通用户、用户 API Key、可选初始余额和可选订阅套餐。该接口是写操作，必须提供 `Idempotency-Key`。
+原管理员路径为 `POST /api/v1/admin/users/provision`。用途：幂等确保普通用户存在、合并可用模型分组，并为缺失分组创建独立 API Key。接口兼容原有一次性创建语义和单个 `api_key` 字段；新接入方应使用稳定的 `external_id` 和批量 `api_keys`。该接口是写操作，必须提供 `Idempotency-Key`。
+
+重复调用时先按 `external_id` 查找账号，未找到时才按邮箱精确认领。若命中多个 `external_id`、邮箱已属于管理员账号，或同一请求重复声明分组，返回冲突或参数错误。已存在分组 Key 不会重复创建，也不会再次返回密钥明文；新增 Key 的明文只在本次响应返回。
 
 ### 4.1 请求字段
 
 | 字段 | 类型 | 是否必填 | 描述 |
 | --- | --- | --- | --- |
+| `external_id` | string | 建议必填 | 第三方系统稳定账号标识，最长 160 字符，只允许字母、数字、点、下划线、冒号和连字符。 |
 | `email` | string | 是 | 唯一邮箱地址。 |
 | `password` | string | 是 | 登录密码，最少 6 个字符；响应不会返回该字段。 |
 | `username` | string | 否 | 显示名称。 |
@@ -217,6 +220,7 @@ POST /api/v1/integrations/admin/users/provision
 | `api_key.rate_limit_5h` | number | 否 | 5 小时滚动窗口请求上限，`0` 表示不限。 |
 | `api_key.rate_limit_1d` | number | 否 | 1 天滚动窗口请求上限，`0` 表示不限。 |
 | `api_key.rate_limit_7d` | number | 否 | 7 天滚动窗口请求上限，`0` 表示不限。 |
+| `api_keys` | object[] | 否 | 批量 Key 定义，元素字段与 `api_key` 相同；`api_key` 与 `api_keys` 至少提供一个。一个请求内每个 `group_id` 只能出现一次。 |
 | `subscription.group_id` | integer | 否 | 订阅类型分组 ID；提供 `subscription` 时必填且必须大于 0。 |
 | `subscription.validity_days` | integer | 否 | 订阅有效天数，范围为 1-36500，省略时默认 30 天。 |
 | `subscription.notes` | string | 否 | 订阅备注。 |
@@ -225,6 +229,7 @@ POST /api/v1/integrations/admin/users/provision
 
 ```json
 {
+  "external_id": "workmesh:site-1001",
   "email": "alice@example.com",
   "password": "change-me-123",
   "username": "alice",
@@ -233,14 +238,20 @@ POST /api/v1/integrations/admin/users/provision
   "concurrency": 5,
   "rpm_limit": 120,
   "allowed_groups": [12],
-  "api_key": {
-    "name": "default",
-    "group_id": 12,
-    "quota": 0,
-    "expires_in_days": 30,
-    "ip_whitelist": ["203.0.113.0/24"],
-    "rate_limit_1d": 10000
-  },
+  "api_keys": [
+    {
+      "name": "workmesh-group-12",
+      "group_id": 12,
+      "quota": 0,
+      "ip_whitelist": ["203.0.113.0/24"],
+      "rate_limit_1d": 10000
+    },
+    {
+      "name": "workmesh-group-18",
+      "group_id": 18,
+      "quota": 0
+    }
+  ],
   "subscription": {
     "group_id": 12,
     "validity_days": 30,
@@ -249,7 +260,7 @@ POST /api/v1/integrations/admin/users/provision
 }
 ```
 
-成功响应的 `data` 包含 `user`、`api_key` 和 `subscription`。`api_key.key` 是完整的 API Key，应只在创建响应中安全保存；密码不会返回。创建用户后的订阅或 API Key 创建失败时，服务端会删除刚创建的用户，避免留下可用账户。
+成功响应的 `data` 包含 `created`、`external_id`、`user`、`api_keys` 和 `subscription`；为兼容旧调用方，首个结果也放在 `api_key`。每个 `api_keys[]` 项包含 `created` 和 `key_fingerprint`，只有 `created=true` 时才包含一次性的完整 `key`。密码不会返回。创建用户后的订阅或 API Key 创建失败时，服务端会删除刚创建的用户；更新已有用户失败时会删除本轮新 Key 并恢复原分组和备注。
 
 ## 5. 常用既有管理员接口映射
 
@@ -258,7 +269,7 @@ POST /api/v1/integrations/admin/users/provision
 | `GET /api/v1/admin/users` | `GET /api/v1/integrations/admin/users` | 查询用户列表。 | 无 body，原查询参数原样透传。 |
 | `POST /api/v1/admin/users/:id/balance` | `POST /api/v1/integrations/admin/users/:id/balance` | 设置、增加或扣减用户余额。 | `balance`：number，必须大于 0；`operation`：`set`、`add` 或 `subtract`；`notes`：string，可选。 |
 | `POST /api/v1/admin/subscriptions/assign` | `POST /api/v1/integrations/admin/subscriptions/assign` | 向已有用户分配订阅套餐。 | 保持该原接口的字段和格式不变。 |
-| `POST /api/v1/admin/users/provision` | `POST /api/v1/integrations/admin/users/provision` | 一次性创建用户、API Key、余额和订阅。 | 见第 4 节。 |
+| `POST /api/v1/admin/users/provision` | `POST /api/v1/integrations/admin/users/provision` | 幂等确保用户和分组 API Key，可选设置首次余额和订阅。 | 见第 4 节。 |
 
 除第 1 节列出的禁止路径外，其他现有管理员接口均可依照相同映射规则调用。
 

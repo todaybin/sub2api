@@ -294,7 +294,8 @@ func (a *Account) IsCNProvider() bool {
 // 兼容上游，也经 OpenAI 网关转发。
 func (a *Account) IsOpenAICompatible() bool {
 	return a != nil && (a.Platform == PlatformOpenAI || a.Platform == PlatformGrok ||
-		a.Platform == PlatformKimi || a.Platform == PlatformZhipu || a.Platform == PlatformDeepseek)
+		a.Platform == PlatformKimi || a.Platform == PlatformZhipu || a.Platform == PlatformDeepseek ||
+		a.Platform == PlatformCodeBuddy)
 }
 
 func (a *Account) GeminiOAuthType() string {
@@ -814,8 +815,8 @@ func resolveRequestedModelInMapping(mapping map[string]string, requestedModel st
 	return matchWildcardMappingResult(mapping, requestedModel)
 }
 
-// IsModelSupported 检查模型是否在 model_mapping 中（支持通配符）
-// 如果未配置 mapping，返回 true（允许所有模型）。
+// IsModelSupported 检查模型是否在 model_mapping 中（支持通配符）。
+// 如果未配置 mapping，通常返回 true；CodeBuddy 账号还会遵守从上游同步的模型目录。
 //
 // 例外：OpenAI OAuth 账号（Codex 上游）的空映射会排除明确属于其他厂商
 // 家族的模型（deepseek-*/glm-* 等）——转发阶段 normalizeOpenAIModelForUpstream
@@ -831,6 +832,17 @@ func (a *Account) IsModelSupported(requestedModel string) bool {
 		return true
 	}
 	mapping := a.GetModelMapping()
+	if a.Platform == PlatformCodeBuddy {
+		upstreamModel := requestedModel
+		if len(mapping) > 0 {
+			var matched bool
+			upstreamModel, matched = a.ResolveMappedModel(requestedModel)
+			if !matched {
+				return false
+			}
+		}
+		return a.codeBuddyCatalogSupportsModel(upstreamModel)
+	}
 	if len(mapping) == 0 {
 		if a.IsOpenAIOAuth() {
 			return isOpenAIOAuthServableModel(requestedModel)
@@ -842,6 +854,49 @@ func (a *Account) IsModelSupported(requestedModel string) bool {
 	}
 	normalized := normalizeRequestedModelForLookup(a.Platform, requestedModel)
 	return normalized != requestedModel && mappingSupportsRequestedModel(mapping, normalized)
+}
+
+func (a *Account) codeBuddyCatalogSupportsModel(requestedModel string) bool {
+	if a == nil || a.Credentials == nil {
+		return true
+	}
+	raw, exists := a.Credentials["models"]
+	if !exists {
+		return true
+	}
+	requestedModel = strings.TrimSpace(requestedModel)
+	hasCatalog := false
+	switch models := raw.(type) {
+	case []string:
+		for _, model := range models {
+			model = strings.TrimSpace(model)
+			if model == "" {
+				continue
+			}
+			hasCatalog = true
+			if model == requestedModel {
+				return true
+			}
+		}
+	case []any:
+		for _, value := range models {
+			model, ok := value.(string)
+			if !ok {
+				continue
+			}
+			model = strings.TrimSpace(model)
+			if model == "" {
+				continue
+			}
+			hasCatalog = true
+			if model == requestedModel {
+				return true
+			}
+		}
+	default:
+		return true
+	}
+	return !hasCatalog
 }
 
 // GetMappedModel 获取映射后的模型名（支持通配符，最长优先匹配）
@@ -1307,7 +1362,7 @@ func (a *Account) IsOpenAIApiKey() bool {
 // 适用 openai 与国产 OpenAI 兼容供应商（kimi/zhipu/deepseek）；grok 走 GetGrokBaseURL，
 // 此处对 grok 返回 "" 以保持原有行为。
 func (a *Account) GetOpenAIBaseURL() string {
-	if !a.IsOpenAI() && !a.IsCNProvider() {
+	if !a.IsOpenAI() && !a.IsCNProvider() && a.Platform != PlatformCodeBuddy {
 		return ""
 	}
 	if a.IsCNProvider() && a.IsAdaptiveAPIProtocol() {
@@ -1324,6 +1379,11 @@ func (a *Account) GetOpenAIBaseURL() string {
 	}
 	// 平台默认 base_url：CN 供应商按 account_mode 选择 payg / coding 默认值。
 	switch a.Platform {
+	case PlatformCodeBuddy:
+		if baseURL := strings.TrimSpace(a.GetCredential("base_url")); baseURL != "" {
+			return strings.TrimRight(baseURL, "/")
+		}
+		return CodeBuddyDomesticEndpoint
 	case PlatformKimi:
 		if a.GetAccountMode() == AccountModeCoding {
 			return DefaultKimiCodingBaseURL
@@ -1723,6 +1783,9 @@ func (a *Account) SupportsOpenAIEndpointCapability(capability OpenAIEndpointCapa
 		return true
 	}
 	if !a.IsOpenAICompatible() {
+		return false
+	}
+	if a.Platform == PlatformCodeBuddy && capability != OpenAIEndpointCapabilityChatCompletions {
 		return false
 	}
 	if a.IsGrok() {

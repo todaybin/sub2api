@@ -1042,7 +1042,17 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 }
 
 func shouldForwardOpenAIResponsesViaRawChatCompletions(account *Account) bool {
-	if account == nil || account.Type != AccountTypeAPIKey {
+	if account == nil {
+		return false
+	}
+	// CodeBuddy exposes only the regional Chat Completions endpoint even for
+	// clients that call /v1/responses. Route it through the compatibility
+	// bridge instead of treating the OAuth account as a ChatGPT Responses
+	// account (which would send the request to api.openai.com).
+	if account.Platform == PlatformCodeBuddy {
+		return true
+	}
+	if account.Type != AccountTypeAPIKey {
 		return false
 	}
 	if account.IsCNProvider() {

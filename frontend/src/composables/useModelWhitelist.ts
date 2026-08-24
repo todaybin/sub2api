@@ -52,6 +52,23 @@ const geminiModels = [
   'gemini-3-pro-preview'
 ]
 
+// Tencent CodeBuddy domestic catalog fallback.
+export const codeBuddyDomesticModels = [
+  'auto',
+  'hy3', 'glm-5.3', 'glm-5.2', 'glm-5.1', 'glm-5v-turbo',
+  'kimi-k3', 'kimi-k2.7-code', 'kimi-k2.6', 'minimax-m3', 'deepseek-v4-flash',
+]
+
+// International fallback catalog. OAuth synchronization replaces this with
+// the account-scoped list returned by CodeBuddy.
+export const codeBuddyInternationalModels = [
+  'auto', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna',
+  'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gemini-3.5-flash',
+  'claude-sonnet-4-5', 'claude-opus-4-5', 'gpt-5',
+]
+
+export const codeBuddyModels = codeBuddyDomesticModels
+
 // Antigravity 官方支持的模型（精确匹配）
 // 基于官方 API 返回的模型列表，只支持 Claude 4.5+ 和 Gemini 2.5+
 const antigravityModels = [
@@ -238,6 +255,8 @@ const allModelsList: string[] = [
   ...openaiModels,
   ...claudeModels,
   ...geminiModels,
+  ...codeBuddyDomesticModels,
+  ...codeBuddyInternationalModels,
   ...zhipuModels,
   ...qwenModels,
   ...deepseekModels,
@@ -304,6 +323,23 @@ const geminiPresetMappings = [
   { label: '2.5 Pro', from: 'gemini-2.5-pro', to: 'gemini-2.5-pro', color: 'bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/30 dark:text-purple-400' },
   { label: '3.5 Flash', from: 'gemini-3.5-flash', to: 'gemini-3.5-flash', color: 'bg-violet-100 text-violet-700 hover:bg-violet-200 dark:bg-violet-900/30 dark:text-violet-400' },
   { label: '3.1 Image', from: 'gemini-3.1-flash-image', to: 'gemini-3.1-flash-image', color: 'bg-sky-100 text-sky-700 hover:bg-sky-200 dark:bg-sky-900/30 dark:text-sky-400' }
+]
+
+const codeBuddyPresetMappings = [
+  { label: 'Default', from: 'default', to: 'default', color: 'bg-cyan-100 text-cyan-800 hover:bg-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-300' },
+  { label: 'DeepSeek V4 Flash', from: 'deepseek-v4-flash', to: 'deepseek-v4-flash', color: 'bg-teal-100 text-teal-700 hover:bg-teal-200 dark:bg-teal-900/30 dark:text-teal-400' },
+  { label: 'MiniMax M3', from: 'minimax-m3', to: 'minimax-m3', color: 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400' },
+  { label: 'GLM 5.2', from: 'glm-5.2', to: 'glm-5.2', color: 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400' },
+  { label: 'Kimi K3', from: 'kimi-k3-1', to: 'kimi-k3-1', color: 'bg-violet-100 text-violet-700 hover:bg-violet-200 dark:bg-violet-900/30 dark:text-violet-400' },
+  { label: 'Hy3', from: 'hy3', to: 'hy3', color: 'bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-400' }
+]
+
+const codeBuddyInternationalPresetMappings = [
+  { label: 'Default', from: 'default', to: 'default', color: 'bg-cyan-100 text-cyan-800 hover:bg-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-300' },
+  { label: 'Claude Sonnet 4.5', from: 'claude-sonnet-4-5', to: 'claude-sonnet-4-5', color: 'bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-400' },
+  { label: 'Claude Opus 4.5', from: 'claude-opus-4-5', to: 'claude-opus-4-5', color: 'bg-violet-100 text-violet-700 hover:bg-violet-200 dark:bg-violet-900/30 dark:text-violet-400' },
+  { label: 'Gemini 2.5 Pro', from: 'gemini-2.5-pro', to: 'gemini-2.5-pro', color: 'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400' },
+  { label: 'GPT-5', from: 'gpt-5', to: 'gpt-5', color: 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400' }
 ]
 
 const grokPresetMappings = [
@@ -414,12 +450,13 @@ export const commonErrorCodes = [
 // =====================
 
 // 按平台获取模型
-export function getModelsByPlatform(platform: string): string[] {
+export function getModelsByPlatform(platform: string, region?: string): string[] {
   switch (platform) {
     case 'openai': return openaiModels
     case 'anthropic':
     case 'claude': return claudeModels
     case 'gemini': return geminiModels
+    case 'codebuddy': return region === 'international' ? codeBuddyInternationalModels : codeBuddyDomesticModels
     case 'antigravity': return antigravityModels
     case 'zhipu': return zhipuModels
     case 'qwen': return qwenModels
@@ -443,9 +480,10 @@ export function getModelsByPlatform(platform: string): string[] {
 }
 
 // 按平台获取预设映射
-export function getPresetMappingsByPlatform(platform: string) {
+export function getPresetMappingsByPlatform(platform: string, region?: string) {
   if (platform === 'openai') return openaiPresetMappings
   if (platform === 'gemini') return geminiPresetMappings
+  if (platform === 'codebuddy') return region === 'international' ? codeBuddyInternationalPresetMappings : codeBuddyPresetMappings
   if (platform === 'grok' || platform === 'xai') return grokPresetMappings
   if (platform === 'antigravity') return antigravityPresetMappings
   if (platform === 'bedrock') return bedrockPresetMappings

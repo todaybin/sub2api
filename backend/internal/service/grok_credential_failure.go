@@ -103,6 +103,13 @@ func (s *OpenAIGatewayService) getRequestCredential(ctx context.Context, c *gin.
 	if account == nil {
 		return "", "", errors.New("account is nil")
 	}
+	if account.Platform == PlatformCodeBuddy {
+		token := strings.TrimSpace(account.GetCredential("access_token"))
+		if token == "" {
+			return "", "access_token", errors.New("codebuddy account missing access_token")
+		}
+		return token, "access_token", nil
+	}
 	if !account.IsGrokOAuth() {
 		return s.GetAccessToken(ctx, account)
 	}

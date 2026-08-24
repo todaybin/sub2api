@@ -346,6 +346,23 @@ export default {
         kimi: 'Kimi',
         zhipu: 'Zhipu GLM',
         deepseek: 'DeepSeek',
+        codebuddy: 'CodeBuddy',
+      },
+      codebuddy: {
+        enterprise: '企业版',
+        region: '服务区域',
+        domestic: '国内版（copilot.tencent.com）',
+        international: '国际版（codebuddy.ai）',
+        regionHint: '请选择与你登录账号对应的 CodeBuddy 服务区域。',
+        referenceCostUnits: '参考成本单位',
+        referenceCredits: '参考积分',
+        tokensPerCredit: '每积分 Token 数',
+        billingHint: '用于该账号的上游成本计算，默认 70 / 2000 / 31874，不进行汇率换算。',
+        authorization: 'CodeBuddy 授权',
+        authorizationHint: '打开登录页面并完成 VS Code 插件授权，授权完成后请保持此窗口打开。',
+        openLogin: '打开 CodeBuddy 登录',
+        waiting: '等待 CodeBuddy 授权...',
+        connected: 'CodeBuddy 账号连接成功',
       },
       cnProviders: {
         accountMode: {

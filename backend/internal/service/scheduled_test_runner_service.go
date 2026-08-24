@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -14,11 +15,12 @@ const scheduledTestDefaultMaxWorkers = 10
 
 // ScheduledTestRunnerService periodically scans due test plans and executes them.
 type ScheduledTestRunnerService struct {
-	planRepo       ScheduledTestPlanRepository
-	scheduledSvc   *ScheduledTestService
-	accountTestSvc *AccountTestService
-	rateLimitSvc   *RateLimitService
-	cfg            *config.Config
+	planRepo               ScheduledTestPlanRepository
+	scheduledSvc           *ScheduledTestService
+	accountTestSvc         *AccountTestService
+	rateLimitSvc           *RateLimitService
+	codeBuddyCheckinRunner *CodeBuddyCheckinRunnerService
+	cfg                    *config.Config
 
 	cron      *cron.Cron
 	startOnce sync.Once
@@ -31,14 +33,16 @@ func NewScheduledTestRunnerService(
 	scheduledSvc *ScheduledTestService,
 	accountTestSvc *AccountTestService,
 	rateLimitSvc *RateLimitService,
+	codeBuddyCheckinRunner *CodeBuddyCheckinRunnerService,
 	cfg *config.Config,
 ) *ScheduledTestRunnerService {
 	return &ScheduledTestRunnerService{
-		planRepo:       planRepo,
-		scheduledSvc:   scheduledSvc,
-		accountTestSvc: accountTestSvc,
-		rateLimitSvc:   rateLimitSvc,
-		cfg:            cfg,
+		planRepo:               planRepo,
+		scheduledSvc:           scheduledSvc,
+		accountTestSvc:         accountTestSvc,
+		rateLimitSvc:           rateLimitSvc,
+		codeBuddyCheckinRunner: codeBuddyCheckinRunner,
+		cfg:                    cfg,
 	}
 }
 
@@ -120,6 +124,10 @@ func (s *ScheduledTestRunnerService) runScheduled() {
 }
 
 func (s *ScheduledTestRunnerService) runOnePlan(ctx context.Context, plan *ScheduledTestPlan) {
+	if plan.TaskType == "checkin" {
+		s.runCheckinPlan(ctx, plan)
+		return
+	}
 	result, err := s.accountTestSvc.RunTestBackground(ctx, plan.AccountID, plan.ModelID)
 	if err != nil {
 		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d RunTestBackground error: %v", plan.ID, err)
@@ -141,6 +149,44 @@ func (s *ScheduledTestRunnerService) runOnePlan(ctx context.Context, plan *Sched
 		return
 	}
 
+	if err := s.planRepo.UpdateAfterRun(ctx, plan.ID, time.Now(), nextRun); err != nil {
+		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d UpdateAfterRun error: %v", plan.ID, err)
+	}
+}
+
+func (s *ScheduledTestRunnerService) runCheckinPlan(ctx context.Context, plan *ScheduledTestPlan) {
+	startedAt := time.Now()
+	result := &ScheduledTestResult{Status: "success", StartedAt: startedAt}
+	if s.codeBuddyCheckinRunner == nil {
+		result.Status = "failed"
+		result.ErrorMessage = "CodeBuddy check-in scheduler is not configured"
+	} else {
+		account, err := s.codeBuddyCheckinRunner.RunNow(ctx, plan.AccountID)
+		if err != nil {
+			result.Status = "failed"
+			result.ErrorMessage = err.Error()
+		} else {
+			result.ResponseText = "CodeBuddy check-in completed"
+			if account != nil {
+				settings := CodeBuddyCheckinSettingsForAccount(account)
+				result.ResponseText = fmt.Sprintf("CodeBuddy check-in: %s; remaining credits: %v", settings.LastStatus, settings.LastCreditRemaining)
+			}
+		}
+	}
+	result.FinishedAt = time.Now()
+	result.LatencyMs = result.FinishedAt.Sub(startedAt).Milliseconds()
+	if err := s.scheduledSvc.SaveResult(ctx, plan.ID, plan.MaxResults, result); err != nil {
+		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d SaveResult error: %v", plan.ID, err)
+	}
+	s.updatePlanNextRun(ctx, plan)
+}
+
+func (s *ScheduledTestRunnerService) updatePlanNextRun(ctx context.Context, plan *ScheduledTestPlan) {
+	nextRun, err := computeNextRun(plan.CronExpression, time.Now())
+	if err != nil {
+		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d computeNextRun error: %v", plan.ID, err)
+		return
+	}
 	if err := s.planRepo.UpdateAfterRun(ctx, plan.ID, time.Now(), nextRun); err != nil {
 		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d UpdateAfterRun error: %v", plan.ID, err)
 	}

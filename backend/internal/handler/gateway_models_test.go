@@ -102,6 +102,52 @@ func TestGatewayModels_GeminiGroupFallsBackToGeminiModels(t *testing.T) {
 	require.NotContains(t, modelIDsForTest(got.Data), "claude-sonnet-4-6")
 }
 
+func TestGatewayModels_CodeBuddyUsesOpenAIModelShape(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	groupID := int64(2026)
+	h := newGatewayModelsHandlerForTest(
+		&gatewayModelsAccountRepoStub{
+			byGroup: map[int64][]service.Account{
+				groupID: {
+					{
+						ID:       1,
+						Platform: service.PlatformCodeBuddy,
+						Credentials: map[string]any{
+							"model_mapping": map[string]any{"hy3": "hy3"},
+						},
+					},
+				},
+			},
+		},
+	)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
+		Group: &service.Group{ID: groupID, Platform: service.PlatformCodeBuddy},
+	})
+
+	h.Models(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var got gatewayModelsResponseForTest
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.Equal(t, "list", got.Object)
+	var hy3 gatewayModelItemForTest
+	for _, item := range got.Data {
+		if item.ID == "hy3" {
+			hy3 = item
+			break
+		}
+	}
+	require.Equal(t, "hy3", hy3.ID)
+	require.Equal(t, "model", hy3.Object)
+	require.Equal(t, "codebuddy", hy3.OwnedBy)
+	require.NotEmpty(t, hy3.Created)
+}
+
 func TestGatewayModels_Grok45AdvertisesReasoningEffortForGrokBuild(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

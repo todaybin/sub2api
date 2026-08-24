@@ -31,9 +31,16 @@
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+              {{ t('admin.scheduledTests.taskType') }}
+            </label>
+            <Select v-model="newPlan.task_type" :options="taskTypeOptions" :placeholder="t('admin.scheduledTests.taskType')" />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
               {{ t('admin.scheduledTests.model') }}
             </label>
             <Select
+              v-if="newPlan.task_type === 'test'"
               v-model="newPlan.model_id"
               :options="modelOptions"
               :placeholder="t('admin.scheduledTests.model')"
@@ -159,7 +166,7 @@
               <!-- Model -->
               <div class="min-w-0">
                 <div class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {{ plan.model_id }}
+                  {{ plan.task_type === 'checkin' ? t('admin.scheduledTests.checkin') : plan.model_id }}
                 </div>
                 <div class="mt-0.5 font-mono text-xs text-gray-500 dark:text-gray-400">
                   {{ plan.cron_expression }}
@@ -241,9 +248,16 @@
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                  {{ t('admin.scheduledTests.taskType') }}
+                </label>
+                <Select v-model="editForm.task_type" :options="taskTypeOptions" :placeholder="t('admin.scheduledTests.taskType')" />
+              </div>
+              <div>
+                <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
                   {{ t('admin.scheduledTests.model') }}
                 </label>
                 <Select
+                  v-if="editForm.task_type === 'test'"
                   v-model="editForm.model_id"
                   :options="modelOptions"
                   :placeholder="t('admin.scheduledTests.model')"
@@ -463,7 +477,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch } from 'vue'
+import { ref, reactive, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -483,6 +497,8 @@ const appStore = useAppStore()
 const props = defineProps<{
   show: boolean
   accountId: number | null
+  accountPlatform?: string
+  accountType?: string
   modelOptions: SelectOption[]
 }>()
 
@@ -504,6 +520,7 @@ const deletingPlan = ref<ScheduledTestPlan | null>(null)
 const editingPlanId = ref<number | null>(null)
 const updating = ref(false)
 const editForm = reactive({
+  task_type: 'test' as 'test' | 'checkin',
   model_id: '' as string,
   cron_expression: '' as string,
   max_results: '100' as string,
@@ -512,6 +529,7 @@ const editForm = reactive({
 })
 
 const newPlan = reactive({
+  task_type: 'test' as 'test' | 'checkin',
   model_id: '' as string,
   cron_expression: '' as string,
   max_results: '100' as string,
@@ -520,12 +538,21 @@ const newPlan = reactive({
 })
 
 const resetNewPlan = () => {
+  newPlan.task_type = 'test'
   newPlan.model_id = ''
   newPlan.cron_expression = ''
   newPlan.max_results = '100'
   newPlan.enabled = true
   newPlan.auto_recover = false
 }
+
+const taskTypeOptions = computed<SelectOption[]>(() => {
+  const options: SelectOption[] = [{ value: 'test', label: t('admin.scheduledTests.connectionTest') }]
+  if (props.accountPlatform === 'codebuddy' && props.accountType === 'oauth') {
+    options.push({ value: 'checkin', label: t('admin.scheduledTests.checkin') })
+  }
+  return options
+})
 
 // Load plans when dialog opens
 watch(
@@ -557,13 +584,14 @@ const loadPlans = async () => {
 }
 
 const handleCreate = async () => {
-  if (!props.accountId || !newPlan.model_id || !newPlan.cron_expression) return
+  if (!props.accountId || !newPlan.cron_expression || (newPlan.task_type === 'test' && !newPlan.model_id)) return
   creating.value = true
   try {
     const maxResults = Number(newPlan.max_results) || 100
     await adminAPI.scheduledTests.create({
       account_id: props.accountId,
-      model_id: newPlan.model_id,
+      task_type: newPlan.task_type,
+      model_id: newPlan.task_type === 'test' ? newPlan.model_id : '',
       cron_expression: newPlan.cron_expression,
       enabled: newPlan.enabled,
       max_results: maxResults,
@@ -595,6 +623,7 @@ const handleToggleEnabled = async (plan: ScheduledTestPlan, enabled: boolean) =>
 
 const startEdit = (plan: ScheduledTestPlan) => {
   editingPlanId.value = plan.id
+  editForm.task_type = plan.task_type || 'test'
   editForm.model_id = plan.model_id
   editForm.cron_expression = plan.cron_expression
   editForm.max_results = String(plan.max_results)
@@ -607,11 +636,12 @@ const cancelEdit = () => {
 }
 
 const handleEdit = async () => {
-  if (!editingPlanId.value || !editForm.model_id || !editForm.cron_expression) return
+  if (!editingPlanId.value || !editForm.cron_expression || (editForm.task_type === 'test' && !editForm.model_id)) return
   updating.value = true
   try {
     const updated = await adminAPI.scheduledTests.update(editingPlanId.value, {
-      model_id: editForm.model_id,
+      task_type: editForm.task_type,
+      model_id: editForm.task_type === 'test' ? editForm.model_id : '',
       cron_expression: editForm.cron_expression,
       max_results: Number(editForm.max_results) || 100,
       enabled: editForm.enabled,

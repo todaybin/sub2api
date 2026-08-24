@@ -245,6 +245,8 @@ const defaultClientTab = computed(() => {
   switch (props.platform) {
     case 'openai':
       return 'codex'
+    case 'codebuddy':
+      return 'codex'
     case 'grok':
       return 'grok'
     case 'gemini':
@@ -350,6 +352,11 @@ const clientTabs = computed((): TabConfig[] => {
       tabs.push({ id: 'opencode', label: t('keys.useKeyModal.cliTabs.opencode'), icon: TerminalIcon })
       return tabs
     }
+    case 'codebuddy':
+      return [
+        { id: 'codex', label: t('keys.useKeyModal.cliTabs.codexCli'), icon: TerminalIcon },
+        { id: 'opencode', label: t('keys.useKeyModal.cliTabs.opencode'), icon: TerminalIcon }
+      ]
     case 'gemini':
       return [
         { id: 'gemini', label: t('keys.useKeyModal.cliTabs.geminiCli'), icon: SparkleIcon },
@@ -411,6 +418,8 @@ const platformDescription = computed(() => {
         return t('keys.useKeyModal.description')
       }
       return t('keys.useKeyModal.openai.description')
+    case 'codebuddy':
+      return t('keys.useKeyModal.openai.description')
     case 'gemini':
       return t('keys.useKeyModal.gemini.description')
     case 'antigravity':
@@ -434,6 +443,10 @@ const platformNote = computed(() => {
       if (activeClientTab.value === 'claude') {
         return t('keys.useKeyModal.note')
       }
+      return activeTab.value === 'windows'
+        ? t('keys.useKeyModal.openai.noteWindows')
+        : t('keys.useKeyModal.openai.note')
+    case 'codebuddy':
       return activeTab.value === 'windows'
         ? t('keys.useKeyModal.openai.noteWindows')
         : t('keys.useKeyModal.openai.note')
@@ -510,6 +523,8 @@ const currentFiles = computed((): FileConfig[] => {
         return [generateOpenCodeConfig('anthropic', apiBase, apiKey)]
       case 'openai':
         return [generateOpenCodeConfig('openai', apiBase, apiKey)]
+      case 'codebuddy':
+        return [generateOpenCodeConfig('codebuddy', apiBase, apiKey)]
       case 'gemini':
         return [generateOpenCodeConfig('gemini', geminiBase, apiKey)]
       case 'antigravity':
@@ -532,6 +547,8 @@ const currentFiles = computed((): FileConfig[] => {
       if (activeClientTab.value === 'codex-ws') {
         return generateOpenAIWsFiles(baseUrl, apiKey)
       }
+      return generateOpenAIFiles(baseUrl, apiKey)
+    case 'codebuddy':
       return generateOpenAIFiles(baseUrl, apiKey)
     case 'gemini':
       return [generateGeminiCliContent(baseUrl, apiKey)]
@@ -1517,6 +1534,22 @@ function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: strin
     provider[platform].models = antigravityGeminiModels
   } else if (platform === 'openai') {
     provider[platform].models = openaiModels
+  } else if (platform === 'codebuddy') {
+    // CodeBuddy is an OpenAI-compatible provider. Keep a small fallback list
+    // for clients that do not call /v1/models; the gateway still exposes the
+    // account's live catalog through that endpoint.
+    provider[platform].npm = '@ai-sdk/openai-compatible'
+    provider[platform].name = 'CodeBuddy via Sub2API'
+    provider[platform].models = {
+      auto: { name: 'Auto' },
+      hy3: { name: 'Hy3' },
+      'hy3-x': { name: 'Hy3' },
+      'gpt-5.6': { name: 'GPT-5.6' },
+      'gpt-5.6-luna': { name: 'GPT-5.6 Luna' },
+      'gpt-5.6-sol': { name: 'GPT-5.6 Sol' },
+      'gpt-5.6-terra': { name: 'GPT-5.6 Terra' },
+      'gpt-5.5': { name: 'GPT-5.5' }
+    }
   } else if (platform === 'grok') {
     // Custom provider pointing at Sub2API OpenAI-compatible Responses/Chat endpoints.
     provider[platform].npm = '@ai-sdk/openai-compatible'

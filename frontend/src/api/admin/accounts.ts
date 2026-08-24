@@ -143,6 +143,75 @@ export async function create(accountData: CreateAccountRequest): Promise<Account
   return data
 }
 
+export interface CodeBuddyOAuthStartRequest {
+  account_id?: number
+  region: 'domestic' | 'international'
+  name?: string
+  notes?: string
+  proxy_id?: number | null
+  group_ids?: number[]
+  concurrency?: number
+  load_factor?: number | null
+  priority?: number
+  rate_multiplier?: number
+  expires_at?: number | null
+  auto_pause_on_expired?: boolean
+  model_mapping?: Record<string, string>
+  reference_cost_units?: number
+  reference_credits?: number
+  tokens_per_credit?: number
+}
+
+export interface CodeBuddyOAuthStartResponse {
+  session_id: string
+  auth_url: string
+  region: string
+  expires_at: number
+}
+
+export async function startCodeBuddyOAuth(payload: CodeBuddyOAuthStartRequest): Promise<CodeBuddyOAuthStartResponse> {
+  const { data } = await apiClient.post<CodeBuddyOAuthStartResponse>('/admin/accounts/codebuddy/oauth/start', payload)
+  return data
+}
+
+export async function pollCodeBuddyOAuth(sessionId: string): Promise<{ status: string; session_id: string; account?: Account; message?: string }> {
+  const { data } = await apiClient.post('/admin/accounts/codebuddy/oauth/poll', { session_id: sessionId })
+  return data
+}
+
+export async function refreshCodeBuddyAccount(id: number): Promise<Account> {
+  const { data } = await apiClient.post<Account>(`/admin/accounts/${id}/codebuddy/refresh`)
+  return data
+}
+
+export async function runCodeBuddyCheckin(id: number): Promise<Account> {
+  const { data } = await apiClient.post<Account>(`/admin/accounts/${id}/codebuddy/checkin`)
+  return data
+}
+
+export interface CodeBuddyModelCatalogEntry {
+  id: string
+  name?: string
+  credits?: string
+  credits_multiplier?: number
+  max_input_tokens?: number
+  max_output_tokens?: number
+  supports_tool_call?: boolean
+  supports_images?: boolean
+  supports_reasoning?: boolean
+  reasoning_effort?: string
+  vendor?: string
+  is_enterprise?: boolean
+  region?: string
+}
+
+export async function getCodeBuddyModels(accountId?: number, region?: 'domestic' | 'international'): Promise<{ models: string[]; model_catalog?: CodeBuddyModelCatalogEntry[]; default_model: string; account_id?: number; region?: string; endpoint?: string; source?: 'upstream' | 'stored' | 'fallback' }> {
+  const { data } = await apiClient.get<{ models: string[]; model_catalog?: CodeBuddyModelCatalogEntry[]; default_model: string; account_id?: number; region?: string; endpoint?: string; source?: 'upstream' | 'stored' | 'fallback' }>('/admin/accounts/codebuddy/models', {
+    params: accountId ? { account_id: accountId, ...(region ? { region } : {}) } : region ? { region } : undefined
+  })
+  return data
+}
+
 /**
  * Duplicate an account while keeping credentials on the server.
  * @param id - Source account ID
@@ -543,6 +612,10 @@ export async function getAvailableModels(id: number): Promise<ClaudeModel[]> {
 
 export interface SyncUpstreamModelsResult {
   models: string[]
+  model_catalog?: CodeBuddyModelCatalogEntry[]
+  region?: string
+  endpoint?: string
+  source?: 'upstream' | 'stored' | 'fallback'
 }
 
 /**
@@ -552,6 +625,13 @@ export interface SyncUpstreamModelsResult {
  */
 export async function syncUpstreamModels(id: number): Promise<SyncUpstreamModelsResult> {
   const { data } = await apiClient.post<SyncUpstreamModelsResult>(`/admin/accounts/${id}/models/sync-upstream`)
+  return data
+}
+
+/** Fetch and persist the live CodeBuddy model catalog for one OAuth account. */
+export async function syncCodeBuddyModels(id: number, region?: 'domestic' | 'international'): Promise<SyncUpstreamModelsResult> {
+  const query = region ? `?region=${encodeURIComponent(region)}` : ''
+  const { data } = await apiClient.post<SyncUpstreamModelsResult>(`/admin/accounts/${id}/codebuddy/models/sync${query}`)
   return data
 }
 
@@ -1033,6 +1113,7 @@ export const accountsAPI = {
   setSchedulable,
   getAvailableModels,
   syncUpstreamModels,
+  syncCodeBuddyModels,
   syncUpstreamModelsPreview,
   generateAuthUrl,
   exchangeCode,
@@ -1067,7 +1148,12 @@ export const accountsAPI = {
   saveOllamaCloudUsageSession,
   deleteOllamaCloudUsageSession,
   setOllamaCloudUsageAutoRefresh,
-  refreshOllamaCloudUsage
+  refreshOllamaCloudUsage,
+  startCodeBuddyOAuth,
+  pollCodeBuddyOAuth,
+  refreshCodeBuddyAccount,
+  runCodeBuddyCheckin,
+  getCodeBuddyModels
 }
 
 export default accountsAPI

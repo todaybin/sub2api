@@ -64,6 +64,13 @@ type AccountHandler struct {
 	grokImportProber        grokImportProber
 	upstreamBillingProbe    *service.UpstreamBillingProbeService
 	ollamaCloudUsage        *service.OllamaCloudUsageService
+	codeBuddyOAuth          *service.CodeBuddyOAuthService
+	codeBuddyCheckinRunner  *service.CodeBuddyCheckinRunnerService
+}
+
+// SetCodeBuddyCheckinRunner attaches the account-level check-in scheduler.
+func (h *AccountHandler) SetCodeBuddyCheckinRunner(runner *service.CodeBuddyCheckinRunnerService) {
+	h.codeBuddyCheckinRunner = runner
 }
 
 // SetUpstreamBillingProbeService attaches the optional remote billing probe service.
@@ -107,6 +114,7 @@ func NewAccountHandler(
 		sessionLimitCache:       sessionLimitCache,
 		rpmCache:                rpmCache,
 		tokenCacheInvalidator:   tokenCacheInvalidator,
+		codeBuddyOAuth:          service.NewCodeBuddyOAuthService(adminService),
 	}
 }
 
@@ -1308,6 +1316,17 @@ func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *serv
 		if baseURL := strings.TrimSpace(account.GetCredential("base_url")); baseURL != "" {
 			newCredentials["base_url"] = baseURL
 		}
+	} else if account.Platform == service.PlatformCodeBuddy {
+		if h.codeBuddyOAuth == nil {
+			return nil, "", fmt.Errorf("codebuddy oauth service is not configured")
+		}
+		updated, err := h.codeBuddyOAuth.Refresh(ctx, account)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to refresh CodeBuddy credentials: %w", err)
+		}
+		// Refresh already merges the provider's token fields into the account,
+		// preserving region, model catalog, mappings, and other credentials.
+		newCredentials = service.MergeCredentials(account.Credentials, updated.Credentials)
 	} else {
 		// Use Anthropic/Claude OAuth service to refresh token
 		tokenInfo, err := h.oauthService.RefreshAccountToken(ctx, account)
@@ -2738,6 +2757,42 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 		return
 	}
 
+	if account.Platform == service.PlatformCodeBuddy {
+		region := service.CodeBuddyRegionForAccount(account)
+		modelIDs := codeBuddyStoredModels(account)
+		modelIDs = service.CodeBuddyModelIDsForRegion(modelIDs, region)
+		if len(modelIDs) == 0 {
+			modelIDs = service.CodeBuddyModelsForRegion(region)
+		}
+		if mapped := account.GetModelMapping(); len(mapped) > 0 {
+			modelIDs = make([]string, 0, len(mapped))
+			for requested := range mapped {
+				modelIDs = append(modelIDs, requested)
+			}
+			modelIDs = service.CodeBuddyModelIDsForRegion(modelIDs, region)
+			sort.Strings(modelIDs)
+		}
+		models := make([]claude.Model, 0, len(modelIDs))
+		catalogByID := make(map[string]service.CodeBuddyModel)
+		for _, model := range service.CodeBuddyStoredModelCatalog(account) {
+			catalogByID[model.ID] = model
+		}
+		for _, id := range modelIDs {
+			displayName := id
+			model := claude.Model{ID: id, Type: "model", DisplayName: displayName, CreatedAt: ""}
+			if catalog, ok := catalogByID[id]; ok {
+				if catalog.Name != "" {
+					model.DisplayName = catalog.Name
+				}
+				model.Credits = catalog.Credits
+				model.CreditsMultiplier = catalog.CreditsMultiplier
+			}
+			models = append(models, model)
+		}
+		response.Success(c, models)
+		return
+	}
+
 	// Handle Claude/Anthropic accounts
 	// For OAuth and Setup-Token accounts: return default models
 	if account.IsOAuth() {
@@ -2779,6 +2834,31 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 	response.Success(c, models)
 }
 
+func codeBuddyStoredModels(account *service.Account) []string {
+	if account == nil {
+		return nil
+	}
+	var raw any
+	if account.Extra != nil {
+		raw = account.Extra["codebuddy_models"]
+	}
+	if raw == nil {
+		raw = account.Credentials["models"]
+	}
+	var models []string
+	switch values := raw.(type) {
+	case []string:
+		models = append(models, values...)
+	case []any:
+		for _, value := range values {
+			if model, ok := value.(string); ok && strings.TrimSpace(model) != "" {
+				models = append(models, strings.TrimSpace(model))
+			}
+		}
+	}
+	return models
+}
+
 // SyncUpstreamModels handles syncing live supported models from an account's upstream.
 // POST /api/v1/admin/accounts/:id/models/sync-upstream
 func (h *AccountHandler) SyncUpstreamModels(c *gin.Context) {
@@ -2791,6 +2871,55 @@ func (h *AccountHandler) SyncUpstreamModels(c *gin.Context) {
 	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
 	if err != nil {
 		response.NotFound(c, "Account not found")
+		return
+	}
+
+	// CodeBuddy does not expose an OpenAI-compatible /v1/models endpoint for
+	// its OAuth account. Use the same /v3/config model catalog as the official
+	// client so the sync button returns the models visible in VSCode.
+	if account.Platform == service.PlatformCodeBuddy {
+		accountRegion := service.CodeBuddyRegionForAccount(account)
+		if requestedRegion := strings.TrimSpace(c.Query("region")); requestedRegion != "" {
+			if !strings.EqualFold(requestedRegion, service.CodeBuddyRegionDomestic) && !strings.EqualFold(requestedRegion, service.CodeBuddyRegionInternational) {
+				response.BadRequest(c, "region must be domestic or international")
+				return
+			}
+			if !strings.EqualFold(requestedRegion, accountRegion) {
+				response.BadRequest(c, "requested CodeBuddy region does not match account region")
+				return
+			}
+		}
+		if h.codeBuddyOAuth == nil {
+			response.InternalError(c, "CodeBuddy service is not configured")
+			return
+		}
+		models, catalog, err := h.codeBuddyOAuth.SyncModelsWithCatalog(c.Request.Context(), account)
+		if err != nil {
+			response.Error(c, http.StatusBadGateway, err.Error())
+			return
+		}
+		// Keep the account's persisted catalog in sync with the live VSCode
+		// product configuration, including credits multipliers.
+		if len(catalog) > 0 {
+			credentials := map[string]any{"region": service.CodeBuddyRegionForAccount(account), "models": models, "model_catalog": catalog}
+			if mapping, ok := account.Credentials["model_mapping"]; ok {
+				credentials["model_mapping"] = mapping
+			}
+			if uid := account.GetCredential("uid"); uid != "" {
+				credentials["uid"] = uid
+			}
+			if enterpriseID := account.GetCredential("enterprise_id"); enterpriseID != "" {
+				credentials["enterprise_id"] = enterpriseID
+			}
+			if _, updateErr := h.adminService.UpdateAccount(c.Request.Context(), accountID, &service.UpdateAccountInput{
+				Credentials: credentials,
+				Extra:       map[string]any{"codebuddy_region": service.CodeBuddyRegionForAccount(account), "codebuddy_models": models, "codebuddy_model_catalog": catalog},
+			}); updateErr != nil {
+				response.Error(c, http.StatusInternalServerError, "Failed to persist CodeBuddy model catalog")
+				return
+			}
+		}
+		response.Success(c, gin.H{"models": models, "model_catalog": catalog, "region": service.CodeBuddyRegionForAccount(account), "source": "upstream"})
 		return
 	}
 

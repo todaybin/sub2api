@@ -115,3 +115,43 @@ func TestUpdateAccount_EmptyCredentialsSkipsUpdate(t *testing.T) {
 	require.Equal(t, "rt-existing", repo.account.Credentials["refresh_token"], "空 credentials 不应触碰已有 token")
 	require.Equal(t, "renamed", repo.account.Name)
 }
+
+func TestUpdateAccount_PreservesCodeBuddyCatalogWhenEditOmitsProviderMetadata(t *testing.T) {
+	accountID := int64(205)
+	repo := &updateAccountCredsRepoStub{
+		account: &Account{
+			ID:       accountID,
+			Platform: PlatformCodeBuddy,
+			Type:     AccountTypeOAuth,
+			Status:   StatusActive,
+			Credentials: map[string]any{
+				"access_token":  "access-token",
+				"models":        []any{"auto", "hy3"},
+				"model_catalog": []any{map[string]any{"id": "hy3"}},
+				"uid":           "user-1",
+				"enterprise_id": "enterprise-1",
+				"region":        "domestic",
+			},
+			Extra: map[string]any{
+				"codebuddy_region":        "domestic",
+				"codebuddy_models":        []any{"auto", "hy3"},
+				"codebuddy_model_catalog": []any{map[string]any{"id": "hy3"}},
+			},
+		},
+	}
+	svc := &adminServiceImpl{accountRepo: repo}
+
+	updated, err := svc.UpdateAccount(context.Background(), accountID, &UpdateAccountInput{
+		Name:        "renamed",
+		Credentials: map[string]any{"intercept_warmup_requests": true},
+		Extra:       map[string]any{"unrelated_setting": true},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "renamed", updated.Name)
+	require.Equal(t, []any{"auto", "hy3"}, repo.account.Credentials["models"])
+	require.Equal(t, map[string]any{"id": "hy3"}, repo.account.Credentials["model_catalog"].([]any)[0])
+	require.Equal(t, "enterprise-1", repo.account.Credentials["enterprise_id"])
+	require.Equal(t, "domestic", repo.account.Extra["codebuddy_region"])
+	require.Equal(t, []any{"auto", "hy3"}, repo.account.Extra["codebuddy_models"])
+}

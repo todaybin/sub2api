@@ -107,6 +107,23 @@ export default {
         kimi: 'Kimi',
         zhipu: 'Zhipu GLM',
         deepseek: 'DeepSeek',
+        codebuddy: 'CodeBuddy',
+      },
+      codebuddy: {
+        region: 'Region',
+        domestic: 'Domestic (copilot.tencent.com)',
+        international: 'International (codebuddy.ai)',
+        regionHint: 'Choose the CodeBuddy service region used by your account.',
+        referenceCostUnits: 'Reference cost units',
+        referenceCredits: 'Reference credits',
+        tokensPerCredit: 'Tokens per credit',
+        billingHint: 'Used for this account upstream cost calculation. Default: 70 / 2000 / 31874; no currency conversion.',
+        authorization: 'CodeBuddy authorization',
+        authorizationHint: 'Open the login page, authorize the VS Code plugin, and keep this window open while the account is connected.',
+        openLogin: 'Open CodeBuddy login',
+        waiting: 'Waiting for CodeBuddy authorization...',
+        connected: 'CodeBuddy account connected',
+        enterprise: 'Enterprise',
       },
       cnProviders: {
         accountMode: {

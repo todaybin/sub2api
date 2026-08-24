@@ -1170,6 +1170,13 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 		if account.IsOpenAIAgentIdentity() {
 			return "", OpenAIAuthModeAgentIdentity, nil
 		}
+		if account.Platform == PlatformCodeBuddy {
+			accessToken := strings.TrimSpace(account.GetCredential("access_token"))
+			if accessToken == "" {
+				return "", "", errors.New("access_token not found in CodeBuddy credentials")
+			}
+			return accessToken, "oauth", nil
+		}
 		if account.Platform == PlatformGrok {
 			if s.grokTokenProvider != nil {
 				accessToken, err := s.grokTokenProvider.GetAccessToken(ctx, account)

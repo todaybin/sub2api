@@ -1407,6 +1407,30 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 			return nil
 		}
 
+		// CodeBuddy keeps its provider-managed catalog in model_catalog rather
+		// than model_mapping. Expose that persisted, region-filtered catalog so
+		// OpenAI-compatible clients (CCS/OpenCode) discover the same models that
+		// the account editor displays, including the `auto` entry.
+		if platform == PlatformCodeBuddy {
+			catalog := filterCodeBuddyCatalogForRegion(CodeBuddyStoredModelCatalog(&acc), CodeBuddyRegionForAccount(&acc))
+			for _, model := range catalog {
+				if id := strings.TrimSpace(model.ID); id != "" {
+					modelSet[id] = struct{}{}
+				}
+			}
+			if len(catalog) > 0 {
+				modelSet["auto"] = struct{}{}
+				hasAnyMapping = true
+			} else {
+				// Keep a region-correct fallback when an older account was
+				// authorized before catalog persistence was introduced.
+				for _, id := range CodeBuddyModelsForRegion(CodeBuddyRegionForAccount(&acc)) {
+					modelSet[id] = struct{}{}
+				}
+				hasAnyMapping = true
+			}
+		}
+
 		mapping := acc.GetModelMapping()
 		if len(mapping) > 0 {
 			hasAnyMapping = true

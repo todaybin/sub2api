@@ -527,7 +527,7 @@ export interface PaginationConfig {
 
 // ==================== API Key & Group Types ====================
 
-export type GroupPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'kimi' | 'zhipu' | 'deepseek' | 'composite'
+export type GroupPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'kimi' | 'zhipu' | 'deepseek' | 'codebuddy' | 'composite'
 
 export type VideoModelPrices = Record<string, Record<string, number>>
 
@@ -899,7 +899,7 @@ export interface UpdateGroupRequest {
 
 // ==================== Account & Proxy Types ====================
 
-export type AccountPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'kimi' | 'zhipu' | 'deepseek'
+export type AccountPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'kimi' | 'zhipu' | 'deepseek' | 'codebuddy'
 export type AccountType = 'oauth' | 'setup-token' | 'apikey' | 'upstream' | 'bedrock' | 'service_account'
 export type OAuthAddMethod = 'oauth' | 'setup-token'
 export type ProxyProtocol = 'http' | 'https' | 'socks5' | 'socks5h'
@@ -910,6 +910,9 @@ export interface ClaudeModel {
   type: string
   display_name: string
   created_at: string
+  credits?: string
+  credits_multiplier?: number
+  is_enterprise?: boolean
 }
 
 export interface Proxy {
@@ -2358,6 +2361,7 @@ export interface TotpLogin2FARequest {
 export interface ScheduledTestPlan {
   id: number
   account_id: number
+  task_type: 'test' | 'checkin'
   model_id: string
   cron_expression: string
   enabled: boolean
@@ -2383,6 +2387,7 @@ export interface ScheduledTestResult {
 
 export interface CreateScheduledTestPlanRequest {
   account_id: number
+  task_type?: 'test' | 'checkin'
   model_id: string
   cron_expression: string
   enabled?: boolean
@@ -2391,6 +2396,7 @@ export interface CreateScheduledTestPlanRequest {
 }
 
 export interface UpdateScheduledTestPlanRequest {
+  task_type?: 'test' | 'checkin'
   model_id?: string
   cron_expression?: string
   enabled?: boolean

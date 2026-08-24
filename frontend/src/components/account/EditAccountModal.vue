@@ -213,7 +213,7 @@
 
             <!-- Whitelist Mode -->
             <div v-if="modelRestrictionMode === 'whitelist'">
-              <ModelWhitelistSelector v-model="allowedModels" :platform="account?.platform || 'anthropic'" :account-id="account?.id" />
+              <ModelWhitelistSelector v-model="allowedModels" :platform="account?.platform || 'anthropic'" :codebuddy-region="codeBuddyRegion" :account-id="account?.id" />
               <p class="text-xs text-gray-500 dark:text-gray-400">
                 {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
                 <span v-if="allowedModels.length === 0 && modelMappings.length === 0">{{
@@ -642,7 +642,7 @@
 
           <!-- Whitelist Mode -->
           <div v-if="modelRestrictionMode === 'whitelist'">
-            <ModelWhitelistSelector v-model="allowedModels" :platform="account?.platform || 'anthropic'" :account-id="account?.id" />
+            <ModelWhitelistSelector v-model="allowedModels" :platform="account?.platform || 'anthropic'" :codebuddy-region="codeBuddyRegion" :account-id="account?.id" />
             <p class="text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
               <span v-if="allowedModels.length === 0 && modelMappings.length === 0">{{
@@ -729,6 +729,79 @@
             </div>
           </div>
         </template>
+      </div>
+
+      <!-- CodeBuddy OAuth model restriction and regional upstream sync -->
+      <div
+        v-if="account.platform === 'codebuddy' && account.type === 'oauth'"
+        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+      >
+        <div class="mb-4 grid gap-3 rounded-lg border border-cyan-200 bg-cyan-50 p-3 dark:border-cyan-800 dark:bg-cyan-950/30 sm:grid-cols-3">
+          <div><label class="input-label">{{ t('admin.accounts.codebuddy.referenceCostUnits') }}</label><input v-model.number="codeBuddyReferenceCostUnits" type="number" min="0" step="0.01" class="input" /></div>
+          <div><label class="input-label">{{ t('admin.accounts.codebuddy.referenceCredits') }}</label><input v-model.number="codeBuddyReferenceCredits" type="number" min="0" step="0.01" class="input" /></div>
+          <div><label class="input-label">{{ t('admin.accounts.codebuddy.tokensPerCredit') }}</label><input v-model.number="codeBuddyTokensPerCredit" type="number" min="0" step="1" class="input" /></div>
+          <p class="input-hint sm:col-span-3">{{ t('admin.accounts.codebuddy.billingHint') }}</p>
+        </div>
+        <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
+        <div class="mb-4 flex gap-2">
+          <button
+            type="button"
+            @click="modelRestrictionMode = 'whitelist'"
+            :class="[
+              'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
+              modelRestrictionMode === 'whitelist'
+                ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500'
+            ]"
+          >
+            {{ t('admin.accounts.modelWhitelist') }}
+          </button>
+          <button
+            type="button"
+            @click="modelRestrictionMode = 'mapping'"
+            :class="[
+              'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
+              modelRestrictionMode === 'mapping'
+                ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500'
+            ]"
+          >
+            {{ t('admin.accounts.modelMapping') }}
+          </button>
+        </div>
+        <div v-if="modelRestrictionMode === 'whitelist'">
+          <ModelWhitelistSelector
+            v-model="allowedModels"
+            platform="codebuddy"
+            :codebuddy-region="codeBuddyRegion"
+            :account-id="account.id"
+          />
+          <p class="text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
+            <span v-if="allowedModels.length === 0">{{ t('admin.accounts.supportsAllModels') }}</span>
+          </p>
+        </div>
+        <div v-else>
+          <div v-if="modelMappings.length > 0" class="mb-3 space-y-2">
+            <div v-for="(mapping, index) in modelMappings" :key="'codebuddy-' + getModelMappingKey(mapping)" class="flex items-center gap-2">
+              <input v-model="mapping.from" type="text" class="input flex-1" :placeholder="t('admin.accounts.requestModel')" />
+              <span class="text-gray-400">-&gt;</span>
+              <input v-model="mapping.to" type="text" class="input flex-1" :placeholder="t('admin.accounts.actualModel')" />
+              <button type="button" @click="removeModelMapping(index)" class="rounded-lg p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20" :aria-label="t('common.delete')">
+                <Icon name="trash" size="sm" />
+              </button>
+            </div>
+          </div>
+          <button type="button" @click="addModelMapping" class="mb-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 text-gray-600 hover:border-gray-400 dark:border-dark-500 dark:text-gray-400">
+            + {{ t('admin.accounts.addMapping') }}
+          </button>
+          <ModelWhitelistSelector
+            v-model="allowedModels"
+            platform="codebuddy"
+            :codebuddy-region="codeBuddyRegion"
+            :account-id="account.id"
+          />
+        </div>
       </div>
 
       <!-- Upstream fields (only for upstream type) -->
@@ -854,7 +927,7 @@
 
           <!-- Whitelist Mode -->
           <div v-if="modelRestrictionMode === 'whitelist'">
-            <ModelWhitelistSelector v-model="allowedModels" :platform="account?.platform || 'anthropic'" :account-id="account?.id" />
+            <ModelWhitelistSelector v-model="allowedModels" :platform="account?.platform || 'anthropic'" :codebuddy-region="codeBuddyRegion" :account-id="account?.id" />
             <p class="text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
               <span v-if="allowedModels.length === 0 && modelMappings.length === 0">{{
@@ -2882,6 +2955,7 @@ import {
   type HeaderOverrideRow
 } from '@/components/account/credentialsBuilder'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
+import { extractApiErrorMessage } from '@/utils/apiError'
 import { templateJSON, type UpstreamUsageQueryMode } from '@/utils/upstreamUsageQuery'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
 import { allSelectedGroupsEnableLongContextPricing } from '@/components/account/longContextBilling'
@@ -2920,6 +2994,18 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const appStore = useAppStore()
 const authStore = useAuthStore()
+
+const codeBuddyRegion = computed<'domestic' | 'international' | undefined>(() => {
+  if (props.account?.platform !== 'codebuddy') return undefined
+  const raw = props.account.extra?.codebuddy_region ?? props.account.credentials?.region
+  if (raw === 'international') return 'international'
+  if (raw === 'domestic') return 'domestic'
+  const baseURL = String(props.account.credentials?.base_url || '').toLowerCase()
+  return baseURL.includes('codebuddy.ai') ? 'international' : 'domestic'
+})
+const codeBuddyReferenceCostUnits = ref(70)
+const codeBuddyReferenceCredits = ref(2000)
+const codeBuddyTokensPerCredit = ref(31874)
 
 // Spark 影子账号(parent_account_id 非空):代理恒继承母账号,不可独立编辑(外审 B/P1),
 // 故隐藏代理选择器。
@@ -3510,7 +3596,7 @@ const openAICompactStatusKey = computed(() => {
 })
 
 // Computed: current preset mappings based on platform
-const presetMappings = computed(() => getPresetMappingsByPlatform(props.account?.platform || 'anthropic'))
+const presetMappings = computed(() => getPresetMappingsByPlatform(props.account?.platform || 'anthropic', codeBuddyRegion.value))
 const tempUnschedPresets = computed(() => [
   {
     label: t('admin.accounts.tempUnschedulable.presets.overloadLabel'),
@@ -3689,6 +3775,11 @@ const syncFormFromAccount = (newAccount: Account | null) => {
 
   // Load intercept warmup requests setting (applies to all account types)
   const credentials = newAccount.credentials as Record<string, unknown> | undefined
+  if (newAccount.platform === 'codebuddy') {
+    codeBuddyReferenceCostUnits.value = Number(credentials?.reference_cost_units) || 70
+    codeBuddyReferenceCredits.value = Number(credentials?.reference_credits) || 2000
+    codeBuddyTokensPerCredit.value = Number(credentials?.tokens_per_credit) || 31874
+  }
   interceptWarmupRequests.value = credentials?.intercept_warmup_requests === true
   autoPauseOnExpired.value = newAccount.auto_pause_on_expired === true
   editVertexProjectId.value = ''
@@ -4061,6 +4152,9 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     if ((newAccount.platform === 'openai' || newAccount.platform === 'grok') && newAccount.credentials) {
       const oauthCredentials = newAccount.credentials as Record<string, unknown>
       loadModelRestrictionFromMapping(oauthCredentials.model_mapping as Record<string, unknown> | undefined)
+    } else if (newAccount.platform === 'codebuddy' && newAccount.credentials) {
+      const codeBuddyCredentials = newAccount.credentials as Record<string, unknown>
+      loadModelRestrictionFromMapping(codeBuddyCredentials.model_mapping as Record<string, unknown> | undefined)
     } else {
       modelRestrictionMode.value = 'whitelist'
       modelMappings.value = []
@@ -4168,7 +4262,7 @@ const syncAntigravityUpstreamModels = async () => {
       appStore.showInfo(t('admin.accounts.syncUpstreamModelsNoChanges', { count: upstreamModels.length }))
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : t('admin.accounts.syncUpstreamModelsFailed')
+    const message = extractApiErrorMessage(error, t('admin.accounts.syncUpstreamModelsFailed'))
     appStore.showError(t('admin.accounts.syncUpstreamModelsError', { message }))
   } finally {
     isSyncingAntigravityUpstream.value = false
@@ -4648,7 +4742,6 @@ const handleSubmit = async () => {
 			...(upstreamBillingUsageQueryConfigJSON.value.trim() ? { upstream_billing_usage_query_config: JSON.parse(upstreamBillingUsageQueryConfigJSON.value) } : {})
 		}
     }
-
     // For apikey type, handle credentials update
     if (props.account.type === 'apikey') {
       const currentCredentials = (props.account.credentials as Record<string, unknown>) || {}
@@ -4915,8 +5008,11 @@ const handleSubmit = async () => {
       updatePayload.credentials = newCredentials
     }
 
-    // OpenAI/Grok OAuth: persist model mapping to credentials
-    if ((props.account.platform === 'openai' || props.account.platform === 'grok') && props.account.type === 'oauth') {
+    // OAuth accounts with a selectable model restriction persist the whitelist
+    // or mapping in credentials. CodeBuddy is included here because its
+    // upstream catalog is account-scoped and the sync control updates the
+    // local whitelist before the edit form is submitted.
+    if ((props.account.platform === 'openai' || props.account.platform === 'grok' || props.account.platform === 'codebuddy') && props.account.type === 'oauth') {
       const currentCredentials = isSparkShadow.value
         ? {}
         : (updatePayload.credentials as Record<string, unknown>) ||
@@ -4930,6 +5026,12 @@ const handleSubmit = async () => {
           newCredentials.model_mapping = modelMapping
         } else {
           delete newCredentials.model_mapping
+        }
+        const billingValues = [codeBuddyReferenceCostUnits.value, codeBuddyReferenceCredits.value, codeBuddyTokensPerCredit.value].map(Number)
+        if (billingValues.every(value => Number.isFinite(value) && value > 0)) {
+          newCredentials.reference_cost_units = billingValues[0]
+          newCredentials.reference_credits = billingValues[1]
+          newCredentials.tokens_per_credit = billingValues[2]
         }
       }
 

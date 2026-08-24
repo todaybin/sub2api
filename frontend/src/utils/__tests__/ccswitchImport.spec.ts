@@ -43,6 +43,20 @@ describe('ccswitchImport utils', () => {
     expect(atob(params.get('usageScript') || '')).toBe(baseInput.usageScript)
   })
 
+  it('imports CodeBuddy as an OpenAI-compatible Codex provider', () => {
+    const params = paramsFromDeeplink(
+      buildCcSwitchImportDeeplink({
+        ...baseInput,
+        platform: 'codebuddy',
+        clientType: 'codex'
+      })
+    )
+
+    expect(params.get('app')).toBe('codex')
+    expect(params.get('endpoint')).toBe(`${baseInput.baseUrl}/v1`)
+    expect(params.get('model')).toBe('auto')
+  })
+
   it.each([
     'https://api.example.com',
     'https://api.example.com/',

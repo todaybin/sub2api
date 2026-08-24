@@ -120,7 +120,21 @@
         </div>
       </div>
 
+      <div v-if="isCodeBuddy" class="space-y-3 rounded-lg border border-cyan-200 bg-cyan-50 p-4 dark:border-cyan-800 dark:bg-cyan-950/30">
+        <h3 class="font-medium text-cyan-900 dark:text-cyan-100">{{ t('admin.accounts.codebuddy.authorization') }}</h3>
+        <p class="text-sm text-cyan-800 dark:text-cyan-200">{{ t('admin.accounts.codebuddy.authorizationHint') }}</p>
+        <p v-if="codeBuddyError" class="text-sm text-red-600 dark:text-red-400">{{ codeBuddyError }}</p>
+        <button
+          type="button"
+          class="btn btn-primary"
+          :disabled="codeBuddyLoading"
+          @click="handleCodeBuddyReauth"
+        >
+          {{ codeBuddyLoading ? t('admin.accounts.codebuddy.waiting') : t('admin.accounts.codebuddy.openLogin') }}
+        </button>
+      </div>
       <OAuthAuthorizationFlow
+        v-else
         ref="oauthFlowRef"
         :add-method="addMethod"
         :auth-url="currentAuthUrl"
@@ -207,6 +221,7 @@ import type { Account } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
 import OAuthAuthorizationFlow from '@/components/account/OAuthAuthorizationFlow.vue'
+import { extractApiErrorMessage } from '@/utils/apiError'
 
 // Type for exposed OAuthAuthorizationFlow component
 // Note: defineExpose automatically unwraps refs, so we use the unwrapped types
@@ -254,6 +269,9 @@ const isGemini = computed(() => props.account?.platform === 'gemini')
 const isAnthropic = computed(() => props.account?.platform === 'anthropic')
 const isAntigravity = computed(() => props.account?.platform === 'antigravity')
 const isGrok = computed(() => props.account?.platform === 'grok')
+const isCodeBuddy = computed(() => props.account?.platform === 'codebuddy')
+const codeBuddyLoading = ref(false)
+const codeBuddyError = ref('')
 
 /**
  * Grok reauth default tab (password auth is hidden):
@@ -359,7 +377,43 @@ const resetState = () => {
   geminiOAuth.resetState()
   antigravityOAuth.resetState()
   grokOAuth.resetState()
+  codeBuddyLoading.value = false
+  codeBuddyError.value = ''
   oauthFlowRef.value?.reset()
+}
+
+const handleCodeBuddyReauth = async () => {
+  if (!props.account || !isCodeBuddy.value || codeBuddyLoading.value) return
+  codeBuddyLoading.value = true
+  codeBuddyError.value = ''
+  try {
+    const rawRegion = (props.account.extra as Record<string, unknown> | undefined)?.codebuddy_region ||
+      (props.account.credentials as Record<string, unknown> | undefined)?.region
+    const region = rawRegion === 'international' ? 'international' : 'domestic'
+    const started = await adminAPI.accounts.startCodeBuddyOAuth({
+      account_id: props.account.id,
+      region,
+      proxy_id: props.account.proxy_id
+    })
+    window.open(started.auth_url, '_blank', 'noopener,noreferrer')
+    const expiresAt = started.expires_at * 1000
+    for (;;) {
+      await new Promise(resolve => window.setTimeout(resolve, 1000))
+      if (Date.now() >= expiresAt) throw new Error('Authorization expired')
+      const result = await adminAPI.accounts.pollCodeBuddyOAuth(started.session_id)
+      if (result.status === 'completed' && result.account) {
+        appStore.showSuccess(t('admin.accounts.reAuthorizedSuccess'))
+        emit('reauthorized', result.account)
+        handleClose()
+        return
+      }
+      if (result.status === 'expired') throw new Error(result.message || 'Authorization expired')
+    }
+  } catch (error) {
+    codeBuddyError.value = extractApiErrorMessage(error, t('common.unknownError'))
+  } finally {
+    codeBuddyLoading.value = false
+  }
 }
 
 const handleClose = () => {

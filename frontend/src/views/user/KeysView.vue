@@ -1903,8 +1903,13 @@ const importToCcswitch = (row: ApiKey) => {
     return
   }
 
-  // For other platforms, execute directly
-  executeCcsImport(row, platform === 'gemini' ? 'gemini' : 'claude')
+  // CodeBuddy and OpenAI both expose the OpenAI-compatible protocol. Do not
+  // silently import them as Claude providers, which makes CCS send the wrong
+  // request shape and hides the available models.
+  const clientType: CcSwitchClientType =
+    platform === 'gemini' ? 'gemini' :
+      platform === 'codebuddy' || platform === 'openai' ? 'codex' : 'claude'
+  executeCcsImport(row, clientType)
 }
 
 const executeCcsImport = (row: ApiKey, clientType: CcSwitchClientType) => {

@@ -112,6 +112,13 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 		}
 		upstreamBody = strippedBody
 	}
+	if account.Platform == PlatformCodeBuddy {
+		preparedBody, promptErr := ensureCodeBuddySystemPrompt(upstreamBody)
+		if promptErr != nil {
+			return nil, fmt.Errorf("prepare CodeBuddy system prompt: %w", promptErr)
+		}
+		upstreamBody = preparedBody
+	}
 
 	// Grok Composer does not accept image_url parts directly, but Grok Build
 	// can describe the images first. Bridge only this exact failure mode.
@@ -146,6 +153,15 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 			return nil, fmt.Errorf("enable stream usage: %w", usageErr)
 		}
 	}
+	if account.Platform == PlatformCodeBuddy {
+		// CodeBuddy's regional endpoint always emits SSE, including for callers
+		// that request a buffered OpenAI response. Keep the downstream mode in
+		// clientStream while forcing the upstream request shape.
+		upstreamBody, err = forceCodeBuddyStream(upstreamBody)
+		if err != nil {
+			return nil, fmt.Errorf("enable CodeBuddy stream: %w", err)
+		}
+	}
 	if account.Platform == PlatformGrok {
 		upstreamBody, err = stripGrokChatPromptCacheKey(upstreamBody)
 		if err != nil {
@@ -170,12 +186,17 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 	if err != nil {
 		return nil, err
 	}
-	SetActualOpenAIUpstreamEndpoint(c, grokChatRawEndpoint)
+	upstreamEndpoint := grokChatRawEndpoint
+	if account.Platform == PlatformCodeBuddy {
+		upstreamEndpoint = targetURL
+	}
+	SetActualOpenAIUpstreamEndpoint(c, upstreamEndpoint)
 	customUA := account.GetOpenAIUserAgent()
 	if customUA == "" && account.IsGrokOAuth() {
 		customUA = "sub2api-grok/1.0"
 	}
-	resp, err := s.sendCCUpstreamRequest(ctx, c, account, targetURL, upstreamBody, clientStream, token, customUA, grokCacheIdentity)
+	upstreamStream := clientStream || account.Platform == PlatformCodeBuddy
+	resp, err := s.sendCCUpstreamRequest(ctx, c, account, targetURL, upstreamBody, upstreamStream, token, customUA, grokCacheIdentity)
 	if err != nil {
 		return nil, err
 	}
@@ -224,17 +245,30 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 	var forwardErr error
 	if clientStream {
 		result, forwardErr = s.streamRawChatCompletions(c, resp, account, originalModel, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime, len(body))
+	} else if account.Platform == PlatformCodeBuddy {
+		result, forwardErr = s.bufferCodeBuddyChatCompletions(c, resp, account, originalModel, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime)
 	} else {
 		result, forwardErr = s.bufferRawChatCompletions(c, resp, account, originalModel, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime)
 	}
 	if result != nil {
 		addOpenAIUsage(&result.Usage, bridgeUsage)
-		result.UpstreamEndpoint = grokChatRawEndpoint
+		result.UpstreamEndpoint = upstreamEndpoint
 	}
 	return result, forwardErr
 }
 
+func forceCodeBuddyStream(body []byte) ([]byte, error) {
+	updated, err := sjson.SetBytes(body, "stream", true)
+	if err != nil {
+		return body, err
+	}
+	return sjson.SetBytes(updated, "stream_options.include_usage", true)
+}
+
 func (s *OpenAIGatewayService) rawChatCompletionsURL(account *Account) (string, error) {
+	if account.Platform == PlatformCodeBuddy {
+		return codeBuddyChatCompletionsURL(account)
+	}
 	if account.Platform == PlatformGrok {
 		targetURL, err := buildGrokChatCompletionsURL(account, s.cfg, s.settingService)
 		if err != nil {

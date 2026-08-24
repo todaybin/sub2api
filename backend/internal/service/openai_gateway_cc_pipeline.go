@@ -150,9 +150,20 @@ func (s *OpenAIGatewayService) openAIChatCompletionsTargetURL(account *Account) 
 // resolveCCFallbackTarget 解析两条 CC 回退路径共用的账号凭证与上游端点
 // （回退路径仅面向 APIKey 账号，凭证恒为 openai api_key）。
 func (s *OpenAIGatewayService) resolveCCFallbackTarget(account *Account) (apiKey string, targetURL string, err error) {
-	apiKey = strings.TrimSpace(account.GetOpenAIProtocolAPIKey())
+	if account.Platform == PlatformCodeBuddy {
+		apiKey = strings.TrimSpace(account.GetCredential("access_token"))
+	} else {
+		apiKey = strings.TrimSpace(account.GetOpenAIProtocolAPIKey())
+	}
 	if apiKey == "" {
+		if account.Platform == PlatformCodeBuddy {
+			return "", "", fmt.Errorf("account %d missing access token", account.ID)
+		}
 		return "", "", fmt.Errorf("account %d missing api_key", account.ID)
+	}
+	if account.Platform == PlatformCodeBuddy {
+		targetURL, err = s.rawChatCompletionsURL(account)
+		return apiKey, targetURL, err
 	}
 	targetURL, err = s.openAIChatCompletionsTargetURL(account)
 	if err != nil {
@@ -189,6 +200,14 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 	upstreamReq.Header.Set("Authorization", "Bearer "+bearerToken)
 	if stream {
 		upstreamReq.Header.Set("Accept", "text/event-stream")
+		// Match the VS Code SSE client and prevent an intermediary gzip layer
+		// from coalescing small CodeBuddy events before they reach the gateway.
+		// CodeBuddy already emits compact JSON chunks, so the bandwidth trade-off
+		// is preferable to adding first-token latency.
+		upstreamReq.Header.Set("Cache-Control", "no-cache")
+		if account != nil && account.Platform == PlatformCodeBuddy {
+			upstreamReq.Header.Set("Accept-Encoding", "identity")
+		}
 	} else {
 		upstreamReq.Header.Set("Accept", "application/json")
 	}
@@ -212,6 +231,10 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 		}
 		applyGrokCacheHeaders(upstreamReq.Header, grokCacheIdentity)
 	}
+	if account.Platform == PlatformCodeBuddy {
+		applyCodeBuddyHeaders(upstreamReq.Header, account)
+		applyCodeBuddyRequestHeaders(upstreamReq.Header, c, body)
+	}
 	// 账号级请求头覆写：放在所有内置默认头（含 Grok CLI 身份头）之后应用，
 	// 使配置值获得除共享传输层强制头之外的最高优先级。
 	account.ApplyHeaderOverrides(upstreamReq.Header)
@@ -220,7 +243,9 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 	if account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
 	}
+	upstreamStart := time.Now()
 	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 	if err != nil {
 		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
 	}

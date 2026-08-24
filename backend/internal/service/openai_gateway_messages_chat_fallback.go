@@ -76,6 +76,16 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
 	if err != nil {
 		return nil, fmt.Errorf("marshal chat completions request: %w", err)
 	}
+	if account.Platform == PlatformCodeBuddy {
+		chatBody, err = ensureCodeBuddySystemPrompt(chatBody)
+		if err != nil {
+			return nil, fmt.Errorf("prepare CodeBuddy system prompt: %w", err)
+		}
+		chatBody, err = forceCodeBuddyStream(chatBody)
+		if err != nil {
+			return nil, fmt.Errorf("enable CodeBuddy stream: %w", err)
+		}
+	}
 	if normalizedBody, normalized := NormalizeGLMOpenAIReasoningEffort(chatBody, upstreamModel); normalized {
 		chatBody = normalizedBody
 	}
@@ -105,7 +115,8 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
 	if err != nil {
 		return nil, err
 	}
-	resp, err := s.sendCCUpstreamRequest(ctx, c, account, targetURL, chatBody, clientStream, apiKey, account.GetOpenAIUserAgent(), "")
+	upstreamStream := clientStream || account.Platform == PlatformCodeBuddy
+	resp, err := s.sendCCUpstreamRequest(ctx, c, account, targetURL, chatBody, upstreamStream, apiKey, account.GetOpenAIUserAgent(), "")
 	if err != nil {
 		return nil, err
 	}
@@ -125,6 +136,9 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
 	// 5. Convert response
 	if clientStream {
 		return s.streamChatCompletionsAsAnthropic(c, resp, originalModel, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime)
+	}
+	if account.Platform == PlatformCodeBuddy {
+		return s.bufferCodeBuddyChatCompletionsAsAnthropic(c, resp, originalModel, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime)
 	}
 	return s.bufferChatCompletionsAsAnthropic(c, resp, originalModel, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime)
 }
@@ -161,6 +175,32 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsAnthropic(
 		ServiceTier:     serviceTier,
 		Stream:          false,
 		Duration:        time.Since(startTime),
+	}, nil
+}
+
+func (s *OpenAIGatewayService) bufferCodeBuddyChatCompletionsAsAnthropic(
+	c *gin.Context,
+	resp *http.Response,
+	originalModel string,
+	billingModel string,
+	upstreamModel string,
+	reasoningEffort *string,
+	serviceTier *string,
+	startTime time.Time,
+) (*OpenAIForwardResult, error) {
+	ccResp, state, err := s.collectCodeBuddyChatCompletions(resp, originalModel, upstreamModel, startTime)
+	if err != nil {
+		return nil, err
+	}
+	anthropicResp := apicompat.ChatCompletionsResponseToAnthropic(ccResp, originalModel)
+	if s.responseHeaderFilter != nil {
+		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+	}
+	c.JSON(http.StatusOK, anthropicResp)
+	return &OpenAIForwardResult{
+		RequestID: resp.Header.Get("x-request-id"), Usage: state.Usage, Model: originalModel,
+		BillingModel: billingModel, UpstreamModel: upstreamModel, ReasoningEffort: reasoningEffort,
+		ServiceTier: serviceTier, Stream: false, Duration: time.Since(startTime),
 	}, nil
 }
 

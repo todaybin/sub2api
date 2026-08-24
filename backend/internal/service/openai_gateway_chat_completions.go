@@ -87,6 +87,9 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 		}
 		return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
 	}
+	if account.Platform == PlatformCodeBuddy {
+		return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
+	}
 
 	// Cursor compatibility: some clients send a Responses-shaped body to the
 	// /v1/chat/completions URL. Detect it before adaptive routing so adaptive

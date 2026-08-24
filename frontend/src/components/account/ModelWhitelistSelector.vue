@@ -72,7 +72,10 @@
                 </svg>
               </span>
               <ModelIcon :model="model.value" size="18px" />
-              <span class="truncate text-gray-900 dark:text-white">{{ model.value }}</span>
+              <span class="min-w-0 truncate text-gray-900 dark:text-white">{{ model.value }}</span>
+              <span v-if="modelCatalog[model.value]?.reasoning_effort" class="shrink-0 text-xs capitalize text-gray-400">{{ modelCatalog[model.value]?.reasoning_effort }}</span>
+              <span v-if="modelCredits(model.value)" class="shrink-0 text-xs text-gray-400">{{ modelCredits(model.value) }}</span>
+              <span v-if="modelCatalog[model.value]?.is_enterprise" class="shrink-0 rounded bg-blue-100 px-1 text-[10px] text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">{{ t('admin.accounts.codebuddy.enterprise') }}</span>
             </button>
             <button
               type="button"
@@ -102,10 +105,10 @@
         {{ t('admin.accounts.fillRelatedModels') }}
       </button>
       <button
-        v-if="canSyncUpstream"
+        v-if="canSyncUpstream || isCodeBuddyPlatform"
         type="button"
         @click="syncUpstreamModels"
-        :disabled="isSyncingUpstream"
+        :disabled="isSyncingUpstream || (!props.accountId && !props.syncCredentials && !isCodeBuddyPlatform)"
         class="rounded-lg border border-emerald-200 px-3 py-1.5 text-sm text-emerald-600 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-900/30"
       >
         {{ isSyncingUpstream ? t('admin.accounts.syncUpstreamModelsLoading') : t('admin.accounts.syncUpstreamModels') }}
@@ -145,15 +148,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
-import { accountsAPI } from '@/api/admin/accounts'
-import type { SyncUpstreamPreviewParams } from '@/api/admin/accounts'
+import { accountsAPI, getCodeBuddyModels } from '@/api/admin/accounts'
+import type { CodeBuddyModelCatalogEntry, SyncUpstreamPreviewParams } from '@/api/admin/accounts'
 import { useClipboard } from '@/composables/useClipboard'
 import ModelIcon from '@/components/common/ModelIcon.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { allModels, getModelsByPlatform } from '@/composables/useModelWhitelist'
+import { extractApiErrorMessage } from '@/utils/apiError'
 
 const { t } = useI18n()
 
@@ -161,6 +165,7 @@ const props = defineProps<{
   modelValue: string[]
   platform?: string
   platforms?: string[]
+  codebuddyRegion?: 'domestic' | 'international'
   accountId?: number
   syncCredentials?: {
     platform: string
@@ -182,6 +187,32 @@ const searchQuery = ref('')
 const customModel = ref('')
 const isComposing = ref(false)
 const isSyncingUpstream = ref(false)
+const codeBuddyFallbackCatalog: Record<string, CodeBuddyModelCatalogEntry> = Object.fromEntries(([
+  ['auto', 'Auto', 0.79, false],
+  ['gpt-5.6-sol', 'GPT-5.6-Sol', 3.47, true],
+  ['gpt-5.6-terra', 'GPT-5.6-Terra', 1.39, true],
+  ['gpt-5.6-luna', 'GPT-5.6-Luna', 0.14, true],
+  ['gpt-5.5', 'GPT-5.5', 3.31, true],
+  ['gpt-5.4', 'GPT-5.4', 1.65, true],
+  ['gpt-5.3-codex', 'GPT-5.3-Codex', 1.25, true],
+  ['gemini-3.5-flash', 'Gemini-3.5-Flash', 0.99, true],
+  ['hy3', 'Hy3', 0, false],
+  ['glm-5.3', 'GLM-5.3', 0.79, false],
+  ['glm-5.2', 'GLM-5.2', 0.79, false],
+  ['glm-5.1', 'GLM-5.1', 0.79, false],
+  ['glm-5v-turbo', 'GLM-5v-Turbo', 0.71, false],
+  ['kimi-k3', 'Kimi-K3', 1.62, false],
+  ['kimi-k2.7-code', 'Kimi-K2.7-Code', 0.57, false],
+  ['kimi-k2.6', 'Kimi-K2.6', 0.52, false],
+  ['minimax-m3', 'MiniMax-M3', 0.25, false],
+  ['deepseek-v4-flash', 'DeepSeek-V4-Flash', 0, false]
+] as Array<[string, string, number, boolean]>).map(([id, name, multiplier, enterprise]) => [id, {
+  id, name, credits_multiplier: multiplier, is_enterprise: enterprise,
+  reasoning_effort: id === 'auto' ? undefined : 'high'
+} as CodeBuddyModelCatalogEntry]))
+const modelCatalog = ref<Record<string, CodeBuddyModelCatalogEntry>>({ ...codeBuddyFallbackCatalog })
+const catalogLoaded = ref(false)
+const syncedModelIDs = ref<string[]>([])
 const normalizedPlatforms = computed(() => {
   const rawPlatforms =
     props.platforms && props.platforms.length > 0
@@ -205,6 +236,7 @@ const upstreamSyncPlatforms = new Set([
   'gemini',
   'antigravity',
   'grok',
+  'codebuddy',
   'kimi',
   'zhipu',
   'deepseek'
@@ -219,20 +251,37 @@ const canSyncUpstream = computed(() => {
   }
   return false
 })
+const isCodeBuddyPlatform = computed(() => normalizedPlatforms.value.some(platform => platform.toLowerCase() === 'codebuddy'))
 
 const availableOptions = computed(() => {
   if (normalizedPlatforms.value.length === 0) {
     return allModels
   }
 
+  if (normalizedPlatforms.value.length === 1 && normalizedPlatforms.value[0].toLowerCase() === 'codebuddy') {
+    const modelIDs = props.accountId && catalogLoaded.value
+      ? syncedModelIDs.value
+      : getModelsByPlatform('codebuddy', props.codebuddyRegion)
+    return modelIDs.map(id => {
+      const model = modelCatalog.value[id]
+      return { value: id, label: model?.name || id }
+    })
+  }
+
   const allowedModels = new Set<string>()
   for (const platform of normalizedPlatforms.value) {
-    for (const model of getModelsByPlatform(platform)) {
+    for (const model of getModelsByPlatform(platform, props.codebuddyRegion)) {
       allowedModels.add(model)
     }
   }
 
-  return allModels.filter(model => allowedModels.has(model.value))
+  const staticOptions = allModels.filter(model => allowedModels.has(model.value))
+  if (!normalizedPlatforms.value.some(platform => platform.toLowerCase() === 'codebuddy')) return staticOptions
+  const known = new Set(staticOptions.map(model => model.value))
+  const syncedOptions = Object.values(modelCatalog.value)
+    .filter(model => model.id && !known.has(model.id))
+    .map(model => ({ value: model.id, label: model.name || model.id }))
+  return [...staticOptions, ...syncedOptions]
 })
 
 const filteredModels = computed(() => {
@@ -242,6 +291,34 @@ const filteredModels = computed(() => {
     m => m.value.toLowerCase().includes(query) || m.label.toLowerCase().includes(query)
   )
 })
+
+const modelCredits = (model: string): string => {
+  const entry = modelCatalog.value[model]
+  return entry?.credits_multiplier != null ? `${entry.credits_multiplier}x` : (entry?.credits || '')
+}
+
+const loadCodeBuddyCatalog = async () => {
+  if (!props.accountId || !normalizedPlatforms.value.some(platform => platform.toLowerCase() === 'codebuddy')) return
+  try {
+    const result = await getCodeBuddyModels(props.accountId)
+    const upstreamRegion = result.region === 'international' ? 'international' : result.region === 'domestic' ? 'domestic' : undefined
+    if (props.codebuddyRegion && upstreamRegion && props.codebuddyRegion !== upstreamRegion) return
+    syncedModelIDs.value = result.models.map(model => model.trim()).filter(Boolean)
+    if (syncedModelIDs.value.length > 0) {
+      // The API's `models` list is already filtered by the account region.
+      // Use it as the allowlist so stale/mixed catalog metadata cannot leak
+      // another region back into the selector.
+      const allowed = new Set(syncedModelIDs.value)
+      modelCatalog.value = { auto: codeBuddyFallbackCatalog.auto, ...Object.fromEntries((result.model_catalog || []).filter(entry => allowed.has(entry.id)).map(entry => [entry.id, entry])) }
+      catalogLoaded.value = true
+    }
+  } catch {
+    // The normal model whitelist remains usable when the upstream is offline.
+  }
+}
+
+onMounted(loadCodeBuddyCatalog)
+watch(() => props.accountId, loadCodeBuddyCatalog)
 
 const toggleDropdown = () => {
   showDropdown.value = !showDropdown.value
@@ -282,7 +359,7 @@ const handleEnter = () => {
 const fillRelated = () => {
   const newModels = [...props.modelValue]
   for (const platform of normalizedPlatforms.value) {
-    for (const model of getModelsByPlatform(platform)) {
+    for (const model of getModelsByPlatform(platform, props.codebuddyRegion)) {
       if (!newModels.includes(model)) {
         newModels.push(model)
       }
@@ -293,20 +370,33 @@ const fillRelated = () => {
 
 const syncUpstreamModels = async () => {
   if (isSyncingUpstream.value) return
-  if (!props.accountId && !props.syncCredentials) return
+  if (!props.accountId && !props.syncCredentials && !isCodeBuddyPlatform.value) return
 
   isSyncingUpstream.value = true
   try {
     let result
     if (props.accountId) {
-      result = await accountsAPI.syncUpstreamModels(props.accountId)
+      result = normalizedPlatforms.value.length === 1 && normalizedPlatforms.value[0].toLowerCase() === 'codebuddy'
+        ? await accountsAPI.syncCodeBuddyModels(props.accountId, props.codebuddyRegion)
+        : await accountsAPI.syncUpstreamModels(props.accountId)
     } else if (props.syncCredentials) {
       result = await accountsAPI.syncUpstreamModelsPreview(props.syncCredentials as SyncUpstreamPreviewParams)
+    } else if (isCodeBuddyPlatform.value) {
+      // Before OAuth completes there is no account ID or token. The backend
+      // still returns the selected region's catalog so the control remains
+      // usable during account creation.
+      result = await getCodeBuddyModels(undefined, props.codebuddyRegion)
     } else {
       return
     }
 
     const upstreamModels = result.models.map(model => model.trim()).filter(Boolean)
+    if (result.model_catalog?.length) {
+      syncedModelIDs.value = upstreamModels
+      const allowed = new Set(upstreamModels)
+      modelCatalog.value = { auto: codeBuddyFallbackCatalog.auto, ...Object.fromEntries(result.model_catalog.filter(entry => allowed.has(entry.id)).map(entry => [entry.id, entry])) }
+      catalogLoaded.value = true
+    }
     if (upstreamModels.length === 0) {
       appStore.showInfo(t('admin.accounts.syncUpstreamModelsEmpty'))
       return
@@ -328,7 +418,7 @@ const syncUpstreamModels = async () => {
       appStore.showInfo(t('admin.accounts.syncUpstreamModelsNoChanges', { count: upstreamModels.length }))
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : t('admin.accounts.syncUpstreamModelsFailed')
+    const message = extractApiErrorMessage(error, t('admin.accounts.syncUpstreamModelsFailed'))
     appStore.showError(t('admin.accounts.syncUpstreamModelsError', { message }))
   } finally {
     isSyncingUpstream.value = false

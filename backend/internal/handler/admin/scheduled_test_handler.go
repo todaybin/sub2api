@@ -21,6 +21,7 @@ func NewScheduledTestHandler(scheduledTestSvc *service.ScheduledTestService) *Sc
 
 type createScheduledTestPlanRequest struct {
 	AccountID      int64  `json:"account_id" binding:"required"`
+	TaskType       string `json:"task_type"`
 	ModelID        string `json:"model_id"`
 	CronExpression string `json:"cron_expression" binding:"required"`
 	Enabled        *bool  `json:"enabled"`
@@ -29,6 +30,7 @@ type createScheduledTestPlanRequest struct {
 }
 
 type updateScheduledTestPlanRequest struct {
+	TaskType       string `json:"task_type"`
 	ModelID        string `json:"model_id"`
 	CronExpression string `json:"cron_expression"`
 	Enabled        *bool  `json:"enabled"`
@@ -62,6 +64,7 @@ func (h *ScheduledTestHandler) Create(c *gin.Context) {
 
 	plan := &service.ScheduledTestPlan{
 		AccountID:      req.AccountID,
+		TaskType:       req.TaskType,
 		ModelID:        req.ModelID,
 		CronExpression: req.CronExpression,
 		Enabled:        true,
@@ -102,7 +105,10 @@ func (h *ScheduledTestHandler) Update(c *gin.Context) {
 		return
 	}
 
-	if req.ModelID != "" {
+	if req.TaskType != "" {
+		existing.TaskType = req.TaskType
+	}
+	if req.ModelID != "" || existing.TaskType == "checkin" {
 		existing.ModelID = req.ModelID
 	}
 	if req.CronExpression != "" {

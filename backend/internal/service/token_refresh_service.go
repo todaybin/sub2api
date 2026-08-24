@@ -142,6 +142,20 @@ func NewTokenRefreshService(
 	return s
 }
 
+// AddCodeBuddyRefresher registers the optional CodeBuddy OAuth provider
+// without changing the long-standing constructor used by tests and tools.
+func (s *TokenRefreshService) AddCodeBuddyRefresher(oauth *CodeBuddyOAuthService) {
+	if s == nil || oauth == nil {
+		return
+	}
+	refresher := NewCodeBuddyTokenRefresher(oauth)
+	s.registrations = append(s.registrations, tokenRefreshRegistration{
+		platform:  PlatformCodeBuddy,
+		refresher: refresher,
+		executor:  refresher,
+	})
+}
+
 func (s *TokenRefreshService) eligiblePlatforms() []string {
 	platforms := make([]string, 0, len(s.registrations))
 	for _, registration := range s.registrations {

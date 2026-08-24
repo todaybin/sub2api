@@ -9,10 +9,10 @@
               :class="hasEffectiveRate ? 'font-mono text-gray-800 dark:text-gray-200' : statusClass || 'text-gray-400 dark:text-gray-500'"
               data-testid="upstream-billing-rate"
             >
-              {{ rateDisplay }}
+              {{ isCodeBuddy ? codeBuddyBalanceDisplay : rateDisplay }}
             </span>
             <span
-              v-if="billingIdentity"
+              v-if="billingIdentity && !isCodeBuddy"
               class="text-sm font-medium text-gray-800 dark:text-gray-200"
               data-testid="upstream-billing-identity"
             >
@@ -25,7 +25,10 @@
         </div>
       </template>
       <div class="space-y-1">
-        <p v-if="validBalance != null">
+        <p v-if="isCodeBuddy && codeBuddyBalance != null">
+          CodeBuddy 积分余额：{{ codeBuddyBalance }}
+        </p>
+        <p v-else-if="validBalance != null">
           {{ t('admin.accounts.upstreamBilling.balance', { value: formattedBalance }) }}
         </p>
         <template v-if="data && billingDataUsable">
@@ -159,7 +162,21 @@ defineEmits<{
 const { t } = useI18n()
 const CLOCK_SKEW_TOLERANCE_MS = 5 * 60 * 1000
 // 探测资格已放宽到全部 API-key 平台（上游是 sub2api 即可应答）。
-const eligible = computed(() => props.account.type === 'apikey')
+const isCodeBuddy = computed(() => props.account.platform === 'codebuddy' && props.account.type === 'oauth')
+const eligible = computed(() => props.account.type === 'apikey' || isCodeBuddy.value)
+const codeBuddyCheckin = computed(() => {
+  const value = props.account.extra?.codebuddy_checkin
+  return value && typeof value === 'object' ? value as Record<string, unknown> : null
+})
+const codeBuddyBalance = computed(() => {
+  const value = codeBuddyCheckin.value?.last_credit_remaining
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+})
+const codeBuddyBalanceDisplay = computed(() => {
+  if (codeBuddyBalance.value == null) return '积分未探测'
+  if (codeBuddyBalance.value <= 0 && props.account.schedulable === false) return '0 积分 · 已停止调度'
+  return `${codeBuddyBalance.value} 积分`
+})
 const snapshot = computed<UpstreamBillingProbeSnapshot | undefined>(() => props.account.extra?.upstream_billing_probe)
 const data = computed(() => snapshot.value?.data)
 const autoDisabledAt = computed(() => {

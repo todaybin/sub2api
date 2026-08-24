@@ -202,7 +202,38 @@
             <PlatformIcon platform="deepseek" size="sm" />
             DeepSeek
           </button>
+          <button
+            type="button"
+            @click="form.platform = 'codebuddy'; accountCategory = 'oauth-based'"
+            :class="[
+              'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
+              form.platform === 'codebuddy' ? 'bg-white text-cyan-600 shadow-sm dark:bg-dark-600 dark:text-cyan-400' : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
+            ]"
+          >
+            <PlatformIcon platform="codebuddy" size="sm" />
+            CodeBuddy
+          </button>
         </div>
+      </div>
+
+      <div
+        v-if="form.platform === 'codebuddy'"
+        class="space-y-3 rounded-lg border border-cyan-200 bg-cyan-50 p-4 dark:border-cyan-800 dark:bg-cyan-950/30"
+      >
+        <div>
+          <label class="input-label">{{ t('admin.accounts.codebuddy.region') }}</label>
+          <select v-model="codeBuddyRegion" class="input" data-testid="codebuddy-region">
+            <option value="domestic">{{ t('admin.accounts.codebuddy.domestic') }}</option>
+            <option value="international">{{ t('admin.accounts.codebuddy.international') }}</option>
+          </select>
+          <p class="input-hint">{{ t('admin.accounts.codebuddy.regionHint') }}</p>
+        </div>
+        <div class="grid gap-3 sm:grid-cols-3">
+          <div><label class="input-label">{{ t('admin.accounts.codebuddy.referenceCostUnits') }}</label><input v-model.number="codeBuddyReferenceCostUnits" type="number" min="0" step="0.01" class="input" /></div>
+          <div><label class="input-label">{{ t('admin.accounts.codebuddy.referenceCredits') }}</label><input v-model.number="codeBuddyReferenceCredits" type="number" min="0" step="0.01" class="input" /></div>
+          <div><label class="input-label">{{ t('admin.accounts.codebuddy.tokensPerCredit') }}</label><input v-model.number="codeBuddyTokensPerCredit" type="number" min="0" step="1" class="input" /></div>
+        </div>
+        <p class="input-hint">{{ t('admin.accounts.codebuddy.billingHint') }}</p>
       </div>
 
       <!-- Account Type Selection (Anthropic) -->
@@ -1459,7 +1490,7 @@
 
             <!-- Whitelist Mode -->
             <div v-if="modelRestrictionMode === 'whitelist'">
-              <ModelWhitelistSelector v-model="allowedModels" :platform="form.platform" :sync-credentials="syncPreviewCredentials" />
+              <ModelWhitelistSelector v-model="allowedModels" :platform="form.platform" :codebuddy-region="form.platform === 'codebuddy' ? codeBuddyRegion : undefined" :sync-credentials="syncPreviewCredentials" />
               <p class="text-xs text-gray-500 dark:text-gray-400">
                 {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
                 <span v-if="allowedModels.length === 0">{{
@@ -2232,7 +2263,7 @@
 
       <!-- OpenAI OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
       <div
-        v-if="(form.platform === 'openai' || form.platform === 'grok') && isOAuthFlow"
+        v-if="(form.platform === 'openai' || form.platform === 'grok' || form.platform === 'codebuddy') && isOAuthFlow"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
@@ -2277,7 +2308,7 @@
 
           <!-- Whitelist Mode -->
           <div v-if="modelRestrictionMode === 'whitelist'">
-            <ModelWhitelistSelector v-model="allowedModels" :platform="form.platform" :sync-credentials="syncPreviewCredentials" />
+            <ModelWhitelistSelector v-model="allowedModels" :platform="form.platform" :codebuddy-region="form.platform === 'codebuddy' ? codeBuddyRegion : undefined" :sync-credentials="syncPreviewCredentials" />
             <p class="text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
               <span v-if="allowedModels.length === 0">{{
@@ -3417,7 +3448,15 @@
 
     <!-- Step 2: OAuth Authorization -->
     <div v-else class="space-y-5">
+      <div v-if="form.platform === 'codebuddy'" class="space-y-4 rounded-lg border border-cyan-200 bg-cyan-50 p-4 dark:border-cyan-800 dark:bg-cyan-950/30">
+        <h3 class="font-medium text-cyan-900 dark:text-cyan-100">{{ t('admin.accounts.codebuddy.authorization') }}</h3>
+        <p class="text-sm text-cyan-800 dark:text-cyan-200">{{ t('admin.accounts.codebuddy.authorizationHint') }}</p>
+        <p v-if="codeBuddyAuthUrl" class="break-all text-xs text-gray-600 dark:text-gray-300">{{ codeBuddyAuthUrl }}</p>
+        <p v-if="codeBuddyLoading" class="text-sm text-cyan-700 dark:text-cyan-300">{{ t('admin.accounts.codebuddy.waiting') }}</p>
+        <p v-if="codeBuddyError" class="text-sm text-red-600">{{ codeBuddyError }}</p>
+      </div>
       <OAuthAuthorizationFlow
+        v-if="form.platform !== 'codebuddy'"
         ref="oauthFlowRef"
         :add-method="form.platform === 'anthropic' ? addMethod : 'oauth'"
         :auth-url="currentAuthUrl"
@@ -3500,7 +3539,16 @@
           {{ t('common.back') }}
         </button>
         <button
-          v-if="isManualInputMethod"
+          v-if="form.platform === 'codebuddy'"
+          type="button"
+          :disabled="codeBuddyLoading"
+          class="btn btn-primary"
+          @click="handleCodeBuddyStart"
+        >
+          {{ codeBuddyLoading ? t('admin.accounts.codebuddy.waiting') : t('admin.accounts.codebuddy.openLogin') }}
+        </button>
+        <button
+          v-else-if="isManualInputMethod"
           type="button"
           :disabled="!canExchangeCode"
           class="btn btn-primary"
@@ -3832,6 +3880,7 @@ import {
   type HeaderOverrideRow
 } from '@/components/account/credentialsBuilder'
 import { formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
+import { extractApiErrorMessage } from '@/utils/apiError'
 import { templateJSON, type UpstreamUsageQueryMode } from '@/utils/upstreamUsageQuery'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
 import { VERTEX_LOCATION_OPTIONS } from '@/constants/account'
@@ -4503,7 +4552,7 @@ const geminiHelpLinks = {
 }
 
 // Computed: current preset mappings based on platform
-const presetMappings = computed(() => getPresetMappingsByPlatform(form.platform))
+const presetMappings = computed(() => getPresetMappingsByPlatform(form.platform, codeBuddyRegion.value))
 const tempUnschedPresets = computed(() => [
   {
     label: t('admin.accounts.tempUnschedulable.presets.overloadLabel'),
@@ -4548,6 +4597,16 @@ const form = reactive({
   group_ids: [] as number[],
   expires_at: null as number | null
 })
+
+const codeBuddyRegion = ref<'domestic' | 'international'>('domestic')
+const codeBuddyReferenceCostUnits = ref(70)
+const codeBuddyReferenceCredits = ref(2000)
+const codeBuddyTokensPerCredit = ref(31874)
+const codeBuddySessionId = ref('')
+const codeBuddyAuthUrl = ref('')
+const codeBuddyLoading = ref(false)
+const codeBuddyError = ref('')
+const codeBuddyPollGeneration = ref(0)
 
 // Helper to check if current type needs OAuth flow
 const isOAuthFlow = computed(() => {
@@ -4602,7 +4661,7 @@ watch(
         .then(profiles => { tlsFingerprintProfiles.value = profiles.map(p => ({ id: p.id, name: p.name })) })
         .catch(() => { tlsFingerprintProfiles.value = [] })
       // Modal opened - fill related models
-      allowedModels.value = [...getModelsByPlatform(form.platform)]
+      allowedModels.value = [...getModelsByPlatform(form.platform, codeBuddyRegion.value)]
       // Antigravity: 默认使用映射模式并填充默认映射
       if (form.platform === 'antigravity') {
         antigravityModelRestrictionMode.value = 'mapping'
@@ -4647,6 +4706,13 @@ watch(
 )
 
 // Reset platform-specific settings when platform changes
+watch(codeBuddyRegion, (region, previousRegion) => {
+  if (form.platform !== 'codebuddy' || region === previousRegion) return
+  // Never retain models from the other CodeBuddy service region.
+  allowedModels.value = [...getModelsByPlatform('codebuddy', region)]
+  modelMappings.value = []
+})
+
 watch(
   () => form.platform,
   (newPlatform) => {
@@ -4786,7 +4852,7 @@ watch(
   [modelRestrictionMode, () => form.platform],
   ([newMode]) => {
     if (newMode === 'whitelist') {
-      allowedModels.value = [...getModelsByPlatform(form.platform)]
+      allowedModels.value = [...getModelsByPlatform(form.platform, codeBuddyRegion.value)]
     }
   }
 )
@@ -5194,12 +5260,23 @@ const resetForm = () => {
   geminiOAuth.resetState()
   antigravityOAuth.resetState()
   grokOAuth.resetState()
+  codeBuddySessionId.value = ''
+  codeBuddyAuthUrl.value = ''
+  codeBuddyLoading.value = false
+  codeBuddyError.value = ''
+  codeBuddyRegion.value = 'domestic'
+  codeBuddyReferenceCostUnits.value = 70
+  codeBuddyReferenceCredits.value = 2000
+  codeBuddyTokensPerCredit.value = 31874
+  codeBuddyPollGeneration.value++
   oauthFlowRef.value?.reset()
   antigravityMixedChannelConfirmed.value = false
   clearMixedChannelDialog()
 }
 
 const handleClose = () => {
+  codeBuddyPollGeneration.value++
+  codeBuddyLoading.value = false
   antigravityMixedChannelConfirmed.value = false
   clearMixedChannelDialog()
   emit('close')
@@ -5666,6 +5743,59 @@ const handleSubmit = async () => {
 		upstream_billing_balance_probe_enabled: upstreamBillingBalanceProbeEnabled.value,
     auto_pause_on_expired: autoPauseOnExpired.value
   })
+}
+
+const handleCodeBuddyStart = async () => {
+  const generation = ++codeBuddyPollGeneration.value
+  codeBuddyLoading.value = true
+  codeBuddyError.value = ''
+  try {
+    const started = await adminAPI.accounts.startCodeBuddyOAuth({
+      region: codeBuddyRegion.value,
+      name: form.name.trim(),
+      notes: form.notes.trim() || undefined,
+      proxy_id: form.proxy_id,
+      group_ids: form.group_ids,
+      concurrency: form.concurrency,
+      load_factor: form.load_factor,
+      priority: form.priority,
+      rate_multiplier: form.rate_multiplier,
+      expires_at: form.expires_at,
+      auto_pause_on_expired: autoPauseOnExpired.value,
+      model_mapping: buildModelMappingObject(
+        modelRestrictionMode.value,
+        allowedModels.value,
+        modelMappings.value
+      ) || undefined,
+      reference_cost_units: codeBuddyReferenceCostUnits.value,
+      reference_credits: codeBuddyReferenceCredits.value,
+      tokens_per_credit: codeBuddyTokensPerCredit.value
+    })
+    codeBuddySessionId.value = started.session_id
+    codeBuddyAuthUrl.value = started.auth_url
+    window.open(started.auth_url, '_blank', 'noopener,noreferrer')
+    const expiresAt = started.expires_at * 1000
+    for (;;) {
+      await new Promise(resolve => window.setTimeout(resolve, 1000))
+      if (generation !== codeBuddyPollGeneration.value) return
+      if (Date.now() >= expiresAt) {
+        throw new Error('Authorization expired')
+      }
+      const result = await adminAPI.accounts.pollCodeBuddyOAuth(codeBuddySessionId.value)
+      if (result.status === 'completed') {
+        codeBuddyLoading.value = false
+        appStore.showSuccess(t('admin.accounts.codebuddy.connected'))
+        emit('created')
+        handleClose()
+        return
+      }
+      if (result.status === 'expired') throw new Error(result.message || 'Authorization expired')
+    }
+  } catch (error) {
+    if (generation !== codeBuddyPollGeneration.value) return
+    codeBuddyError.value = extractApiErrorMessage(error, t('common.unknownError'))
+    codeBuddyLoading.value = false
+  }
 }
 
 const goBackToBasicInfo = () => {

@@ -285,6 +285,10 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	}
 
 	// Route to platform-specific test method
+	if account.Platform == PlatformCodeBuddy {
+		return s.testCodeBuddyConnection(c, account, modelID, prompt)
+	}
+
 	if account.IsCNProvider() {
 		switch account.GetAPIProtocol() {
 		case APIProtocolAdaptive:

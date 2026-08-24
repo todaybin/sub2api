@@ -9,6 +9,7 @@ import (
 type ScheduledTestPlan struct {
 	ID             int64      `json:"id"`
 	AccountID      int64      `json:"account_id"`
+	TaskType       string     `json:"task_type"`
 	ModelID        string     `json:"model_id"`
 	CronExpression string     `json:"cron_expression"`
 	Enabled        bool       `json:"enabled"`

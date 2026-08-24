@@ -39,6 +39,7 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
 	}
 
 	clientStream := responsesReq.Stream
+	conversionStart := time.Now()
 	serviceTier := extractOpenAIServiceTierFromBody(body)
 	// custom 工具（如 codex 的 exec）降级为 function 工具转发，回程需按名字还原为
 	// custom_tool_call 项，先记下名字集合；tool_search 工具同理，回程还原为
@@ -79,6 +80,16 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
 	if err != nil {
 		return nil, fmt.Errorf("marshal chat completions fallback request: %w", err)
 	}
+	if account.Platform == PlatformCodeBuddy {
+		chatBody, err = ensureCodeBuddySystemPrompt(chatBody)
+		if err != nil {
+			return nil, fmt.Errorf("prepare CodeBuddy system prompt: %w", err)
+		}
+		chatBody, err = forceCodeBuddyStream(chatBody)
+		if err != nil {
+			return nil, fmt.Errorf("enable CodeBuddy stream: %w", err)
+		}
+	}
 	chatBody, err = s.applyOpenAIFastPolicyToBody(ctx, account, upstreamModel, chatBody)
 	if err != nil {
 		var blocked *OpenAIFastBlockedError
@@ -97,6 +108,7 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
 		zap.String("billing_model", billingModel),
 		zap.String("upstream_model", upstreamModel),
 		zap.Bool("stream", clientStream),
+		zap.Int64("conversion_ms", time.Since(conversionStart).Milliseconds()),
 	)
 
 	// Build and send upstream request via the shared CC pipeline
@@ -104,7 +116,8 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
 	if err != nil {
 		return nil, err
 	}
-	resp, err := s.sendCCUpstreamRequest(ctx, c, account, targetURL, chatBody, clientStream, apiKey, account.GetOpenAIUserAgent(), "")
+	upstreamStream := clientStream || account.Platform == PlatformCodeBuddy
+	resp, err := s.sendCCUpstreamRequest(ctx, c, account, targetURL, chatBody, upstreamStream, apiKey, account.GetOpenAIUserAgent(), "")
 	if err != nil {
 		return nil, err
 	}
@@ -120,6 +133,9 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
 
 	if clientStream {
 		return s.streamChatCompletionsAsResponses(c, resp, originalModel, customTools, toolSearch, namespaceTools, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime)
+	}
+	if account.Platform == PlatformCodeBuddy {
+		return s.bufferCodeBuddyChatCompletionsAsResponses(c, resp, originalModel, customTools, toolSearch, namespaceTools, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime)
 	}
 	return s.bufferChatCompletionsAsResponses(c, resp, originalModel, customTools, toolSearch, namespaceTools, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime)
 }
@@ -160,6 +176,36 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsResponses(
 		ServiceTier:     serviceTier,
 		Stream:          false,
 		Duration:        time.Since(startTime),
+	}, nil
+}
+
+func (s *OpenAIGatewayService) bufferCodeBuddyChatCompletionsAsResponses(
+	c *gin.Context,
+	resp *http.Response,
+	originalModel string,
+	customTools map[string]bool,
+	toolSearch bool,
+	namespaceTools map[string]apicompat.NamespacedToolName,
+	billingModel string,
+	upstreamModel string,
+	reasoningEffort *string,
+	serviceTier *string,
+	startTime time.Time,
+) (*OpenAIForwardResult, error) {
+	ccResp, state, err := s.collectCodeBuddyChatCompletions(resp, originalModel, upstreamModel, startTime)
+	if err != nil {
+		return nil, err
+	}
+	responsesResp := apicompat.ChatCompletionsResponseToResponses(ccResp, originalModel, customTools, toolSearch, namespaceTools)
+	s.cacheReasoningItemsFromOutput(responsesResp.Output)
+	if s.responseHeaderFilter != nil {
+		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+	}
+	c.JSON(http.StatusOK, responsesResp)
+	return &OpenAIForwardResult{
+		RequestID: resp.Header.Get("x-request-id"), Usage: state.Usage, Model: originalModel,
+		BillingModel: billingModel, UpstreamModel: upstreamModel, ReasoningEffort: reasoningEffort,
+		ServiceTier: serviceTier, Stream: false, Duration: time.Since(startTime),
 	}, nil
 }
 

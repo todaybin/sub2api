@@ -112,6 +112,8 @@ func DetectModelPlatform(model string) (string, bool) {
 			return PlatformZhipu, true
 		case "deepseek":
 			return PlatformDeepseek, true
+		case "codebuddy", "code-buddy", "tencent-codebuddy":
+			return PlatformCodeBuddy, true
 		}
 		if rest != "" {
 			normalized = strings.TrimPrefix(rest, "models/")
@@ -142,6 +144,10 @@ func DetectModelPlatform(model string) (string, bool) {
 	case strings.HasPrefix(normalized, "kimi-"),
 		strings.HasPrefix(normalized, "moonshot-"):
 		return PlatformKimi, true
+	case strings.HasPrefix(normalized, "glm-5v"),
+		strings.HasPrefix(normalized, "hunyuan-"),
+		strings.HasPrefix(normalized, "codebuddy-"):
+		return PlatformCodeBuddy, true
 	case strings.HasPrefix(normalized, "glm-"):
 		return PlatformZhipu, true
 	case strings.HasPrefix(normalized, "deepseek-"):
@@ -193,7 +199,7 @@ func (s *GatewayService) resolveCompositeRouteDecision(ctx context.Context, grou
 func isConcreteRequestPlatform(platform string) bool {
 	switch platform {
 	case PlatformAnthropic, PlatformOpenAI, PlatformGemini, PlatformAntigravity, PlatformGrok,
-		PlatformKimi, PlatformZhipu, PlatformDeepseek:
+		PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformCodeBuddy:
 		return true
 	default:
 		return false

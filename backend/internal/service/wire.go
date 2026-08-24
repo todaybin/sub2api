@@ -133,6 +133,7 @@ func ProvideTokenRefreshService(
 	proxyRepo ProxyRepository,
 	refreshAPI *OAuthRefreshAPI,
 	runtimeBlocker AccountRuntimeBlocker,
+	codeBuddyOAuth *CodeBuddyOAuthService,
 ) *TokenRefreshService {
 	svc := NewTokenRefreshService(accountRepo, oauthService, openaiOAuthService, geminiOAuthService, antigravityOAuthService, cacheInvalidator, schedulerCache, cfg, tempUnschedCache, grokOAuthService)
 	// 注入 OpenAI privacy opt-out 依赖
@@ -142,6 +143,7 @@ func ProvideTokenRefreshService(
 	// 调用侧显式注入后台刷新策略，避免策略漂移
 	svc.SetRefreshPolicy(DefaultBackgroundRefreshPolicy())
 	svc.SetAccountRuntimeBlocker(runtimeBlocker)
+	svc.AddCodeBuddyRefresher(codeBuddyOAuth)
 	svc.Start()
 	return svc
 }
@@ -601,10 +603,20 @@ func ProvideScheduledTestRunnerService(
 	scheduledSvc *ScheduledTestService,
 	accountTestSvc *AccountTestService,
 	rateLimitSvc *RateLimitService,
+	codeBuddyCheckinRunner *CodeBuddyCheckinRunnerService,
 	cfg *config.Config,
 ) *ScheduledTestRunnerService {
-	svc := NewScheduledTestRunnerService(planRepo, scheduledSvc, accountTestSvc, rateLimitSvc, cfg)
+	svc := NewScheduledTestRunnerService(planRepo, scheduledSvc, accountTestSvc, rateLimitSvc, codeBuddyCheckinRunner, cfg)
 	svc.Start()
+	return svc
+}
+
+// ProvideCodeBuddyCheckinRunnerService creates the CodeBuddy check-in executor.
+// Scheduling is owned by ScheduledTestRunnerService plans; this service is also
+// used by the admin manual check-in endpoint.
+func ProvideCodeBuddyCheckinRunnerService(admin AdminService, cfg *config.Config, leaderLock LeaderLockCache) *CodeBuddyCheckinRunnerService {
+	svc := NewCodeBuddyCheckinRunnerService(admin, NewCodeBuddyOAuthService(admin), cfg)
+	svc.SetLeaderLock(leaderLock)
 	return svc
 }
 
@@ -872,6 +884,7 @@ var ProviderSet = wire.NewSet(
 	ProvideSchedulerSnapshotService,
 	NewIdentityService,
 	NewCRSSyncService,
+	NewCodeBuddyOAuthService,
 	ProvideUpdateService,
 	ProvideTokenRefreshService,
 	wire.Bind(new(GrokOAuthReconciler), new(*TokenRefreshService)),
@@ -896,6 +909,7 @@ var ProviderSet = wire.NewSet(
 	ProvideIdempotencyCleanupService,
 	ProvideScheduledTestService,
 	ProvideScheduledTestRunnerService,
+	ProvideCodeBuddyCheckinRunnerService,
 	NewGroupCapacityService,
 	NewChannelService,
 	wire.Bind(new(ChannelCacheInvalidator), new(*ChannelService)),

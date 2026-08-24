@@ -42,6 +42,7 @@ func RegisterAdminRoutes(
 
 		// 账号管理
 		registerAccountRoutes(admin, h, stepUpAuth)
+		registerCodeBuddyRoutes(admin, h)
 
 		// 公告管理
 		registerAnnouncementRoutes(admin, h)
@@ -125,6 +126,15 @@ func RegisterAdminRoutes(
 		// 操作审计日志
 		registerAuditLogRoutes(admin, h, stepUpAuth)
 	}
+}
+
+func registerCodeBuddyRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	codebuddy := admin.Group("/codebuddy")
+	codebuddy.POST("/oauth/start", h.Admin.Account.CodeBuddyOAuthStart)
+	codebuddy.POST("/oauth/poll", h.Admin.Account.CodeBuddyOAuthPoll)
+	codebuddy.GET("/models", h.Admin.Account.CodeBuddyModels)
+	codebuddy.POST("/accounts/:id/refresh", h.Admin.Account.CodeBuddyAccountRefresh)
+	codebuddy.POST("/accounts/:id/checkin", h.Admin.Account.CodeBuddyCheckin)
 }
 
 func registerPromptAuditRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
@@ -359,6 +369,12 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 		accounts.POST("/upstream-usage-query/test", h.Admin.Account.TestUpstreamUsageQuery)
 		accounts.GET("/ollama-cloud-usage/settings", h.Admin.Account.GetOllamaCloudUsageSettings)
 		accounts.PUT("/ollama-cloud-usage/settings", h.Admin.Account.UpdateOllamaCloudUsageSettings)
+		// CodeBuddy OAuth is POST-init + browser authorization + polling. Keep
+		// these before /:id routes so "codebuddy" is never parsed as an ID.
+		accounts.POST("/codebuddy/oauth/start", h.Admin.Account.CodeBuddyOAuthStart)
+		accounts.POST("/codebuddy/oauth/poll", h.Admin.Account.CodeBuddyOAuthPoll)
+		accounts.GET("/codebuddy/models", h.Admin.Account.CodeBuddyModels)
+		accounts.POST("/:id/codebuddy/models/sync", h.Admin.Account.SyncUpstreamModels)
 		accounts.GET("/:id", h.Admin.Account.GetByID)
 		accounts.POST("", h.Admin.Account.Create)
 		accounts.POST("/:id/duplicate", h.Admin.Account.Duplicate)
@@ -378,6 +394,8 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 		accounts.POST("/:id/test", h.Admin.Account.Test)
 		accounts.POST("/:id/recover-state", h.Admin.Account.RecoverState)
 		accounts.POST("/:id/refresh", h.Admin.Account.Refresh)
+		accounts.POST("/:id/codebuddy/refresh", h.Admin.Account.CodeBuddyAccountRefresh)
+		accounts.POST("/:id/codebuddy/checkin", h.Admin.Account.CodeBuddyCheckin)
 		accounts.POST("/:id/apply-oauth-credentials", h.Admin.Account.ApplyOAuthCredentials)
 		accounts.POST("/:id/set-privacy", h.Admin.Account.SetPrivacy)
 		accounts.POST("/:id/refresh-tier", h.Admin.Account.RefreshTier)

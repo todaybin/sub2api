@@ -1133,6 +1133,10 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 		writeGrokModelsList(c, xai.DefaultModelIDs())
 		return
 	}
+	if platform == service.PlatformCodeBuddy {
+		writeModelsList(c, platform, defaultModelIDsForPlatform(platform))
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"object": "list",
@@ -1147,7 +1151,7 @@ func (h *GatewayHandler) compositeAvailableModels(ctx context.Context, groupID *
 	seen := make(map[string]struct{})
 	models := make([]string, 0)
 	schedulablePlatforms := h.gatewayService.GetSchedulablePlatforms(ctx, groupID)
-	for _, platform := range []string{service.PlatformAnthropic, service.PlatformGemini, service.PlatformOpenAI, service.PlatformAntigravity, service.PlatformGrok, service.PlatformKimi, service.PlatformZhipu, service.PlatformDeepseek} {
+	for _, platform := range []string{service.PlatformAnthropic, service.PlatformGemini, service.PlatformOpenAI, service.PlatformAntigravity, service.PlatformGrok, service.PlatformKimi, service.PlatformZhipu, service.PlatformDeepseek, service.PlatformCodeBuddy} {
 		platformModels := h.gatewayService.GetAvailableModels(ctx, groupID, platform)
 		if len(platformModels) == 0 {
 			// CN 供应商没有静态默认模型列表（defaultModelIDsForPlatform 的
@@ -1176,6 +1180,14 @@ func writeModelsList(c *gin.Context, platform string, modelIDs []string) {
 		writeGrokModelsList(c, modelIDs)
 		return
 	}
+	if platform == service.PlatformCodeBuddy || platform == service.PlatformOpenAI {
+		owner := "openai"
+		if platform == service.PlatformCodeBuddy {
+			owner = "codebuddy"
+		}
+		writeOpenAIModelsListWithOwner(c, modelIDs, owner)
+		return
+	}
 	models := make([]claude.Model, 0, len(modelIDs))
 	for _, modelID := range modelIDs {
 		models = append(models, claude.Model{
@@ -1192,8 +1204,12 @@ func writeModelsList(c *gin.Context, platform string, modelIDs []string) {
 }
 
 func writeCustomModelsList(c *gin.Context, platform string, modelIDs []string) {
-	if platform == service.PlatformOpenAI {
-		writeOpenAIModelsList(c, modelIDs)
+	if platform == service.PlatformOpenAI || platform == service.PlatformCodeBuddy {
+		owner := "openai"
+		if platform == service.PlatformCodeBuddy {
+			owner = "codebuddy"
+		}
+		writeOpenAIModelsListWithOwner(c, modelIDs, owner)
 		return
 	}
 	writeModelsList(c, platform, modelIDs)
@@ -1259,6 +1275,10 @@ func grokModelSupportsConfigurableReasoning(modelID string) bool {
 }
 
 func writeOpenAIModelsList(c *gin.Context, modelIDs []string) {
+	writeOpenAIModelsListWithOwner(c, modelIDs, "openai")
+}
+
+func writeOpenAIModelsListWithOwner(c *gin.Context, modelIDs []string, owner string) {
 	defaultsByID := make(map[string]openai.Model, len(openai.DefaultModels))
 	for _, model := range openai.DefaultModels {
 		defaultsByID[model.ID] = model
@@ -1267,6 +1287,9 @@ func writeOpenAIModelsList(c *gin.Context, modelIDs []string) {
 	models := make([]openai.Model, 0, len(modelIDs))
 	for _, modelID := range modelIDs {
 		if model, ok := defaultsByID[modelID]; ok {
+			if owner != "" {
+				model.OwnedBy = owner
+			}
 			models = append(models, model)
 			continue
 		}
@@ -1274,7 +1297,7 @@ func writeOpenAIModelsList(c *gin.Context, modelIDs []string) {
 			ID:          modelID,
 			Object:      "model",
 			Created:     1704067200,
-			OwnedBy:     "openai",
+			OwnedBy:     owner,
 			Type:        "model",
 			DisplayName: modelID,
 		})
@@ -1371,10 +1394,12 @@ func defaultModelIDsForPlatform(platform string) []string {
 		return mergeModelIDs(ids, nil)
 	case service.PlatformGrok:
 		return xai.DefaultModelIDs()
+	case service.PlatformCodeBuddy:
+		return append([]string(nil), service.CodeBuddyModels...)
 	case service.PlatformComposite:
 		ids := make([]string, 0)
 		seen := make(map[string]struct{})
-		for _, concretePlatform := range []string{service.PlatformAnthropic, service.PlatformGemini, service.PlatformOpenAI, service.PlatformAntigravity, service.PlatformGrok, service.PlatformKimi, service.PlatformZhipu, service.PlatformDeepseek} {
+		for _, concretePlatform := range []string{service.PlatformAnthropic, service.PlatformGemini, service.PlatformOpenAI, service.PlatformAntigravity, service.PlatformGrok, service.PlatformKimi, service.PlatformZhipu, service.PlatformDeepseek, service.PlatformCodeBuddy} {
 			for _, id := range defaultModelIDsForPlatform(concretePlatform) {
 				if _, ok := seen[id]; ok {
 					continue

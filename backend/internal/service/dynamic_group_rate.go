@@ -122,6 +122,25 @@ func (s *DynamicGroupRateService) ReconcileGroup(ctx context.Context, groupID in
 		return nil
 	}
 	now := s.now().UTC()
+	// CodeBuddy's provider cost is resolved per request from the selected
+	// model's credits multiplier. It is deliberately independent of the
+	// account-level upstream billing probe used by API-key providers. A
+	// CodeBuddy dynamic group therefore only applies its configured markup to
+	// the local base rate; the request-level provider multiplier is applied by
+	// gateway usage billing and must not be folded into the group rate.
+	if group.Platform == PlatformCodeBuddy {
+		source := 1.0
+		target := dynamicGroupRateTarget(source, group.DynamicRateMarkupPercent)
+		evaluation := DynamicGroupRateEvaluation{
+			SourceMultiplier: &source,
+			Status:           DynamicRateStatusReady,
+			EvaluatedAt:      now,
+		}
+		if apply, _ := dynamicGroupRateDecision(group.RateMultiplier, target, true); apply {
+			evaluation.TargetMultiplier = &target
+		}
+		return s.apply(ctx, group, evaluation)
+	}
 	settings := defaultUpstreamBillingProbeSettings()
 	if s.settingService != nil {
 		settings, err = s.settingService.GetUpstreamBillingProbeSettings(ctx)
