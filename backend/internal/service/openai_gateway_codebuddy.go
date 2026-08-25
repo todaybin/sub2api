@@ -105,7 +105,7 @@ func (s *OpenAIGatewayService) bufferCodeBuddyChatCompletions(
 	serviceTier *string,
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
-	response, state, err := s.collectCodeBuddyChatCompletions(resp, originalModel, upstreamModel, startTime)
+	response, state, err := s.collectCodeBuddyChatCompletions(c, resp, originalModel, upstreamModel, startTime)
 	if err != nil {
 		return nil, err
 	}
@@ -125,6 +125,7 @@ func (s *OpenAIGatewayService) bufferCodeBuddyChatCompletions(
 }
 
 func (s *OpenAIGatewayService) collectCodeBuddyChatCompletions(
+	c *gin.Context,
 	resp *http.Response,
 	originalModel string,
 	upstreamModel string,
@@ -143,7 +144,7 @@ func (s *OpenAIGatewayService) collectCodeBuddyChatCompletions(
 	var responseID string
 	var responseModel string
 	var created int64
-	state := s.scanCCStream(resp, "codebuddy chat_completions", resp.Header.Get("x-request-id"), startTime, func(chunk *apicompat.ChatCompletionsChunk) {
+	state := s.scanCCStream(c, resp, "codebuddy chat_completions", resp.Header.Get("x-request-id"), startTime, func(chunk *apicompat.ChatCompletionsChunk) {
 		if responseID == "" {
 			responseID = chunk.ID
 		}

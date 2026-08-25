@@ -188,7 +188,7 @@ func (s *OpenAIGatewayService) bufferCodeBuddyChatCompletionsAsAnthropic(
 	serviceTier *string,
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
-	ccResp, state, err := s.collectCodeBuddyChatCompletions(resp, originalModel, upstreamModel, startTime)
+	ccResp, state, err := s.collectCodeBuddyChatCompletions(c, resp, originalModel, upstreamModel, startTime)
 	if err != nil {
 		return nil, err
 	}
