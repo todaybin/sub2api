@@ -471,6 +471,9 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 		return nil, err
 	}
 	accountExtra, err = NormalizeUpstreamUsageQueryExtra(accountExtra)
+	if err != nil {
+		return nil, err
+	}
 	accountExtra, err = normalizeOpenAIAutoResetCreditExtra(input.Platform, input.Type, false, accountExtra)
 	if err != nil {
 		return nil, err
@@ -571,6 +574,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 			return nil, err
 		}
 		normalizedExtra, err = NormalizeUpstreamUsageQueryExtra(normalizedExtra)
+		if err != nil {
+			return nil, err
+		}
 		effectiveType := account.Type
 		if input.Type != "" {
 			effectiveType = input.Type

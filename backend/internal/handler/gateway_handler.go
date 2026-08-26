@@ -1274,10 +1274,6 @@ func grokModelSupportsConfigurableReasoning(modelID string) bool {
 	}
 }
 
-func writeOpenAIModelsList(c *gin.Context, modelIDs []string) {
-	writeOpenAIModelsListWithOwner(c, modelIDs, "openai")
-}
-
 func writeOpenAIModelsListWithOwner(c *gin.Context, modelIDs []string, owner string) {
 	defaultsByID := make(map[string]openai.Model, len(openai.DefaultModels))
 	for _, model := range openai.DefaultModels {

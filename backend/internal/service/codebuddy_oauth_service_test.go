@@ -200,10 +200,10 @@ func TestCodeBuddyCatalogFetchUsesPluginUAAndEnterpriseEndpoint(t *testing.T) {
 	var enterpriseHeaders http.Header
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.URL.Path == "/v2/plugin/accounts":
+		switch r.URL.Path {
+		case "/v2/plugin/accounts":
 			_, _ = w.Write([]byte(`{"data":{"accounts":[{"pluginEnabled":true,"lastLogin":true,"uid":"u-1","enterpriseId":"ent-1"}]}}`))
-		case r.URL.Path == "/console/enterprises/ent-1/config/models":
+		case "/console/enterprises/ent-1/config/models":
 			enterpriseHeaders = r.Header.Clone()
 			_, _ = w.Write([]byte(`[{"id":"glm-5.2","name":"GLM-5.2","credits":"x0.79 credits"}]`))
 		default:

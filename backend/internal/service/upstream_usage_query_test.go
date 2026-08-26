@@ -48,7 +48,10 @@ func TestProtectUpstreamUsageQuerySecrets(t *testing.T) {
 	}
 	credentials := map[string]any{}
 	require.NoError(t, ProtectUpstreamUsageQuerySecrets(extra, credentials))
-	require.Equal(t, "secret", credentials[UpstreamBillingUsageQuerySecretsKey].(map[string]any)["token"])
-	config := extra[UpstreamBillingUsageQueryConfigExtraKey].(*UpstreamUsageQueryConfig)
+	secrets, ok := credentials[UpstreamBillingUsageQuerySecretsKey].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "secret", secrets["token"])
+	config, ok := extra[UpstreamBillingUsageQueryConfigExtraKey].(*UpstreamUsageQueryConfig)
+	require.True(t, ok)
 	require.Empty(t, config.Variables["token"].Value)
 }

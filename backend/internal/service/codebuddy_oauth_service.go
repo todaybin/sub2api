@@ -993,11 +993,6 @@ func codeBuddyPluginAccountFromValue(value any) any {
 	return value
 }
 
-func (s *CodeBuddyOAuthService) fetchModels(ctx context.Context, sess *codeBuddySession, token, uid, enterpriseID string) []string {
-	models, _, _ := s.fetchModelCatalog(ctx, sess, token, uid, enterpriseID)
-	return models
-}
-
 func uniqueStrings(values []string) []string {
 	seen := make(map[string]struct{}, len(values))
 	result := make([]string, 0, len(values))
@@ -1193,10 +1188,6 @@ func (s *CodeBuddyOAuthService) ModelsWithCatalog(ctx context.Context, account *
 	if account == nil || account.Platform != PlatformCodeBuddy {
 		return nil, nil, errors.New("codebuddy account required")
 	}
-	endpoint := strings.TrimSpace(account.GetCredential("base_url"))
-	if endpoint == "" {
-		endpoint = CodeBuddyDomesticEndpoint
-	}
 	region := CodeBuddyRegionForAccount(account)
 	// The selected account region is authoritative. Do not let a stale or
 	// manually edited base_url redirect a domestic account to the global host.
@@ -1258,10 +1249,6 @@ func (s *CodeBuddyOAuthService) ModelsWithCatalog(ctx context.Context, account *
 func (s *CodeBuddyOAuthService) SyncModelsWithCatalog(ctx context.Context, account *Account) ([]string, []CodeBuddyModel, error) {
 	if account == nil || account.Platform != PlatformCodeBuddy {
 		return nil, nil, errors.New("codebuddy account required")
-	}
-	endpoint := strings.TrimSpace(account.GetCredential("base_url"))
-	if endpoint == "" {
-		endpoint = CodeBuddyDomesticEndpoint
 	}
 	token := strings.TrimSpace(account.GetCredential("access_token"))
 	if token == "" {
