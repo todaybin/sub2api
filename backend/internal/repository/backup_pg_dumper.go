@@ -351,7 +351,7 @@ func isRegularFile(path string) bool {
 	if path == "" {
 		return false
 	}
-	info, err := os.Stat(path)
+	info, err := os.Stat(path) //nolint:gosec // path is an internal tool path validated by the caller.
 	return err == nil && !info.IsDir()
 }
 

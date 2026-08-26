@@ -11,22 +11,22 @@ import (
 )
 
 type codeBuddyOAuthStartRequest struct {
-	AccountID    int64             `json:"account_id"`
-	Region       string            `json:"region" binding:"required"`
-	Name         string            `json:"name"`
-	Notes        string            `json:"notes"`
-	ProxyID      *int64            `json:"proxy_id"`
-	GroupIDs     []int64           `json:"group_ids"`
-	Concurrency  int               `json:"concurrency"`
-	LoadFactor   *int              `json:"load_factor"`
-	Priority     int               `json:"priority"`
-	Rate         *float64          `json:"rate_multiplier"`
-	ExpiresAt    *int64            `json:"expires_at"`
-	AutoPause    *bool             `json:"auto_pause_on_expired"`
-	ModelMapping map[string]string `json:"model_mapping"`
-	ReferenceCostUnits float64 `json:"reference_cost_units"`
-	ReferenceCredits float64 `json:"reference_credits"`
-	TokensPerCredit float64 `json:"tokens_per_credit"`
+	AccountID          int64             `json:"account_id"`
+	Region             string            `json:"region" binding:"required"`
+	Name               string            `json:"name"`
+	Notes              string            `json:"notes"`
+	ProxyID            *int64            `json:"proxy_id"`
+	GroupIDs           []int64           `json:"group_ids"`
+	Concurrency        int               `json:"concurrency"`
+	LoadFactor         *int              `json:"load_factor"`
+	Priority           int               `json:"priority"`
+	Rate               *float64          `json:"rate_multiplier"`
+	ExpiresAt          *int64            `json:"expires_at"`
+	AutoPause          *bool             `json:"auto_pause_on_expired"`
+	ModelMapping       map[string]string `json:"model_mapping"`
+	ReferenceCostUnits float64           `json:"reference_cost_units"`
+	ReferenceCredits   float64           `json:"reference_credits"`
+	TokensPerCredit    float64           `json:"tokens_per_credit"`
 }
 
 // CodeBuddyOAuthStart initializes the upstream authorization state. The

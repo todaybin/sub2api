@@ -51,10 +51,14 @@ func CodeBuddyBillingSettingsForAccount(account *Account) CodeBuddyBillingSettin
 	}
 	parse := func(key string, fallback float64) float64 {
 		raw, ok := account.Credentials[key]
-	if !ok { return fallback }
-	text, ok := codeBuddyStringValue(raw)
-	if !ok { return fallback }
-	value, parseErr := strconv.ParseFloat(strings.TrimSpace(text), 64)
+		if !ok {
+			return fallback
+		}
+		text, ok := codeBuddyStringValue(raw)
+		if !ok {
+			return fallback
+		}
+		value, parseErr := strconv.ParseFloat(strings.TrimSpace(text), 64)
 		if parseErr != nil || value <= 0 || math.IsNaN(value) || math.IsInf(value, 0) {
 			return fallback
 		}

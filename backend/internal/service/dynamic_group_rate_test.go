@@ -147,7 +147,11 @@ func TestDynamicGroupRateReconcileFreezesIncompleteDecreaseButAllowsIncrease(t *
 	valid := dynamicRateTestAccount(1, now, "balance", 0.8)
 	stale := dynamicRateTestAccount(2, now, "balance", 0.6)
 	past := now.Add(-time.Minute)
-	stale.Extra[UpstreamBillingProbeExtraKey].(*UpstreamBillingProbeSnapshot).FreshUntil = &past
+	snapshot, ok := stale.Extra[UpstreamBillingProbeExtraKey].(*UpstreamBillingProbeSnapshot)
+	if !ok {
+		t.Fatal("expected an upstream billing snapshot")
+	}
+	snapshot.FreshUntil = &past
 
 	decreaseGroup := &Group{ID: 7, Status: StatusActive, RateMode: GroupRateModeDynamic, RateMultiplier: 1.2, DynamicRateMarkupPercent: 20}
 	service, repo, _ := newDynamicRateTestService(now, decreaseGroup, valid, stale)

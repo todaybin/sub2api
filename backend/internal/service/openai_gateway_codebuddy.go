@@ -164,12 +164,12 @@ func (s *OpenAIGatewayService) collectCodeBuddyChatCompletions(
 				choice.role = deltaChoice.Delta.Role
 			}
 			if deltaChoice.Delta.Content != nil {
-				choice.content.WriteString(*deltaChoice.Delta.Content)
+				_, _ = choice.content.WriteString(*deltaChoice.Delta.Content)
 			}
 			if deltaChoice.Delta.ReasoningContent != nil {
-				choice.reasoning.WriteString(*deltaChoice.Delta.ReasoningContent)
+				_, _ = choice.reasoning.WriteString(*deltaChoice.Delta.ReasoningContent)
 			} else if deltaChoice.Delta.Reasoning != nil {
-				choice.reasoning.WriteString(*deltaChoice.Delta.Reasoning)
+				_, _ = choice.reasoning.WriteString(*deltaChoice.Delta.Reasoning)
 			}
 			if deltaChoice.FinishReason != nil {
 				choice.finishReason = *deltaChoice.FinishReason
