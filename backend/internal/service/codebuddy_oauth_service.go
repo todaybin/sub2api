@@ -1191,7 +1191,7 @@ func (s *CodeBuddyOAuthService) ModelsWithCatalog(ctx context.Context, account *
 	region := CodeBuddyRegionForAccount(account)
 	// The selected account region is authoritative. Do not let a stale or
 	// manually edited base_url redirect a domestic account to the global host.
-	endpoint, _ = CodeBuddyEndpointForRegion(region)
+	endpoint, _ := CodeBuddyEndpointForRegion(region)
 	token := strings.TrimSpace(account.GetCredential("access_token"))
 	if token == "" {
 		if catalog := CodeBuddyStoredModelCatalog(account); len(catalog) > 0 {
@@ -1255,7 +1255,7 @@ func (s *CodeBuddyOAuthService) SyncModelsWithCatalog(ctx context.Context, accou
 		return nil, nil, errors.New("codebuddy access token missing; authorize the account before syncing upstream models")
 	}
 	region := CodeBuddyRegionForAccount(account)
-	endpoint, _ = CodeBuddyEndpointForRegion(region)
+	endpoint, _ := CodeBuddyEndpointForRegion(region)
 	sess := &codeBuddySession{Endpoint: endpoint, Region: region, Domain: account.GetCredential("domain"), ProxyID: account.ProxyID}
 	result := s.fetchModelCatalogDetailed(ctx, sess, token, account.GetCredential("uid"), account.GetCredential("enterprise_id"))
 	if result.uid != "" || result.enterprise != "" {
