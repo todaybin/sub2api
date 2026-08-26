@@ -374,8 +374,8 @@ func TestSchedulerFullRebuildFreshActivePreparesEveryTokenBeforeFirstDB(t *testi
 
 	require.NoError(t, svc.rebuildFullSnapshot(context.Background(), "test"))
 	require.Equal(t, capturesAtFirstDB, cache.captureAttemptCount())
-	require.Equal(t, 21, accounts.callCount())
-	require.Equal(t, 11, accounts.groupCallCount(groupID))
+	require.Equal(t, 23, accounts.callCount())
+	require.Equal(t, 12, accounts.groupCallCount(groupID))
 	_, historicalPublished := cache.counts(historical)
 	require.Equal(t, 1, historicalPublished)
 	activeCalls, fallbackCalls, freshCalls := groups.stats()
@@ -398,7 +398,7 @@ func TestSchedulerFullRebuildOrdinaryCaptureErrorReturnsBeforeFirstDB(t *testing
 
 	err := svc.rebuildFullSnapshot(context.Background(), "test")
 	require.ErrorIs(t, err, wantErr)
-	require.Equal(t, 20, cache.captureAttemptCount(), "all canonical and ordinary captures must be attempted before returning")
+	require.Equal(t, 22, cache.captureAttemptCount(), "all canonical and ordinary captures must be attempted before returning")
 	require.Zero(t, accounts.callCount())
 	require.Zero(t, cache.totalSetAttempts())
 }
@@ -537,8 +537,8 @@ func TestSchedulerFullRebuildPartialLifecycleFailureReturnsBeforeDBAndRetries(t 
 	require.NoError(t, svc.triggerFullRebuild("retry"))
 	_, _, freshCalls = groups.stats()
 	require.Equal(t, []int64{1, 2, 2, 3}, freshCalls)
-	require.Equal(t, 60, len(cache.retiredBuckets()))
-	require.Equal(t, 10, accounts.callCount())
+	require.Equal(t, 63, len(cache.retiredBuckets()))
+	require.Equal(t, 11, accounts.callCount())
 	require.Empty(t, cache.tokens())
 }
 
@@ -561,8 +561,8 @@ func TestSchedulerFullRebuildActiveTombstoneLazyRecoveryDiscardsPartialCaptureTa
 		capturesAtFirstDB = cache.captureAttemptCount()
 		held, reopenCount := cache.leaseHeldAndTokenCount()
 		require.False(t, held)
-		require.Equal(t, 18, reopenCount)
-		require.Equal(t, 25, capturesAtFirstDB)
+	require.Equal(t, 20, reopenCount)
+		require.Equal(t, 27, capturesAtFirstDB)
 	}
 	svc := newFullRebuildLifecycleService(cache, nil, accounts, groups, config.RunModeStandard)
 
