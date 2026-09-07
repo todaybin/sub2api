@@ -177,6 +177,7 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsAnthropic(
 
 	return &OpenAIForwardResult{
 		RequestID:                   requestID,
+		UpstreamHeaders:             resp.Header,
 		Usage:                       usage,
 		Model:                       originalModel,
 		BillingModel:                billingModel,
@@ -264,6 +265,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 		// (mirrors forwardResponsesViaRawChatCompletions).
 		return &OpenAIForwardResult{
 			RequestID:                   requestID,
+			UpstreamHeaders:             resp.Header,
 			Usage:                       usage,
 			Model:                       originalModel,
 			BillingModel:                billingModel,
@@ -300,6 +302,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 
 	return &OpenAIForwardResult{
 		RequestID:                   requestID,
+		UpstreamHeaders:             resp.Header,
 		Usage:                       usage,
 		Model:                       originalModel,
 		BillingModel:                billingModel,
