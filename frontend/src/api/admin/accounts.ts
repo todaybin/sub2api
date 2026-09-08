@@ -246,7 +246,7 @@ export interface CodeBuddyModelCatalogEntry {
   region?: string
 }
 
-export async function getCodeBuddyModels(accountId?: number, region?: 'domestic' | 'international'): Promise<{ models: string[]; model_catalog?: CodeBuddyModelCatalogEntry[]; default_model: string; account_id?: number; region?: string; endpoint?: string; source?: 'upstream' | 'stored' | 'fallback' }> {
+export async function getCodeBuddyModels(accountId?: number, region?: 'domestic' | 'international'): Promise<{ models: string[]; model_catalog?: CodeBuddyModelCatalogEntry[]; default_model: string; account_id?: number; region?: string; endpoint?: string; source?: 'upstream' | 'stored' | 'fallback'; warnings?: UpstreamModelSyncWarning[] }> {
   const { data } = await apiClient.get<{ models: string[]; model_catalog?: CodeBuddyModelCatalogEntry[]; default_model: string; account_id?: number; region?: string; endpoint?: string; source?: 'upstream' | 'stored' | 'fallback' }>('/admin/accounts/codebuddy/models', {
     params: accountId ? { account_id: accountId, ...(region ? { region } : {}) } : region ? { region } : undefined
   })
