@@ -813,10 +813,10 @@
           <div class="mb-3 flex items-center justify-between gap-3">
             <div>
               <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
-                {{ t("admin.groups.modelAllowlist.title") }}
+                {{ t("admin.groups.modelAllowlist.title", { endpoint: modelsListEndpoint(createForm.platform) }) }}
               </label>
               <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {{ t("admin.groups.modelAllowlist.hint") }}
+                {{ t("admin.groups.modelAllowlist.hint", { endpoint: modelsListEndpoint(createForm.platform) }) }}
               </p>
             </div>
             <Toggle v-model="createModelAllowlistState.enabled" />
@@ -2468,10 +2468,10 @@
           <div class="mb-3 flex items-center justify-between gap-3">
             <div>
               <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
-                {{ t("admin.groups.modelAllowlist.title") }}
+                {{ t("admin.groups.modelAllowlist.title", { endpoint: modelsListEndpoint(editForm.platform) }) }}
               </label>
               <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {{ t("admin.groups.modelAllowlist.hint") }}
+                {{ t("admin.groups.modelAllowlist.hint", { endpoint: modelsListEndpoint(editForm.platform) }) }}
               </p>
             </div>
             <Toggle v-model="editModelAllowlistState.enabled" />
@@ -4945,6 +4945,8 @@ const createCodexManifestDefaults = (): CodexModelsManifestConfig => ({
 });
 const editCodexManifestConfig = ref<CodexModelsManifestConfig>(createCodexManifestDefaults());
 const editCodexManifestAccountNames = ref<Record<number, string>>({});
+const modelsListEndpoint = (platform: string) =>
+  platform === "gemini" ? "/v1beta/models" : "/v1/models";
 const modelAllowlistCandidatesTracker = createModelAllowlistCandidatesTracker();
 const createModelAllowlistSelectedCount = computed(
   () => createModelAllowlistState.items.filter((item) => item.selected).length,
