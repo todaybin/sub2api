@@ -451,6 +451,13 @@ export default {
       title: '用户管理',
       description: '管理用户账户和权限',
       createUser: '创建用户',
+      bulkDelete: {
+        action: '批量删除（{count}）',
+        title: '删除已选用户',
+        confirm: '确定删除已选的 {count} 个用户吗？此操作无法撤销。管理员账号无法删除。',
+        success: '已删除 {count} 个用户',
+        failed: '{count} 个用户删除失败，已保留选中，可重试。'
+      },
       bulkLimits: {
         action: '批量设置限制（{count}）',
         title: '批量设置用户限制',
@@ -926,6 +933,7 @@ export default {
         kimi: 'Kimi',
         zhipu: 'Zhipu GLM',
         deepseek: 'DeepSeek',
+        minimax: 'MiniMax',
         codebuddy: 'CodeBuddy',
         composite: 'Composite',
       },
