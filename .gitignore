@@ -141,6 +141,7 @@ docs/*
 !docs/CODEBUDDY_ACCOUNT_INTEGRATION_REPORT.md
 !docs/BATCH_IMAGE_MVP.md
 !docs/COMPOSITE_GROUPS.md
+!docs/SMART_ROUTING.md
 !docs/PLUGIN_DEVELOPMENT.md
 !docs/channel-monitor-v2-safe-defaults.md
 !docs/codex-credits.md

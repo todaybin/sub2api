@@ -156,6 +156,19 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		return errors.New("openai usage input is nil")
 	}
 	result := input.Result
+	input.APIKey = input.APIKey.BillingSnapshotForAccount(input.Account)
+	if input.APIKey != nil && input.APIKey.RoutingMode == "smart" {
+		if input.Account == nil || input.APIKey.GroupID == nil || input.APIKey.Group == nil || input.Account.RoutingGroupID != *input.APIKey.GroupID {
+			return errors.New("smart billing requires the selected request group")
+		}
+		if input.APIKey.Group.IsSubscriptionType() && (s.cfg == nil || s.cfg.RunMode != config.RunModeSimple) {
+			if input.Subscription == nil || input.Subscription.GroupID != *input.APIKey.GroupID || input.Subscription.UserID != input.APIKey.UserID {
+				return errors.New("smart billing requires the admitted subscription for the selected group")
+			}
+		} else {
+			input.Subscription = nil
+		}
+	}
 	if result == nil {
 		return errors.New("openai usage result is nil")
 	}

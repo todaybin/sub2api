@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/gin-gonic/gin"
@@ -161,6 +162,11 @@ func (s *OpenAIGatewayService) GenerateExplicitSessionHash(c *gin.Context, body 
 // sticky seed with the client-requested model so switching models does not
 // inherit a stale account binding (grok2api affinityKey pattern).
 func (s *OpenAIGatewayService) GenerateSessionHash(c *gin.Context, body []byte) string {
+	if c != nil && c.Request != nil {
+		if hash := SmartSessionHash(c.Request.Context()); hash != "" {
+			return hash
+		}
+	}
 	if c == nil {
 		return ""
 	}
@@ -255,6 +261,12 @@ func (s *OpenAIGatewayService) SelectAccountForModel(ctx context.Context, groupI
 // SelectAccountForModelWithExclusions selects an account supporting the requested model while excluding specified accounts.
 // SelectAccountForModelWithExclusions 选择支持指定模型的账号，同时排除指定的账号。
 func (s *OpenAIGatewayService) SelectAccountForModelWithExclusions(ctx context.Context, groupID *int64, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}) (*Account, error) {
+	if hash := SmartSessionHash(ctx); hash != "" {
+		sessionHash = hash
+	}
+	if groupID == nil && hasSmartRouting(ctx) {
+		return nil, ErrNoAvailableAccounts
+	}
 	return s.selectAccountForModelWithExclusions(s.withOpenAIQuotaAutoPauseContext(ctx), groupID, PlatformOpenAI, sessionHash, requestedModel, excludedIDs, false, 0, "", false)
 }
 
@@ -1131,11 +1143,29 @@ func (s *OpenAIGatewayService) isBetterAccount(candidate, current *Account) bool
 
 // SelectAccountWithLoadAwareness selects an account with load-awareness and wait plan.
 func (s *OpenAIGatewayService) SelectAccountWithLoadAwareness(ctx context.Context, groupID *int64, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}) (*AccountSelectionResult, error) {
+	if hash := SmartSessionHash(ctx); hash != "" {
+		sessionHash = hash
+	}
+	if groupID == nil && hasSmartRouting(ctx) {
+		return nil, ErrNoAvailableAccounts
+	}
 	ctx = s.withOpenAIQuotaAutoPauseContext(ctx)
 	ctx = s.withOpenAIGroupPrivacyRequirement(ctx, groupID)
 	// 分组利润控制：legacy 公共入口同样装门，保证不经
 	// selectAccountWithScheduler 的调用方也无法绕过利润准入。
 	ctx = s.withOpenAIProfitControlGate(ctx, groupID)
+	if selection := takeSmartSelection(ctx, groupID, requestedModel, excludedIDs); selection != nil {
+		checker := &defaultOpenAIAccountScheduler{service: s, stats: newOpenAIAccountRuntimeStats()}
+		if !selection.Account.IsSchedulable() || !openAIStickyAccountMatchesGroup(selection.Account, groupID) || !checker.isAccountRequestCompatible(ctx, selection.Account, OpenAIAccountScheduleRequest{GroupID: groupID, Platform: PlatformOpenAI, RequestedModel: requestedModel, ExcludedIDs: excludedIDs, RequirePrivacySet: s.openAIGroupRequiresPrivacySet(ctx, groupID)}) {
+			releaseSmartSelection(selection)
+			return nil, ErrNoAvailableAccounts
+		}
+		return selection, nil
+	}
+	if smartSelectionPinned(ctx) {
+		return nil, ErrNoAvailableAccounts
+	}
+
 	return s.selectAccountWithLoadAwareness(ctx, groupID, PlatformOpenAI, sessionHash, requestedModel, excludedIDs, false, "", true)
 }
 
@@ -1742,6 +1772,13 @@ func (s *OpenAIGatewayService) newSelectionResult(ctx context.Context, account *
 	hydrated, err := s.hydrateSelectedAccount(ctx, account)
 	if err != nil {
 		return nil, err
+	}
+	if hydrated != nil {
+		if groupID, ok := ctx.Value(ctxkey.SelectedGroupID).(int64); ok {
+			copy := *hydrated
+			copy.RoutingGroupID = groupID
+			hydrated = &copy
+		}
 	}
 	return attachSelectionProfitGate(ctx, &AccountSelectionResult{
 		Account:     hydrated,

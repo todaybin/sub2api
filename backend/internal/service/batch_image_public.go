@@ -637,7 +637,7 @@ func (s *BatchImagePublicService) ListModels(ctx context.Context, owner BatchIma
 		}
 		for i := range accounts {
 			account := accounts[i]
-			if !account.IsSchedulable() || !provider.SupportsAccount(&account) {
+			if !account.IsActive() || !account.Schedulable || !provider.SupportsAccount(&account) {
 				continue
 			}
 			for _, model := range batchImageModelsFromAccountMapping(&account) {
@@ -935,6 +935,19 @@ func maxBatchImageReferenceImagesForModel(model string) int {
 
 func (s *BatchImagePublicService) selectProviderAndAccount(ctx context.Context, owner BatchImageOwner, requestedProvider, model string) (BatchImageProvider, *Account, error) {
 	providers := batchImageProviderSelectionOrder(requestedProvider)
+	if selection := takeSmartSelection(ctx, owner.GroupID, model, nil); selection != nil {
+		defer releaseSmartSelection(selection)
+		account := selection.Account
+		if !openAIStickyAccountMatchesGroup(account, owner.GroupID) || !account.IsSchedulable() || !account.IsModelSupported(model) {
+			return nil, nil, ErrBatchImageNoAccountAvailable
+		}
+		for _, name := range providers {
+			if provider, ok := s.ProviderRegistry.Get(name); ok && provider.SupportsAccount(account) {
+				return provider, account, nil
+			}
+		}
+		return nil, nil, ErrBatchImageNoAccountAvailable
+	}
 	for _, providerName := range providers {
 		provider, ok := s.ProviderRegistry.Get(providerName)
 		if !ok || provider == nil {

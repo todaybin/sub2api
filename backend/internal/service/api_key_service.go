@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"html"
 	"math"
@@ -37,7 +38,8 @@ var (
 	// ErrAPIKeyExpired        = infraerrors.Forbidden("API_KEY_EXPIRED", "api key has expired")
 	ErrAPIKeyExpired = infraerrors.Forbidden("API_KEY_EXPIRED", "api key 已过期")
 	// ErrAPIKeyQuotaExhausted = infraerrors.TooManyRequests("API_KEY_QUOTA_EXHAUSTED", "api key quota exhausted")
-	ErrAPIKeyQuotaExhausted = infraerrors.TooManyRequests("API_KEY_QUOTA_EXHAUSTED", "api key 额度已用完")
+	ErrAPIKeyQuotaExhausted  = infraerrors.TooManyRequests("API_KEY_QUOTA_EXHAUSTED", "api key 额度已用完")
+	ErrSmartGroupUnavailable = infraerrors.Forbidden("SMART_GROUP_UNAVAILABLE", "no available smart group for this API key")
 
 	// Rate limit errors
 	ErrAPIKeyRateLimit5hExceeded = infraerrors.TooManyRequests("API_KEY_RATE_5H_EXCEEDED", "api key 5小时限额已用完")
@@ -68,6 +70,7 @@ type APIKeyUpdateFields struct {
 	Status    bool
 	Quota     bool
 	GroupID   bool
+	Routing   bool
 	ExpiresAt bool
 	// QuotaUsed 仅供"重置配额用量"路径声明；常规计费走 IncrementQuotaUsed。
 	QuotaUsed bool
@@ -212,11 +215,14 @@ type APIKeyAuthCacheInvalidator interface {
 
 // CreateAPIKeyRequest 创建API Key请求
 type CreateAPIKeyRequest struct {
-	Name        string   `json:"name"`
-	GroupID     *int64   `json:"group_id"`
-	CustomKey   *string  `json:"custom_key"`   // 可选的自定义key
-	IPWhitelist []string `json:"ip_whitelist"` // IP 白名单
-	IPBlacklist []string `json:"ip_blacklist"` // IP 黑名单
+	Name            string   `json:"name"`
+	GroupID         *int64   `json:"group_id"`
+	RoutingMode     string   `json:"routing_mode"`
+	RoutingStrategy string   `json:"routing_strategy"`
+	SmartGroupIDs   []int64  `json:"smart_group_ids"`
+	CustomKey       *string  `json:"custom_key"`   // 可选的自定义key
+	IPWhitelist     []string `json:"ip_whitelist"` // IP 白名单
+	IPBlacklist     []string `json:"ip_blacklist"` // IP 黑名单
 
 	// Quota fields
 	Quota         float64 `json:"quota"`           // Quota limit in USD (0 = unlimited)
@@ -230,11 +236,14 @@ type CreateAPIKeyRequest struct {
 
 // UpdateAPIKeyRequest 更新API Key请求
 type UpdateAPIKeyRequest struct {
-	Name        *string   `json:"name"`
-	GroupID     *int64    `json:"group_id"`
-	Status      *string   `json:"status"`
-	IPWhitelist *[]string `json:"ip_whitelist"` // IP 白名单（nil 不修改，空数组清空）
-	IPBlacklist *[]string `json:"ip_blacklist"` // IP 黑名单（nil 不修改，空数组清空）
+	Name            *string   `json:"name"`
+	GroupID         *int64    `json:"group_id"`
+	RoutingMode     *string   `json:"routing_mode"`
+	RoutingStrategy *string   `json:"routing_strategy"`
+	SmartGroupIDs   *[]int64  `json:"smart_group_ids"`
+	Status          *string   `json:"status"`
+	IPWhitelist     *[]string `json:"ip_whitelist"` // IP 白名单（nil 不修改，空数组清空）
+	IPBlacklist     *[]string `json:"ip_blacklist"` // IP 黑名单（nil 不修改，空数组清空）
 
 	// Quota fields
 	Quota           *float64   `json:"quota"`       // Quota limit in USD (nil = no change, 0 = unlimited)
@@ -265,6 +274,26 @@ func validateCreateAPIKeyRequest(req CreateAPIKeyRequest) error {
 	if req.ExpiresInDays != nil && *req.ExpiresInDays <= 0 {
 		return infraerrors.BadRequest("API_KEY_EXPIRY_INVALID", "expires_in_days must be greater than zero")
 	}
+	mode := strings.ToLower(strings.TrimSpace(req.RoutingMode))
+	if mode == "" {
+		mode = "single"
+	}
+	if mode != "single" && mode != "smart" {
+		return infraerrors.BadRequest("API_KEY_ROUTING_MODE_INVALID", "routing_mode must be single or smart")
+	}
+	strategy := strings.ToLower(strings.TrimSpace(req.RoutingStrategy))
+	if strategy == "" {
+		strategy = "auto"
+	}
+	if strategy != "auto" && strategy != "price" && strategy != "speed" && strategy != "random" {
+		return infraerrors.BadRequest("API_KEY_ROUTING_STRATEGY_INVALID", "routing_strategy must be auto, price, speed, or random")
+	}
+	if mode == "smart" && len(req.SmartGroupIDs) == 0 {
+		return infraerrors.BadRequest("API_KEY_SMART_GROUPS_REQUIRED", "smart API key requires at least one group")
+	}
+	if mode == "smart" && req.GroupID != nil {
+		return infraerrors.BadRequest("API_KEY_SMART_GROUP_CONFLICT", "smart API key cannot set group_id")
+	}
 	return nil
 }
 
@@ -274,6 +303,18 @@ func validateUpdateAPIKeyRequest(req UpdateAPIKeyRequest) error {
 			if err := validateAPIKeyLimit(*v); err != nil {
 				return err
 			}
+		}
+	}
+	if req.RoutingMode != nil {
+		mode := strings.ToLower(strings.TrimSpace(*req.RoutingMode))
+		if mode != "single" && mode != "smart" {
+			return infraerrors.BadRequest("API_KEY_ROUTING_MODE_INVALID", "routing_mode must be single or smart")
+		}
+	}
+	if req.RoutingStrategy != nil {
+		strategy := strings.ToLower(strings.TrimSpace(*req.RoutingStrategy))
+		if strategy != "auto" && strategy != "price" && strategy != "speed" && strategy != "random" {
+			return infraerrors.BadRequest("API_KEY_ROUTING_STRATEGY_INVALID", "routing_strategy must be auto, price, speed, or random")
 		}
 	}
 	return nil
@@ -478,14 +519,23 @@ func (s *APIKeyService) incrementAPIKeyErrorCount(ctx context.Context, userID in
 // canUserBindGroup 检查用户是否可以绑定指定分组
 // 对于订阅类型分组：检查用户是否有有效订阅
 // 对于标准类型分组：使用原有的 AllowedGroups 和 IsExclusive 逻辑
-func (s *APIKeyService) canUserBindGroup(ctx context.Context, user *User, group *Group) bool {
+func (s *APIKeyService) canUserBindGroup(ctx context.Context, user *User, group *Group) (bool, error) {
 	// 订阅类型分组：需要有效订阅
 	if group.IsSubscriptionType() {
-		_, err := s.userSubRepo.GetActiveByUserIDAndGroupID(ctx, user.ID, group.ID)
-		return err == nil // 有有效订阅则允许
+		if s.userSubRepo == nil {
+			return false, errors.New("subscription repository unavailable")
+		}
+		sub, err := s.userSubRepo.GetActiveByUserIDAndGroupID(ctx, user.ID, group.ID)
+		if errors.Is(err, ErrSubscriptionNotFound) || errors.Is(err, ErrSubscriptionExpired) || errors.Is(err, ErrSubscriptionSuspended) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		return sub != nil, nil // 有有效订阅则允许
 	}
 	// 标准类型分组：使用原有逻辑
-	return user.CanBindGroup(group.ID, group.IsExclusive)
+	return user.CanBindGroup(group.ID, group.IsExclusive), nil
 }
 
 // Create 创建API Key
@@ -513,6 +563,17 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 		}
 	}
 
+	req.RoutingMode = strings.ToLower(strings.TrimSpace(req.RoutingMode))
+	req.RoutingStrategy = strings.ToLower(strings.TrimSpace(req.RoutingStrategy))
+	if req.RoutingMode == "" {
+		req.RoutingMode = "single"
+	}
+	if req.RoutingStrategy == "" {
+		req.RoutingStrategy = "auto"
+	}
+	if req.RoutingMode == "single" {
+		req.SmartGroupIDs = nil
+	}
 	// 验证分组权限（如果指定了分组）
 	if req.GroupID != nil {
 		group, err := s.groupRepo.GetByID(ctx, *req.GroupID)
@@ -521,8 +582,35 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 		}
 
 		// 检查用户是否可以绑定该分组
-		if !s.canUserBindGroup(ctx, user, group) {
+		allowed, bindErr := s.canUserBindGroup(ctx, user, group)
+		if bindErr != nil {
+			return nil, fmt.Errorf("check group permission: %w", bindErr)
+		}
+		if !group.IsActive() || !allowed {
 			return nil, ErrGroupNotAllowed
+		}
+	}
+	if req.RoutingMode == "smart" {
+		userGroups := make(map[int64]struct{}, len(req.SmartGroupIDs))
+		for _, groupID := range req.SmartGroupIDs {
+			if groupID <= 0 {
+				return nil, infraerrors.BadRequest("API_KEY_SMART_GROUP_INVALID", "smart group IDs must be positive")
+			}
+			if _, ok := userGroups[groupID]; ok {
+				return nil, infraerrors.BadRequest("API_KEY_SMART_GROUP_DUPLICATE", "smart group IDs must be unique")
+			}
+			userGroups[groupID] = struct{}{}
+			group, getErr := s.groupRepo.GetByID(ctx, groupID)
+			if getErr != nil {
+				return nil, fmt.Errorf("get smart group: %w", getErr)
+			}
+			allowed, bindErr := s.canUserBindGroup(ctx, user, group)
+			if bindErr != nil {
+				return nil, fmt.Errorf("check group permission: %w", bindErr)
+			}
+			if !group.IsActive() || !allowed {
+				return nil, ErrGroupNotAllowed
+			}
 		}
 	}
 
@@ -567,18 +655,21 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 
 	// 创建API Key记录
 	apiKey := &APIKey{
-		UserID:      userID,
-		Key:         key,
-		Name:        html.EscapeString(req.Name),
-		GroupID:     req.GroupID,
-		Status:      StatusActive,
-		IPWhitelist: req.IPWhitelist,
-		IPBlacklist: req.IPBlacklist,
-		Quota:       req.Quota,
-		QuotaUsed:   0,
-		RateLimit5h: req.RateLimit5h,
-		RateLimit1d: req.RateLimit1d,
-		RateLimit7d: req.RateLimit7d,
+		UserID:          userID,
+		Key:             key,
+		Name:            html.EscapeString(req.Name),
+		GroupID:         req.GroupID,
+		RoutingMode:     req.RoutingMode,
+		RoutingStrategy: req.RoutingStrategy,
+		SmartGroupIDs:   append([]int64(nil), req.SmartGroupIDs...),
+		Status:          StatusActive,
+		IPWhitelist:     req.IPWhitelist,
+		IPBlacklist:     req.IPBlacklist,
+		Quota:           req.Quota,
+		QuotaUsed:       0,
+		RateLimit5h:     req.RateLimit5h,
+		RateLimit1d:     req.RateLimit1d,
+		RateLimit7d:     req.RateLimit7d,
 	}
 
 	// Set expiration time if specified
@@ -819,6 +910,9 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 		}
 	}
 
+	localKey := *apiKey
+	apiKey = &localKey
+
 	// fields 只登记本次请求真正要改的列。quota_used 与 usage_5h/1d/7d 由计费热路径
 	// 原子递增，除非用户显式点了"重置"，否则这里不用快照把它们写回去。
 	var fields APIKeyUpdateFields
@@ -844,12 +938,81 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 			return nil, fmt.Errorf("get group: %w", err)
 		}
 
-		if !s.canUserBindGroup(ctx, user, group) {
+		allowed, bindErr := s.canUserBindGroup(ctx, user, group)
+
+		if bindErr != nil {
+			return nil, fmt.Errorf("check group permission: %w", bindErr)
+		}
+
+		if !group.IsActive() || !allowed {
 			return nil, ErrGroupNotAllowed
 		}
 
 		apiKey.GroupID = req.GroupID
+		apiKey.Group = group
 		fields.GroupID = true
+	}
+
+	if req.RoutingMode != nil || req.RoutingStrategy != nil || req.SmartGroupIDs != nil || req.GroupID != nil {
+		mode := apiKey.RoutingMode
+		if mode == "" {
+			mode = "single"
+		}
+		if req.RoutingMode != nil {
+			mode = strings.ToLower(strings.TrimSpace(*req.RoutingMode))
+		}
+		strategy := apiKey.RoutingStrategy
+		if strategy == "" {
+			strategy = "auto"
+		}
+		if req.RoutingStrategy != nil {
+			strategy = strings.ToLower(strings.TrimSpace(*req.RoutingStrategy))
+		}
+		ids := apiKey.SmartGroupIDs
+		if req.SmartGroupIDs != nil {
+			ids = append([]int64(nil), (*req.SmartGroupIDs)...)
+		}
+		if mode == "smart" {
+			if req.GroupID != nil && *req.GroupID > 0 {
+				return nil, infraerrors.BadRequest("API_KEY_SMART_GROUP_CONFLICT", "smart API key cannot set group_id")
+			}
+			if len(ids) == 0 {
+				return nil, infraerrors.BadRequest("API_KEY_SMART_GROUPS_REQUIRED", "smart API key requires at least one group")
+			}
+			user, err := s.userRepo.GetByID(ctx, userID)
+			if err != nil {
+				return nil, fmt.Errorf("get user: %w", err)
+			}
+			seen := make(map[int64]struct{}, len(ids))
+			for _, groupID := range ids {
+				if groupID <= 0 {
+					return nil, infraerrors.BadRequest("API_KEY_SMART_GROUP_INVALID", "smart group IDs must be positive")
+				}
+				if _, ok := seen[groupID]; ok {
+					return nil, infraerrors.BadRequest("API_KEY_SMART_GROUP_DUPLICATE", "smart group IDs must be unique")
+				}
+				seen[groupID] = struct{}{}
+				group, getErr := s.groupRepo.GetByID(ctx, groupID)
+				if getErr != nil {
+					return nil, fmt.Errorf("get smart group: %w", getErr)
+				}
+				allowed, bindErr := s.canUserBindGroup(ctx, user, group)
+				if bindErr != nil {
+					return nil, fmt.Errorf("check group permission: %w", bindErr)
+				}
+				if !group.IsActive() || !allowed {
+					return nil, ErrGroupNotAllowed
+				}
+			}
+			apiKey.GroupID = nil
+			apiKey.Group = nil
+			fields.GroupID = true
+		} else {
+			ids = nil
+		}
+		apiKey.SmartGroups = nil
+		apiKey.RoutingMode, apiKey.RoutingStrategy, apiKey.SmartGroupIDs = mode, strategy, ids
+		fields.Routing = true
 	}
 
 	if req.Status != nil {
@@ -1080,6 +1243,52 @@ func (s *APIKeyService) GetAvailableGroups(ctx context.Context, userID int64) ([
 	}
 
 	return availableGroups, nil
+}
+
+// PrepareSmartAPIKey loads authorized groups without choosing a billing group.
+func (s *APIKeyService) PrepareSmartAPIKey(ctx context.Context, apiKey *APIKey) error {
+	if apiKey == nil || apiKey.RoutingMode != "smart" {
+		return nil
+	}
+	if s.groupRepo == nil || apiKey.User == nil {
+		return ErrSmartGroupUnavailable
+	}
+	apiKey.SmartGroups = nil
+	apiKey.GroupID, apiKey.Group = nil, nil
+	var subscribed map[int64]bool
+	for _, groupID := range apiKey.SmartGroupIDs {
+		group, err := s.groupRepo.GetByIDLite(ctx, groupID)
+		if errors.Is(err, ErrGroupNotFound) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("load smart group: %w", err)
+		}
+		if group == nil || !group.IsActive() {
+			continue
+		}
+		allowed := apiKey.User.CanBindGroup(group.ID, group.IsExclusive)
+		if group.IsSubscriptionType() {
+			if subscribed == nil {
+				if s.userSubRepo == nil {
+					return errors.New("subscription repository unavailable")
+				}
+				subs, err := s.userSubRepo.ListActiveByUserID(ctx, apiKey.User.ID)
+				if err != nil {
+					return fmt.Errorf("load smart subscriptions: %w", err)
+				}
+				subscribed = make(map[int64]bool)
+				for _, sub := range subs {
+					subscribed[sub.GroupID] = true
+				}
+			}
+			allowed = subscribed[group.ID]
+		}
+		if allowed {
+			apiKey.SmartGroups = append(apiKey.SmartGroups, group)
+		}
+	}
+	return nil
 }
 
 // canUserBindGroupInternal 内部方法，检查用户是否可以绑定分组（使用预加载的订阅数据）

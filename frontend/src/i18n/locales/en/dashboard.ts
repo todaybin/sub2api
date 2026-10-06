@@ -119,6 +119,20 @@ export default {
     nameLabel: 'Name',
     namePlaceholder: 'My API Key',
     groupLabel: 'Group',
+    singleGroup: 'Single group',
+    smartGroup: 'Smart group',
+    smartGroups: 'Smart group members',
+    smartGroupCount: '{count} child groups',
+    reorderSmartGroups: 'Drag to reorder display',
+    smartGroupsHint: 'Select groups. Existing sessions reuse their group and account. Exhausted subscriptions may fall back to selected balance groups and charge your balance.',
+    smartGroupRequired: 'Select at least one smart group member',
+    routingStrategy: { auto: 'Automatic', price: 'Price first', speed: 'Speed first', random: 'Random' },
+    routingStrategyHint: {
+      auto: 'Use account scheduling priorities, load, queues and administrator settings. Display order does not affect priority.',
+      price: 'Prefer available capacity and lower estimated user charges for the same workload using actual group billing rules. Final charges use actual usage. Unknown prices rank after known prices.',
+      speed: 'Prefer available capacity, then observed time to first token for this model. Routes without samples use normal scheduling.',
+      random: 'Choose equally among eligible available groups, then use the account scheduler within that group. Existing sessions prefer their original route.'
+    },
     providerLabel: 'Provider',
     providers: {
       anthropic: 'Anthropic',

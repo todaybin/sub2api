@@ -44,6 +44,18 @@ func (APIKey) Fields() []ent.Field {
 		field.Int64("group_id").
 			Optional().
 			Nillable(),
+		field.String("routing_mode").
+			MaxLen(16).
+			Default("single").
+			Comment("single or smart API key group routing mode"),
+		field.String("routing_strategy").
+			MaxLen(16).
+			Default("auto").
+			Comment("auto, price, speed, or random smart routing strategy"),
+		field.JSON("smart_group_ids", []int64{}).
+			Optional().
+			SchemaType(map[string]string{dialect.Postgres: "jsonb"}).
+			Comment("ordered group IDs used by smart API key routing"),
 		field.String("status").
 			MaxLen(20).
 			Default(domain.StatusActive),

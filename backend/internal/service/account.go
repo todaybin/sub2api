@@ -66,6 +66,9 @@ type Account struct {
 	AccountGroups []AccountGroup
 	GroupIDs      []int64
 	Groups        []*Group
+	// RoutingGroupID is the child group selected for the current request.
+	// It is runtime metadata and is not persisted with the account.
+	RoutingGroupID int64
 
 	// model_mapping 热路径缓存（非持久化字段）
 	modelMappingCache               map[string]string

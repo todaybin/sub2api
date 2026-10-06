@@ -119,6 +119,20 @@ export default {
     nameLabel: '名称',
     namePlaceholder: '我的 API 密钥',
     groupLabel: '分组',
+    singleGroup: '单分组',
+    smartGroup: '智能分组',
+    smartGroups: '智能分组成员',
+    smartGroupCount: '{count} 个子分组',
+    reorderSmartGroups: '拖动调整显示顺序',
+    smartGroupsHint: '可多选分组；已有会话优先复用原分组与账号。订阅分组额度不足时，可能使用所选余额分组并扣除余额。',
+    smartGroupRequired: '请至少选择一个智能分组成员',
+    routingStrategy: { auto: '自动选择', price: '价格优先', speed: '速度优先', random: '随机选择' },
+    routingStrategyHint: {
+      auto: '沿用账号调度器，综合优先级、负载、队列和管理员设置选择。分组显示顺序不影响优先级。',
+      price: '优先选择有空闲容量且预估用户费用较低的线路；按相同请求量和分组实际计费规则比较，最终按实际用量结算。未知价格排在已知价格之后。',
+      speed: '优先选择有空闲容量的线路；有历史数据时比较该模型的首字延迟，没有数据时使用常规调度。',
+      random: '在符合权限、模型和计费条件的可用分组间等概率选择，再由分组内调度器选择账号。已有会话优先复用原线路。'
+    },
     providerLabel: '厂商',
     providers: {
       anthropic: 'Anthropic',

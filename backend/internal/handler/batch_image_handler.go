@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -132,6 +133,31 @@ func (h *BatchImageHandler) Models(c *gin.Context) {
 	owner, ok := batchImageOwnerFromContext(c)
 	if !ok {
 		batchImageError(c, infraerrors.New(http.StatusUnauthorized, "API_KEY_REQUIRED", "API key is required"))
+		return
+	}
+	if key, exists := middleware.GetAPIKeyFromContext(c); exists && key.RoutingMode == "smart" {
+		models := map[string]service.BatchImagePublicModel{}
+		for _, group := range key.SmartGroups {
+			if !group.IsActive() || group.Platform != service.PlatformGemini || !group.AllowBatchImageGeneration || group.IsSubscriptionType() {
+				continue
+			}
+			local := owner
+			local.GroupID = &group.ID
+			got, err := h.service.ListModels(c.Request.Context(), local)
+			if err != nil {
+				batchImageError(c, err)
+				return
+			}
+			for _, model := range filterBatchImageModelsByAllowlist(got.Data, group.ModelAllowlist) {
+				models[model.ID] = model
+			}
+		}
+		data := make([]service.BatchImagePublicModel, 0, len(models))
+		for _, model := range models {
+			data = append(data, model)
+		}
+		sort.Slice(data, func(i, j int) bool { return data[i].ID < data[j].ID })
+		c.JSON(http.StatusOK, service.BatchImagePublicModelsResponse{Object: "list", Data: data})
 		return
 	}
 	got, err := h.service.ListModels(c.Request.Context(), owner)

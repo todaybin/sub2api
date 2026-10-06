@@ -2175,6 +2175,32 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 	previousResponseCanMove bool,
 	useUpstreamTokenCost bool,
 ) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
+	if hash := SmartSessionHash(ctx); hash != "" {
+		sessionHash = hash
+	}
+	ctx = s.withOpenAIQuotaAutoPauseContext(ctx)
+	ctx = s.withOpenAIGroupPrivacyRequirement(ctx, groupID)
+	if requiredImageCapability == "" {
+		ctx = s.withOpenAIProfitControlGate(ctx, groupID)
+	}
+	if selection := takeSmartSelection(ctx, groupID, requestedModel, excludedIDs); selection != nil {
+		checker := &defaultOpenAIAccountScheduler{service: s, stats: newOpenAIAccountRuntimeStats()}
+		req := OpenAIAccountScheduleRequest{GroupID: groupID, Platform: platform, RequestedModel: requestedModel, RequiredTransport: requiredTransport, RequiredCapability: requiredCapability, RequiredImageCapability: requiredImageCapability, RequireCompact: requireCompact, ExcludedIDs: excludedIDs, RequirePrivacySet: s.openAIGroupRequiresPrivacySet(ctx, groupID)}
+		if !selection.Account.IsSchedulable() || !openAIStickyAccountMatchesGroup(selection.Account, groupID) || !checker.isAccountRequestCompatible(ctx, selection.Account, req) || !checker.isAccountTransportCompatible(selection.Account, requiredTransport) {
+			releaseSmartSelection(selection)
+			return nil, OpenAIAccountScheduleDecision{}, ErrNoAvailableAccounts
+		}
+		parent := s.resolveOpenAIGuardianParentAccountID(ctx, groupID)
+		if parent > 0 && previousResponseID == "" && parent != selection.Account.ID {
+			releaseSmartSelection(selection)
+		} else {
+			return selection, OpenAIAccountScheduleDecision{Layer: "smart", SelectedAccountID: selection.Account.ID}, nil
+		}
+	}
+	if smartSelectionPinned(ctx) {
+		return nil, OpenAIAccountScheduleDecision{}, ErrNoAvailableAccounts
+	}
+
 	selection, decision, err := s.selectAccountWithSchedulerOnce(ctx, groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, platform, previousResponseCanMove, useUpstreamTokenCost)
 	if err == nil || openAIProxyStreamQuarantineBypassed(ctx) {
 		return selection, decision, err
@@ -2517,6 +2543,9 @@ func (s *OpenAIGatewayService) ReportOpenAIAccountScheduleResult(account *Accoun
 		return false
 	}
 	accountID := account.ID
+	if success {
+		observeSmartTTFT(accountID, model, firstTokenMs)
+	}
 	healthTripped := false
 	if s != nil && s.rateLimitService != nil {
 		if success {

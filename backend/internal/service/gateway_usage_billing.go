@@ -646,6 +646,29 @@ func writeUsageLogBestEffort(ctx context.Context, repo UsageLogRepository, usage
 
 // RecordUsage 记录使用量并扣费（或更新订阅用量）
 func (s *GatewayService) RecordUsage(ctx context.Context, input *RecordUsageInput) error {
+	if input == nil {
+		return errors.New("usage input is nil")
+	}
+	input.APIKey = input.APIKey.BillingSnapshotForAccount(input.Account)
+	if input.APIKey != nil && input.APIKey.RoutingMode == "smart" {
+		if input.Account == nil || input.APIKey.GroupID == nil || input.APIKey.Group == nil || input.Account.RoutingGroupID != *input.APIKey.GroupID {
+			return errors.New("smart billing requires the selected request group")
+		}
+		if input.APIKey.Group.IsSubscriptionType() && (s.cfg == nil || s.cfg.RunMode != config.RunModeSimple) {
+			if input.Subscription == nil || input.Subscription.GroupID != *input.APIKey.GroupID || input.Subscription.UserID != input.APIKey.UserID {
+				return errors.New("smart billing requires the admitted subscription for the selected group")
+			}
+		} else {
+			input.Subscription = nil
+		}
+	}
+	if input.Result != nil && input.Account != nil && !input.Account.IsOpenAICompatible() {
+		model := input.Result.UpstreamModel
+		if model == "" {
+			model = input.Account.GetMappedModel(input.Result.Model)
+		}
+		observeSmartTTFT(input.Account.ID, model, input.Result.FirstTokenMs)
+	}
 	return s.recordUsageCore(ctx, &recordUsageCoreInput{
 		Result:             input.Result,
 		APIKey:             input.APIKey,

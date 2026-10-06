@@ -157,11 +157,23 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 			AbortWithError(c, 401, "USER_INACTIVE", "User account is not active")
 			return
 		}
-		if abortIfAPIKeyGroupUnavailable(c, apiKey) {
+		if apiKey.RoutingMode != "smart" && abortIfAPIKeyGroupUnavailable(c, apiKey) {
 			return
 		}
-		if abortIfAPIKeyGroupNotAllowed(c, apiKey) {
+		if apiKey.RoutingMode != "smart" && abortIfAPIKeyGroupNotAllowed(c, apiKey) {
 			return
+		}
+		if apiKey.RoutingMode == "smart" {
+			copyKey := *apiKey
+			apiKey = &copyKey
+			if err := apiKeyService.PrepareSmartAPIKey(c.Request.Context(), apiKey); err != nil {
+				AbortWithError(c, http.StatusServiceUnavailable, "SMART_GROUP_UNAVAILABLE", "Smart group authorization is unavailable")
+				return
+			}
+			ctx := context.WithValue(c.Request.Context(), ctxkey.SmartGroupIDs, apiKey.SmartGroupIDs)
+			ctx = context.WithValue(ctx, ctxkey.SmartRoutingStrategy, apiKey.RoutingStrategy)
+			ctx = context.WithValue(ctx, ctxkey.SmartGroups, apiKey.SmartGroups)
+			c.Request = c.Request.WithContext(ctx)
 		}
 		ctx := context.WithValue(c.Request.Context(), ctxkey.UserID, apiKey.User.ID)
 		c.Request = c.Request.WithContext(ctx)
@@ -191,7 +203,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		// ── 5. 按端点需要加载订阅 ───────────────────────────────────
 
 		var subscription *service.UserSubscription
-		isSubscriptionType := apiKey.Group != nil && apiKey.Group.IsSubscriptionType()
+		isSubscriptionType := apiKey.RoutingMode != "smart" && apiKey.Group != nil && apiKey.Group.IsSubscriptionType()
 
 		// 计费自省需要订阅 ID 和当前订阅周期，但仍通过 skipBilling 跳过计费拦截。
 		if isSubscriptionType && subscriptionService != nil {
@@ -260,7 +272,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 				}
 			} else {
 				// 非订阅模式 或 订阅模式但 subscriptionService 未注入：回退到余额检查
-				if apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) {
+				if apiKey.RoutingMode != "smart" && apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) {
 					AbortWithError(c, 403, "INSUFFICIENT_BALANCE", "Insufficient account balance")
 					return
 				}
@@ -446,4 +458,9 @@ func validateAPIKeyGroupAvailable(apiKey *service.APIKey) (string, string, bool)
 		return "GROUP_DISABLED", "API Key 所属分组已停用", false
 	}
 	return "", "", true
+}
+
+// APIKeyBalanceBelowAuthThreshold shares the admission threshold with smart routing.
+func APIKeyBalanceBelowAuthThreshold(balance float64, cfg *config.Config) bool {
+	return apiKeyBalanceBelowAuthThreshold(balance, cfg)
 }

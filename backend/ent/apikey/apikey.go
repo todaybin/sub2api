@@ -29,6 +29,12 @@ const (
 	FieldName = "name"
 	// FieldGroupID holds the string denoting the group_id field in the database.
 	FieldGroupID = "group_id"
+	// FieldRoutingMode holds the string denoting the routing_mode field in the database.
+	FieldRoutingMode = "routing_mode"
+	// FieldRoutingStrategy holds the string denoting the routing_strategy field in the database.
+	FieldRoutingStrategy = "routing_strategy"
+	// FieldSmartGroupIds holds the string denoting the smart_group_ids field in the database.
+	FieldSmartGroupIds = "smart_group_ids"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldLastUsedAt holds the string denoting the last_used_at field in the database.
@@ -102,6 +108,9 @@ var Columns = []string{
 	FieldKey,
 	FieldName,
 	FieldGroupID,
+	FieldRoutingMode,
+	FieldRoutingStrategy,
+	FieldSmartGroupIds,
 	FieldStatus,
 	FieldLastUsedAt,
 	FieldIPWhitelist,
@@ -148,6 +157,14 @@ var (
 	KeyValidator func(string) error
 	// NameValidator is a validator for the "name" field. It is called by the builders before save.
 	NameValidator func(string) error
+	// DefaultRoutingMode holds the default value on creation for the "routing_mode" field.
+	DefaultRoutingMode string
+	// RoutingModeValidator is a validator for the "routing_mode" field. It is called by the builders before save.
+	RoutingModeValidator func(string) error
+	// DefaultRoutingStrategy holds the default value on creation for the "routing_strategy" field.
+	DefaultRoutingStrategy string
+	// RoutingStrategyValidator is a validator for the "routing_strategy" field. It is called by the builders before save.
+	RoutingStrategyValidator func(string) error
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
@@ -211,6 +228,16 @@ func ByName(opts ...sql.OrderTermOption) OrderOption {
 // ByGroupID orders the results by the group_id field.
 func ByGroupID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldGroupID, opts...).ToFunc()
+}
+
+// ByRoutingMode orders the results by the routing_mode field.
+func ByRoutingMode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRoutingMode, opts...).ToFunc()
+}
+
+// ByRoutingStrategy orders the results by the routing_strategy field.
+func ByRoutingStrategy(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRoutingStrategy, opts...).ToFunc()
 }
 
 // ByStatus orders the results by the status field.

@@ -58,6 +58,7 @@ type GatewayHandler struct {
 	maxAccountSwitchesGemini  int
 	cfg                       *config.Config
 	settingService            *service.SettingService
+	smartSubscriptions        *service.SubscriptionService
 }
 
 // NewGatewayHandler creates a new GatewayHandler
@@ -1147,6 +1148,10 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 // Falls back to default models if no whitelist is configured
 func (h *GatewayHandler) Models(c *gin.Context) {
 	apiKey, _ := middleware2.GetAPIKeyFromContext(c)
+	if apiKey != nil && apiKey.RoutingMode == "smart" {
+		h.smartModels(c, apiKey, false)
+		return
+	}
 
 	var groupID *int64
 	var platform string
@@ -1227,6 +1232,10 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 // OpenAIGatewayHandler.CodexModels so their live upstream metadata is preserved.
 func (h *GatewayHandler) CodexModels(c *gin.Context) {
 	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
+	if ok && apiKey != nil && apiKey.RoutingMode == "smart" {
+		h.smartModels(c, apiKey, true)
+		return
+	}
 	if !ok || apiKey == nil || apiKey.Group == nil {
 		h.errorResponse(c, http.StatusUnauthorized, "invalid_request_error", "API key group is required")
 		return
@@ -1553,6 +1562,11 @@ func mergeModelIDs(primary, secondary []string) []string {
 // GET /antigravity/models
 // 分组级模型白名单开启时按白名单过滤。
 func (h *GatewayHandler) AntigravityModels(c *gin.Context) {
+	if key, ok := middleware2.GetAPIKeyFromContext(c); ok && key.RoutingMode == "smart" {
+		c.Set(string(middleware2.ContextKeyForcePlatform), service.PlatformAntigravity)
+		h.smartModels(c, key, false)
+		return
+	}
 	models := antigravity.DefaultModels()
 	if apiKey, ok := middleware2.GetAPIKeyFromContext(c); ok && apiKey != nil && apiKey.Group != nil && apiKey.Group.ModelAllowlistEnabled() {
 		filtered := make([]antigravity.ClaudeModel, 0, len(models))

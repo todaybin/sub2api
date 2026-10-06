@@ -163,7 +163,7 @@
                 :title="t('keys.clickToChangeGroup')"
               >
                 <GroupBadge
-                  v-if="row.group"
+                  v-if="row.group && row.routing_mode !== 'smart'"
                   :name="row.group.name"
                   :platform="row.group.platform"
                   :subscription-type="row.group.subscription_type"
@@ -178,6 +178,17 @@
                   :dynamic-rate-last-change="row.group.dynamic_rate_last_change"
                   :dynamic-rate-last-adjusted-at="row.group.dynamic_rate_last_adjusted_at"
                 />
+                <div v-else-if="row.routing_mode === 'smart'" class="flex items-center gap-2">
+                  <span class="rounded bg-primary-50 px-2 py-1 text-xs font-semibold text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
+                    {{ t('keys.smartGroup') }}
+                  </span>
+                  <span class="text-xs text-gray-600 dark:text-gray-300">
+                    {{ t('keys.smartGroupCount', { count: row.smart_group_ids?.length || 0 }) }}
+                  </span>
+                  <span class="text-xs text-gray-500 dark:text-gray-400">
+                    {{ t(`keys.routingStrategy.${row.routing_strategy || 'auto'}`) }}
+                  </span>
+                </div>
                 <span v-else class="text-sm text-gray-400 dark:text-dark-500">{{
                   t('keys.noGroup')
                 }}</span>
@@ -489,7 +500,12 @@
           />
         </div>
 
-        <fieldset v-if="!showEditModal" data-tour="key-form-provider">
+        <div class="flex items-center gap-2 rounded-lg bg-gray-50 p-1 dark:bg-dark-700">
+          <button type="button" class="flex-1 rounded-md px-3 py-2 text-sm" :class="formData.routing_mode === 'single' ? 'bg-white font-semibold shadow-sm dark:bg-dark-600' : 'text-gray-500'" @click="setRoutingMode('single')">{{ t('keys.singleGroup') }}</button>
+          <button type="button" class="flex-1 rounded-md px-3 py-2 text-sm" :class="formData.routing_mode === 'smart' ? 'bg-white font-semibold shadow-sm dark:bg-dark-600' : 'text-gray-500'" @click="setRoutingMode('smart')">{{ t('keys.smartGroup') }}</button>
+        </div>
+
+        <fieldset v-if="!showEditModal && formData.routing_mode === 'single'" data-tour="key-form-provider">
           <legend class="input-label">{{ t('keys.providerLabel') }}</legend>
           <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <label
@@ -537,7 +553,7 @@
           </p>
         </fieldset>
 
-        <div>
+        <div v-if="formData.routing_mode === 'single'">
           <label class="input-label" for="key-form-group">{{ t('keys.groupLabel') }}</label>
           <Select
             :key="showEditModal ? 'edit' : createProvider"
@@ -590,6 +606,30 @@
               />
             </template>
           </Select>
+        </div>
+
+        <div v-else class="space-y-3">
+          <label class="input-label">{{ t('keys.smartGroups') }}</label>
+          <div class="grid max-h-56 gap-2 overflow-y-auto rounded-lg border border-gray-200 p-2 dark:border-dark-600">
+            <label
+              v-for="option in orderedSmartGroupOptions"
+              :key="option.value"
+              draggable="true"
+              class="flex cursor-grab items-center gap-2 rounded-md px-2 py-2 hover:bg-gray-50 dark:hover:bg-dark-700 active:cursor-grabbing"
+              @dragstart="startSmartGroupDrag(Number(option.value))"
+              @dragover.prevent
+              @drop.prevent="dropSmartGroup(Number(option.value))"
+            >
+              <Icon name="arrowsUpDown" size="sm" class="text-gray-400" :title="t('keys.reorderSmartGroups')" />
+              <input type="checkbox" class="checkbox" :checked="formData.smart_group_ids.includes(Number(option.value))" @change="toggleSmartGroup(Number(option.value))" />
+              <GroupBadge :name="option.label" :platform="option.platform" :subscription-type="option.subscriptionType" :rate-multiplier="option.rate" :user-rate-multiplier="option.userRate" />
+            </label>
+          </div>
+          <p class="input-hint">{{ t('keys.smartGroupsHint') }}</p>
+          <div class="flex gap-2">
+            <button v-for="strategy in ['auto', 'price', 'speed', 'random']" :key="strategy" type="button" class="flex-1 rounded-md border px-2 py-2 text-xs" :class="formData.routing_strategy === strategy ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 dark:border-dark-600'" @click="formData.routing_strategy = strategy as 'auto' | 'price' | 'speed' | 'random'">{{ t(`keys.routingStrategy.${strategy}`) }}</button>
+          </div>
+          <p class="input-hint">{{ t(`keys.routingStrategyHint.${formData.routing_strategy}`) }}</p>
         </div>
 
         <!-- Custom Key Section (only for create) -->
@@ -1452,6 +1492,9 @@ const setGroupButtonRef = (keyId: number, el: Element | ComponentPublicInstance 
 const formData = ref({
   name: '',
   group_id: null as number | null,
+  routing_mode: 'single' as 'single' | 'smart',
+  routing_strategy: 'auto' as 'auto' | 'price' | 'speed' | 'random',
+  smart_group_ids: [] as number[],
   status: 'active' as 'active' | 'inactive',
   use_custom_key: false,
   custom_key: '',
@@ -1470,6 +1513,51 @@ const formData = ref({
   expiration_preset: '30' as '7' | '30' | '90' | 'custom',
   expiration_date: ''
 })
+
+const draggingSmartGroup = ref<number | null>(null)
+const orderedSmartGroupOptions = computed(() => {
+  const order = new Map(formData.value.smart_group_ids.map((id, index) => [id, index]))
+  return [...groupOptions.value].sort((a, b) => {
+    const ai = order.get(Number(a.value))
+    const bi = order.get(Number(b.value))
+    if (ai !== undefined && bi !== undefined) return ai - bi
+    if (ai !== undefined) return -1
+    if (bi !== undefined) return 1
+    return String(a.label).localeCompare(String(b.label))
+  })
+})
+
+const setRoutingMode = (mode: 'single' | 'smart') => {
+  formData.value.routing_mode = mode
+  if (mode === 'single') {
+    formData.value.smart_group_ids = []
+  } else {
+    formData.value.group_id = null
+  }
+}
+
+const toggleSmartGroup = (groupID: number) => {
+  const ids = formData.value.smart_group_ids
+  const index = ids.indexOf(groupID)
+  if (index >= 0) ids.splice(index, 1)
+  else ids.push(groupID)
+}
+
+const startSmartGroupDrag = (groupID: number) => {
+  draggingSmartGroup.value = groupID
+}
+
+const dropSmartGroup = (targetID: number) => {
+  const sourceID = draggingSmartGroup.value
+  draggingSmartGroup.value = null
+  if (sourceID === null || sourceID === targetID) return
+  const ids = formData.value.smart_group_ids
+  const sourceIndex = ids.indexOf(sourceID)
+  const targetIndex = ids.indexOf(targetID)
+  if (sourceIndex < 0 || targetIndex < 0) return
+  ids.splice(sourceIndex, 1)
+  ids.splice(ids.indexOf(targetID), 0, sourceID)
+}
 
 // 自定义Key验证
 const customKeyError = computed(() => {
@@ -1724,6 +1812,9 @@ const editKey = (key: ApiKey) => {
   formData.value = {
     name: key.name,
     group_id: key.group_id,
+    routing_mode: key.routing_mode === 'smart' ? 'smart' : 'single',
+    routing_strategy: key.routing_strategy || 'auto',
+    smart_group_ids: [...(key.smart_group_ids || [])],
     status: key.status === 'quota_exhausted' || key.status === 'expired' ? 'inactive' : key.status,
     use_custom_key: false,
     custom_key: '',
@@ -1757,6 +1848,10 @@ const toggleKeyStatus = async (key: ApiKey) => {
 }
 
 const openGroupSelector = (key: ApiKey) => {
+  if (key.routing_mode === 'smart') {
+    editKey(key)
+    return
+  }
   if (groupSelectorKeyId.value === key.id) {
     groupSelectorKeyId.value = null
     dropdownPosition.value = null
@@ -1823,8 +1918,12 @@ const confirmDelete = (key: ApiKey) => {
 
 const handleSubmit = async () => {
   // Validate group_id is required
-  if (formData.value.group_id === null) {
+  if (formData.value.routing_mode === 'single' && formData.value.group_id === null) {
     appStore.showError(t('keys.groupRequired'))
+    return
+  }
+  if (formData.value.routing_mode === 'smart' && formData.value.smart_group_ids.length === 0) {
+    appStore.showError(t('keys.smartGroupRequired'))
     return
   }
 
@@ -1881,6 +1980,9 @@ const handleSubmit = async () => {
       const updates: UpdateApiKeyRequest = {
         name: formData.value.name,
         group_id: formData.value.group_id,
+        routing_mode: formData.value.routing_mode,
+        routing_strategy: formData.value.routing_strategy,
+        smart_group_ids: formData.value.smart_group_ids,
         ip_whitelist: ipWhitelist,
         ip_blacklist: ipBlacklist,
         quota: quota,
@@ -1904,7 +2006,8 @@ const handleSubmit = async () => {
         ipBlacklist,
         quota,
         expiresInDays,
-        rateLimitData
+        rateLimitData,
+        { mode: formData.value.routing_mode, strategy: formData.value.routing_strategy, groupIds: formData.value.smart_group_ids }
       )
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
       // Only advance tour if active, on submit step, and creation succeeded
@@ -1950,6 +2053,9 @@ const closeModals = () => {
   formData.value = {
     name: '',
     group_id: null,
+    routing_mode: 'single',
+    routing_strategy: 'auto',
+    smart_group_ids: [],
     status: 'active',
     use_custom_key: false,
     custom_key: '',

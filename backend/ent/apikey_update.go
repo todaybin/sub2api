@@ -120,6 +120,52 @@ func (_u *APIKeyUpdate) ClearGroupID() *APIKeyUpdate {
 	return _u
 }
 
+// SetRoutingMode sets the "routing_mode" field.
+func (_u *APIKeyUpdate) SetRoutingMode(v string) *APIKeyUpdate {
+	_u.mutation.SetRoutingMode(v)
+	return _u
+}
+
+// SetNillableRoutingMode sets the "routing_mode" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableRoutingMode(v *string) *APIKeyUpdate {
+	if v != nil {
+		_u.SetRoutingMode(*v)
+	}
+	return _u
+}
+
+// SetRoutingStrategy sets the "routing_strategy" field.
+func (_u *APIKeyUpdate) SetRoutingStrategy(v string) *APIKeyUpdate {
+	_u.mutation.SetRoutingStrategy(v)
+	return _u
+}
+
+// SetNillableRoutingStrategy sets the "routing_strategy" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableRoutingStrategy(v *string) *APIKeyUpdate {
+	if v != nil {
+		_u.SetRoutingStrategy(*v)
+	}
+	return _u
+}
+
+// SetSmartGroupIds sets the "smart_group_ids" field.
+func (_u *APIKeyUpdate) SetSmartGroupIds(v []int64) *APIKeyUpdate {
+	_u.mutation.SetSmartGroupIds(v)
+	return _u
+}
+
+// AppendSmartGroupIds appends value to the "smart_group_ids" field.
+func (_u *APIKeyUpdate) AppendSmartGroupIds(v []int64) *APIKeyUpdate {
+	_u.mutation.AppendSmartGroupIds(v)
+	return _u
+}
+
+// ClearSmartGroupIds clears the value of the "smart_group_ids" field.
+func (_u *APIKeyUpdate) ClearSmartGroupIds() *APIKeyUpdate {
+	_u.mutation.ClearSmartGroupIds()
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *APIKeyUpdate) SetStatus(v string) *APIKeyUpdate {
 	_u.mutation.SetStatus(v)
@@ -555,6 +601,16 @@ func (_u *APIKeyUpdate) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "APIKey.name": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.RoutingMode(); ok {
+		if err := apikey.RoutingModeValidator(v); err != nil {
+			return &ValidationError{Name: "routing_mode", err: fmt.Errorf(`ent: validator failed for field "APIKey.routing_mode": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.RoutingStrategy(); ok {
+		if err := apikey.RoutingStrategyValidator(v); err != nil {
+			return &ValidationError{Name: "routing_strategy", err: fmt.Errorf(`ent: validator failed for field "APIKey.routing_strategy": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := apikey.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
@@ -592,6 +648,23 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(apikey.FieldName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.RoutingMode(); ok {
+		_spec.SetField(apikey.FieldRoutingMode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.RoutingStrategy(); ok {
+		_spec.SetField(apikey.FieldRoutingStrategy, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SmartGroupIds(); ok {
+		_spec.SetField(apikey.FieldSmartGroupIds, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedSmartGroupIds(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, apikey.FieldSmartGroupIds, value)
+		})
+	}
+	if _u.mutation.SmartGroupIdsCleared() {
+		_spec.ClearField(apikey.FieldSmartGroupIds, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeString, value)
@@ -904,6 +977,52 @@ func (_u *APIKeyUpdateOne) SetNillableGroupID(v *int64) *APIKeyUpdateOne {
 // ClearGroupID clears the value of the "group_id" field.
 func (_u *APIKeyUpdateOne) ClearGroupID() *APIKeyUpdateOne {
 	_u.mutation.ClearGroupID()
+	return _u
+}
+
+// SetRoutingMode sets the "routing_mode" field.
+func (_u *APIKeyUpdateOne) SetRoutingMode(v string) *APIKeyUpdateOne {
+	_u.mutation.SetRoutingMode(v)
+	return _u
+}
+
+// SetNillableRoutingMode sets the "routing_mode" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableRoutingMode(v *string) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetRoutingMode(*v)
+	}
+	return _u
+}
+
+// SetRoutingStrategy sets the "routing_strategy" field.
+func (_u *APIKeyUpdateOne) SetRoutingStrategy(v string) *APIKeyUpdateOne {
+	_u.mutation.SetRoutingStrategy(v)
+	return _u
+}
+
+// SetNillableRoutingStrategy sets the "routing_strategy" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableRoutingStrategy(v *string) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetRoutingStrategy(*v)
+	}
+	return _u
+}
+
+// SetSmartGroupIds sets the "smart_group_ids" field.
+func (_u *APIKeyUpdateOne) SetSmartGroupIds(v []int64) *APIKeyUpdateOne {
+	_u.mutation.SetSmartGroupIds(v)
+	return _u
+}
+
+// AppendSmartGroupIds appends value to the "smart_group_ids" field.
+func (_u *APIKeyUpdateOne) AppendSmartGroupIds(v []int64) *APIKeyUpdateOne {
+	_u.mutation.AppendSmartGroupIds(v)
+	return _u
+}
+
+// ClearSmartGroupIds clears the value of the "smart_group_ids" field.
+func (_u *APIKeyUpdateOne) ClearSmartGroupIds() *APIKeyUpdateOne {
+	_u.mutation.ClearSmartGroupIds()
 	return _u
 }
 
@@ -1355,6 +1474,16 @@ func (_u *APIKeyUpdateOne) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "APIKey.name": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.RoutingMode(); ok {
+		if err := apikey.RoutingModeValidator(v); err != nil {
+			return &ValidationError{Name: "routing_mode", err: fmt.Errorf(`ent: validator failed for field "APIKey.routing_mode": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.RoutingStrategy(); ok {
+		if err := apikey.RoutingStrategyValidator(v); err != nil {
+			return &ValidationError{Name: "routing_strategy", err: fmt.Errorf(`ent: validator failed for field "APIKey.routing_strategy": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := apikey.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
@@ -1409,6 +1538,23 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(apikey.FieldName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.RoutingMode(); ok {
+		_spec.SetField(apikey.FieldRoutingMode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.RoutingStrategy(); ok {
+		_spec.SetField(apikey.FieldRoutingStrategy, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SmartGroupIds(); ok {
+		_spec.SetField(apikey.FieldSmartGroupIds, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedSmartGroupIds(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, apikey.FieldSmartGroupIds, value)
+		})
+	}
+	if _u.mutation.SmartGroupIdsCleared() {
+		_spec.ClearField(apikey.FieldSmartGroupIds, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeString, value)

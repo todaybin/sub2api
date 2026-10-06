@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
@@ -53,6 +54,10 @@ func (h *GatewayHandler) KeyBillingInfo(c *gin.Context) {
 	}
 	if h.cfg != nil && h.cfg.RunMode == config.RunModeSimple {
 		h.errorResponse(c, http.StatusNotFound, "not_found_error", "Billing information is not supported in simple mode")
+		return
+	}
+	if apiKey.RoutingMode == "smart" {
+		h.smartKeyBillingInfo(c, apiKey)
 		return
 	}
 	if apiKey.GroupID == nil {
@@ -171,4 +176,72 @@ func buildKeyBillingInfo(apiKey *service.APIKey, resolvedRate float64, now time.
 		response.Timezone = &tz
 	}
 	return response
+}
+
+// Smart keys have no single effective multiplier. Each selected group settles independently.
+func (h *GatewayHandler) smartKeyBillingInfo(c *gin.Context, key *service.APIKey) {
+	now := timezone.Now()
+	groups := make([]map[string]any, 0, len(key.SmartGroups))
+	for _, group := range key.SmartGroups {
+		local := *key
+		local.Group, local.GroupID = group, &group.ID
+		rate, ok := h.resolveKeyBillingRate(c, &local)
+		if !ok {
+			h.errorResponse(c, http.StatusInternalServerError, "api_error", "Billing information is unavailable")
+			return
+		}
+		info := buildKeyBillingInfo(&local, rate, now)
+		mode := "balance"
+		available := key.User != nil && !middleware2.APIKeyBalanceBelowAuthThreshold(key.User.Balance, h.cfg)
+		var subID *int64
+		if group.IsSubscriptionType() {
+			mode = "subscription"
+			if h.smartSubscriptions == nil {
+				h.errorResponse(c, http.StatusInternalServerError, "api_error", "Subscription information is unavailable")
+				return
+			}
+			sub, err := h.smartSubscriptions.GetActiveSubscription(c.Request.Context(), key.UserID, group.ID)
+			if errors.Is(err, service.ErrSubscriptionNotFound) || errors.Is(err, service.ErrSubscriptionExpired) || errors.Is(err, service.ErrSubscriptionSuspended) {
+				available = false
+			} else if err != nil {
+				h.errorResponse(c, http.StatusInternalServerError, "api_error", "Subscription information is unavailable")
+				return
+			}
+			if sub != nil {
+				subID = &sub.ID
+				maintenance, limitErr := h.smartSubscriptions.ValidateAndCheckLimits(sub, group)
+				if maintenance {
+					sub, err = h.smartSubscriptions.EnsureWindowMaintenance(c.Request.Context(), sub)
+					if err != nil {
+						h.errorResponse(c, http.StatusInternalServerError, "api_error", "Subscription information is unavailable")
+						return
+					}
+					_, limitErr = h.smartSubscriptions.ValidateAndCheckLimits(sub, group)
+				}
+				available = limitErr == nil
+			}
+		}
+		info.BillingMode, info.SubscriptionID = mode, subID
+		pricing := gin.H{
+			"token": info, "model_pricing": group.ModelPricing,
+			"long_context_pricing_enabled": group.LongContextPricingEnabled,
+			"image":                        gin.H{"rate_independent": group.ImageRateIndependent, "rate_multiplier": rate, "price_1k": group.ImagePrice1K, "price_2k": group.ImagePrice2K, "price_4k": group.ImagePrice4K},
+			"video":                        gin.H{"rate_independent": group.VideoRateIndependent, "rate_multiplier": rate, "price_480p": group.VideoPrice480P, "price_720p": group.VideoPrice720P, "price_1080p": group.VideoPrice1080P, "model_prices": group.VideoModelPrices},
+			"audio":                        gin.H{"realtime_price_per_min": group.AudioRealtimePricePerMin, "tts_price_per_million_chars": group.AudioTTSPricePerMillionChars, "stt_price_per_hour": group.AudioSTTPricePerHour},
+			"web_search_price_per_call":    group.WebSearchPricePerCall, "search_price_per_1k": group.SearchPricePer1k,
+		}
+		if group.ImageRateIndependent {
+			pricing["image"].(gin.H)["rate_multiplier"] = group.ImageRateMultiplier
+		}
+		if group.VideoRateIndependent {
+			pricing["video"].(gin.H)["rate_multiplier"] = group.VideoRateMultiplier
+		}
+		groups = append(groups, map[string]any{"group_id": group.ID, "group_name": group.Name, "billing_mode": mode, "available": available, "subscription_id": subID, "pricing": pricing})
+	}
+	result := gin.H{"object": "sub2api.key_billing", "schema_version": 2, "billing_scope": "selected_group", "routing_mode": "smart", "routing_strategy": key.RoutingStrategy, "groups": groups, "observed_at": now.UTC()}
+	if key.User != nil {
+		result["balance"] = key.User.Balance
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, result)
 }

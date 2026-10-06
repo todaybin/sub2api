@@ -583,6 +583,34 @@ describe('user KeysView column settings', () => {
       getAvailableGroups.mockResolvedValue(availableGroups)
     })
 
+    it.each(['auto', 'price', 'speed', 'random'] as const)('creates a smart key with %s strategy and groups across providers', async (strategy) => {
+      const wrapper = await openCreate()
+      await wrapper.get('[data-tour="key-form-name"]').setValue('Smart key')
+      await groupSelect(wrapper).vm.$emit('update:modelValue', 1)
+      await getButtonByText(wrapper, 'keys.smartGroup').trigger('click')
+      expect(wrapper.find('[data-tour="key-form-provider"]').exists()).toBe(false)
+      await wrapper.get('#key-form').trigger('submit')
+      expect(showError).toHaveBeenCalledWith('keys.smartGroupRequired')
+      expect(keysAPI.create).not.toHaveBeenCalled()
+
+      const groupLabels = wrapper.findAll('label[draggable="true"]')
+      expect(groupLabels).toHaveLength(availableGroups.length)
+      for (const group of availableGroups.slice(0, 2)) {
+        const label = groupLabels.find((item) => item.find('group-badge-stub').attributes('name') === group.name)!
+        await label.get('input[type="checkbox"]').setValue(true)
+      }
+      await getButtonByText(wrapper, `keys.routingStrategy.${strategy}`).trigger('click')
+      expect(wrapper.text()).toContain(`keys.routingStrategyHint.${strategy}`)
+      vi.mocked(keysAPI.create).mockResolvedValue({ ...createApiKey(), routing_mode: 'smart', routing_strategy: strategy, smart_group_ids: [1, 2] })
+      await wrapper.get('#key-form').trigger('submit')
+      await flushPromises()
+      expect(keysAPI.create).toHaveBeenCalledOnce()
+      const args = vi.mocked(keysAPI.create).mock.calls[0]
+      expect(args.slice(0, 2)).toEqual(['Smart key', null])
+      expect(args[8]).toEqual({ mode: 'smart', strategy, groupIds: [1, 2] })
+      wrapper.unmount()
+    })
+
     it('classifies all configured platforms and retains the complete table filter', async () => {
       const wrapper = await openCreate()
       expect(wrapper.findAll('input[name="key-provider"]')).toHaveLength(4)

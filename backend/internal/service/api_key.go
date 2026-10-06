@@ -28,14 +28,17 @@ func IsWindowExpired(windowStart *time.Time, duration time.Duration) bool {
 }
 
 type APIKey struct {
-	ID          int64
-	UserID      int64
-	Key         string
-	Name        string
-	GroupID     *int64
-	Status      string
-	IPWhitelist []string
-	IPBlacklist []string
+	ID              int64
+	UserID          int64
+	Key             string
+	Name            string
+	GroupID         *int64
+	RoutingMode     string
+	RoutingStrategy string
+	SmartGroupIDs   []int64
+	Status          string
+	IPWhitelist     []string
+	IPBlacklist     []string
 	// 预编译的 IP 规则，用于认证热路径避免重复 ParseIP/ParseCIDR。
 	CompiledIPWhitelist *ip.CompiledIPRules `json:"-"`
 	CompiledIPBlacklist *ip.CompiledIPRules `json:"-"`
@@ -45,7 +48,10 @@ type APIKey struct {
 	UpdatedAt           time.Time
 	User                *User
 	Group               *Group
-	CurrentConcurrency  int
+	// SmartGroups contains the authorized child groups for smart routing.
+	// It is populated on the authentication path and is never persisted.
+	SmartGroups        []*Group `json:"-"`
+	CurrentConcurrency int
 
 	// Quota fields
 	Quota     float64    // Quota limit in USD (0 = unlimited)
@@ -62,6 +68,29 @@ type APIKey struct {
 	Window5hStart *time.Time // Start of current 5h window
 	Window1dStart *time.Time // Start of current 1d window
 	Window7dStart *time.Time // Start of current 7d window
+}
+
+// BillingSnapshotForAccount returns a request-local API key view whose group
+// matches the child group selected by the scheduler. Smart keys keep the
+// first child in Group for legacy admission paths, so billing must use this
+// snapshot after account selection.
+func (k *APIKey) BillingSnapshotForAccount(account *Account) *APIKey {
+	if k == nil || account == nil || k.RoutingMode != "smart" {
+		return k
+	}
+	selectedID := account.RoutingGroupID
+	if selectedID <= 0 {
+		return k
+	}
+	for _, group := range k.SmartGroups {
+		if group != nil && group.ID == selectedID {
+			copy := *k
+			copy.GroupID = &group.ID
+			copy.Group = group
+			return &copy
+		}
+	}
+	return k
 }
 
 func (k *APIKey) IsActive() bool {

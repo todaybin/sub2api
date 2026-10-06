@@ -32,6 +32,19 @@ func (s *GatewayService) SelectAccountForModel(ctx context.Context, groupID *int
 
 // SelectAccountForModelWithExclusions selects an account supporting the requested model while excluding specified accounts.
 func (s *GatewayService) SelectAccountForModelWithExclusions(ctx context.Context, groupID *int64, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}) (*Account, error) {
+	if hash := SmartSessionHash(ctx); hash != "" {
+		sessionHash = hash
+	}
+	if groupID == nil && hasSmartRouting(ctx) {
+		return nil, ErrNoAvailableAccounts
+	}
+	return s.selectAccountForModelWithExclusionsSingle(ctx, groupID, sessionHash, requestedModel, excludedIDs)
+}
+
+func (s *GatewayService) selectAccountForModelWithExclusionsSingle(ctx context.Context, groupID *int64, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}) (*Account, error) {
+	if groupID == nil && hasSmartRouting(ctx) {
+		return nil, ErrNoAvailableAccounts
+	}
 	// 优先检查 context 中的强制平台（/antigravity 路由）
 	var platform string
 	forcePlatform, hasForcePlatform := ctx.Value(ctxkey.ForcePlatform).(string)
@@ -46,6 +59,7 @@ func (s *GatewayService) SelectAccountForModelWithExclusions(ctx context.Context
 			return nil, ErrGroupNotFound
 		}
 		groupID = resolvedGroupID
+		ctx = context.WithValue(ctx, ctxkey.SelectedGroupID, *groupID)
 		ctx = s.withGroupContext(ctx, group)
 		platform = group.Platform
 		if group.Platform == PlatformComposite {
@@ -98,6 +112,12 @@ func (s *GatewayService) SelectAccountForModelWithExclusions(ctx context.Context
 // metadataUserID: 用于客户端亲和调度，从中提取客户端 ID
 // sub2apiUserID: 系统用户 ID，用于二维亲和调度
 func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, groupID *int64, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}, metadataUserID string, sub2apiUserID int64) (*AccountSelectionResult, error) {
+	if hash := SmartSessionHash(ctx); hash != "" {
+		sessionHash = hash
+	}
+	if groupID == nil && hasSmartRouting(ctx) {
+		return nil, ErrNoAvailableAccounts
+	}
 	// 调试日志：记录调度入口参数
 	excludedIDsList := make([]int64, 0, len(excludedIDs))
 	for id := range excludedIDs {
@@ -116,6 +136,9 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 	if err != nil {
 		return nil, err
 	}
+	if groupID != nil {
+		ctx = context.WithValue(ctx, ctxkey.SelectedGroupID, *groupID)
+	}
 	ctx = s.withGroupContext(ctx, group)
 	ctx = s.withGatewayProfitControlGate(ctx, groupID)
 
@@ -126,6 +149,18 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 			"group_id", derefGroupID(groupID),
 			"model", requestedModel)
 		return nil, fmt.Errorf("%w supporting model: %s (channel pricing restriction)", ErrNoAvailableAccounts, requestedModel)
+	}
+
+	if selection := takeSmartSelection(ctx, groupID, requestedModel, excludedIDs); selection != nil {
+		a := selection.Account
+		if !openAIStickyAccountMatchesGroup(a, groupID) || !s.isAccountSchedulableForSelection(a) || !s.isModelSupportedByAccountWithContext(ctx, a, requestedModel) || !s.isAccountSchedulableForModelSelection(ctx, a, requestedModel) || !s.isAccountSchedulableForQuota(a) || !s.isAccountSchedulableForWindowCost(ctx, a, selection.stickySessionHit) || !s.isAccountSchedulableForRPM(ctx, a, selection.stickySessionHit) || !s.isGatewayAccountProfitEligible(ctx, a) {
+			releaseSmartSelection(selection)
+			return nil, ErrNoAvailableAccounts
+		}
+		return selection, nil
+	}
+	if smartSelectionPinned(ctx) {
+		return nil, ErrNoAvailableAccounts
 	}
 
 	var stickyAccountID int64
@@ -793,6 +828,18 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 	return nil, ErrNoAvailableAccounts
 }
 
+func hasSmartRouting(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	groups, _ := ctx.Value(ctxkey.SmartGroups).([]*Group)
+	if len(groups) > 0 {
+		return true
+	}
+	ids, _ := ctx.Value(ctxkey.SmartGroupIDs).([]int64)
+	return len(ids) > 0
+}
+
 func (s *GatewayService) tryAcquireByLegacyOrder(ctx context.Context, candidates []*Account, groupID *int64, sessionHash string, preferOAuth bool) (*AccountSelectionResult, bool, error) {
 	ordered := append([]*Account(nil), candidates...)
 	sortAccountsByPriorityAndLastUsed(ordered, preferOAuth)
@@ -941,6 +988,9 @@ func (s *GatewayService) resolveGatewayGroup(ctx context.Context, groupID *int64
 			return group, &currentID, nil
 		}
 
+		if hasSmartRouting(ctx) {
+			return nil, nil, ErrClaudeCodeOnly
+		}
 		if group.FallbackGroupID == nil {
 			return nil, nil, ErrClaudeCodeOnly
 		}
@@ -1576,6 +1626,13 @@ func (s *GatewayService) newSelectionResult(ctx context.Context, account *Accoun
 	hydrated, err := s.hydrateSelectedAccount(ctx, account)
 	if err != nil {
 		return nil, err
+	}
+	if hydrated != nil {
+		if groupID, ok := ctx.Value(ctxkey.SelectedGroupID).(int64); ok {
+			copy := *hydrated
+			copy.RoutingGroupID = groupID
+			hydrated = &copy
+		}
 	}
 	return attachSelectionProfitGate(ctx, &AccountSelectionResult{
 		Account:     hydrated,

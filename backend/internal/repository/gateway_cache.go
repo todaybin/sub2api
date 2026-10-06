@@ -18,6 +18,39 @@ const stickySessionPrefix = "sticky_session:"
 const openAIResponsesSessionWindowPrefix = "openai_responses_session_window:"
 const liveCallPrefix = "live:call:"
 
+var claimSmartGroupScript = redis.NewScript(`
+local current = redis.call('GET', KEYS[1])
+if current and current ~= ARGV[1] then
+  return current
+end
+redis.call('SET', KEYS[1], ARGV[2], 'PX', ARGV[3])
+return ARGV[2]
+`)
+
+func smartGroupKey(keyID int64, session string) string {
+	digest := sha256.Sum256([]byte(session))
+	return fmt.Sprintf("smart_group:%d:%x", keyID, digest)
+}
+
+func (c *gatewayCache) GetSmartGroup(ctx context.Context, keyID int64, session string) (int64, error) {
+	value, err := c.rdb.Get(ctx, smartGroupKey(keyID, session)).Int64()
+	if errors.Is(err, redis.Nil) {
+		return 0, nil
+	}
+	return value, err
+}
+
+func (c *gatewayCache) ClaimSmartGroup(ctx context.Context, keyID int64, session string, expected, groupID int64, ttl time.Duration) (int64, error) {
+	if keyID <= 0 || groupID <= 0 || session == "" || ttl <= 0 {
+		return 0, errors.New("invalid smart group claim")
+	}
+	value, err := claimSmartGroupScript.Run(ctx, c.rdb, []string{smartGroupKey(keyID, session)}, expected, groupID, ttl.Milliseconds()).Text()
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseInt(value, 10, 64)
+}
+
 type gatewayCache struct {
 	rdb *redis.Client
 }
