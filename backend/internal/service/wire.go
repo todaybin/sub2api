@@ -606,6 +606,7 @@ func ProvideAuditLogService(repo AuditLogRepository, settingService *SettingServ
 func buildIdempotencyConfig(cfg *config.Config) IdempotencyConfig {
 	idempotencyCfg := DefaultIdempotencyConfig()
 	if cfg != nil {
+		idempotencyCfg.ResponseEncryptionSecret = cfg.JWT.Secret
 		if cfg.Idempotency.DefaultTTLSeconds > 0 {
 			idempotencyCfg.DefaultTTL = time.Duration(cfg.Idempotency.DefaultTTLSeconds) * time.Second
 		}

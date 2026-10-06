@@ -22,7 +22,7 @@ import (
 
 const (
 	IntegrationAuthenticatedContextKey = "integration_admin_authenticated"
-	IntegrationIDContextKey            = "integration_admin_id"
+	IntegrationAppIDContextKey         = "integration_admin_appid"
 	integrationTimestampTolerance      = 5 * time.Minute
 	integrationNonceTTL                = 5 * time.Minute
 )
@@ -30,9 +30,9 @@ const (
 type integrationRequestContextKey struct{}
 
 type integrationRequestIdentity struct {
-	IntegrationID string
-	Admin         AuthSubject
-	AdminRole     string
+	AppID     string
+	Admin     AuthSubject
+	AdminRole string
 }
 
 // NewIntegrationAdminGateway authenticates a signed request and then dispatches
@@ -50,7 +50,7 @@ func NewIntegrationAdminGateway(engine *gin.Engine, settings *service.SettingSer
 			AbortWithError(c, http.StatusForbidden, "INTEGRATION_ROUTE_FORBIDDEN", "This admin route is not available to integrations")
 			return
 		}
-		integrationID, ok := verifyIntegrationRequest(c, targetPath, settings, redisClient)
+		appid, ok := verifyIntegrationRequest(c, targetPath, settings, redisClient)
 		if !ok {
 			return
 		}
@@ -63,9 +63,9 @@ func NewIntegrationAdminGateway(engine *gin.Engine, settings *service.SettingSer
 		// HandleContext resets Gin keys, so carry the verified identity in the
 		// request context. adminAuth restores it for the reused admin route.
 		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), integrationRequestContextKey{}, integrationRequestIdentity{
-			IntegrationID: integrationID,
-			Admin:         AuthSubject{UserID: admin.ID, Concurrency: admin.Concurrency},
-			AdminRole:     admin.Role,
+			AppID:     appid,
+			Admin:     AuthSubject{UserID: admin.ID, Concurrency: admin.Concurrency},
+			AdminRole: admin.Role,
 		}))
 
 		originalPath, originalRawPath := c.Request.URL.Path, c.Request.URL.RawPath
@@ -73,20 +73,25 @@ func NewIntegrationAdminGateway(engine *gin.Engine, settings *service.SettingSer
 		c.Request.URL.RawPath = ""
 		engine.HandleContext(c)
 		c.Request.URL.Path, c.Request.URL.RawPath = originalPath, originalRawPath
+		// HandleContext restores the outer handler index but leaves the target
+		// handler chain installed. Stop the outer chain to avoid executing the
+		// admin business handler a second time after the path is restored.
+		c.Abort()
 	}
 }
 
 func integrationIdentityFromRequest(ctx context.Context) (integrationRequestIdentity, bool) {
 	identity, ok := ctx.Value(integrationRequestContextKey{}).(integrationRequestIdentity)
-	return identity, ok && identity.IntegrationID != "" && identity.Admin.UserID > 0
+	return identity, ok && identity.AppID != "" && identity.Admin.UserID > 0
 }
 
 func verifyIntegrationRequest(c *gin.Context, targetPath string, settings *service.SettingService, redisClient *redis.Client) (string, bool) {
-	integrationID := strings.TrimSpace(c.GetHeader("X-Integration-ID"))
+	apiKey := c.GetHeader("x-api-key")
+	appid := strings.TrimSpace(c.GetHeader("X-App-Id"))
 	timestampRaw := strings.TrimSpace(c.GetHeader("X-Timestamp"))
 	nonce := strings.TrimSpace(c.GetHeader("X-Nonce"))
 	signature := strings.ToLower(strings.TrimSpace(c.GetHeader("X-Signature")))
-	if integrationID == "" || timestampRaw == "" || nonce == "" || signature == "" {
+	if apiKey == "" || appid == "" || timestampRaw == "" || nonce == "" || signature == "" || c.GetHeader("X-Integration-ID") != "" {
 		AbortWithError(c, http.StatusUnauthorized, "INTEGRATION_AUTH_FAILED", "Integration authentication headers are required")
 		return "", false
 	}
@@ -99,8 +104,21 @@ func verifyIntegrationRequest(c *gin.Context, targetPath string, settings *servi
 		AbortWithError(c, http.StatusUnauthorized, "INTEGRATION_TIMESTAMP_EXPIRED", "Integration timestamp is outside the allowed window")
 		return "", false
 	}
+	storedKey, err := settings.GetAdminAPIKey(c.Request.Context())
+	if err != nil {
+		AbortWithError(c, http.StatusServiceUnavailable, "INTEGRATION_AUTH_UNAVAILABLE", "Integration authentication is unavailable")
+		return "", false
+	}
+	if storedKey == "" || subtle.ConstantTimeCompare([]byte(apiKey), []byte(storedKey)) != 1 {
+		AbortWithError(c, http.StatusUnauthorized, "INTEGRATION_AUTH_FAILED", "Invalid integration authentication")
+		return "", false
+	}
 	credentials, err := settings.GetIntegrationAdminCredentials(c.Request.Context())
-	if err != nil || credentials == nil || !credentials.Enabled || subtle.ConstantTimeCompare([]byte(integrationID), []byte(credentials.IntegrationID)) != 1 {
+	if err != nil {
+		AbortWithError(c, http.StatusServiceUnavailable, "INTEGRATION_AUTH_UNAVAILABLE", "Integration authentication is unavailable")
+		return "", false
+	}
+	if credentials == nil || !credentials.Enabled || subtle.ConstantTimeCompare([]byte(appid), []byte(credentials.AppID)) != 1 {
 		AbortWithError(c, http.StatusUnauthorized, "INTEGRATION_AUTH_FAILED", "Invalid integration authentication")
 		return "", false
 	}
@@ -110,8 +128,8 @@ func verifyIntegrationRequest(c *gin.Context, targetPath string, settings *servi
 		return "", false
 	}
 	c.Request.Body = io.NopCloser(bytes.NewReader(body))
-	canonical := IntegrationCanonicalString(c.Request.Method, targetPath, integrationID, timestampRaw, nonce, body)
-	mac := hmac.New(sha256.New, []byte(credentials.SigningSecret))
+	canonical := IntegrationCanonicalString(c.Request.Method, targetPath, appid, timestampRaw, nonce, body)
+	mac := hmac.New(sha256.New, []byte(credentials.Secret))
 	_, _ = mac.Write([]byte(canonical))
 	expected := hex.EncodeToString(mac.Sum(nil))
 	if subtle.ConstantTimeCompare([]byte(expected), []byte(signature)) != 1 {
@@ -122,7 +140,7 @@ func verifyIntegrationRequest(c *gin.Context, targetPath string, settings *servi
 		AbortWithError(c, http.StatusServiceUnavailable, "INTEGRATION_NONCE_STORE_UNAVAILABLE", "Integration replay protection is unavailable")
 		return "", false
 	}
-	nonceHash := sha256.Sum256([]byte(integrationID + "\n" + nonce))
+	nonceHash := sha256.Sum256([]byte(appid + "\n" + nonce))
 	accepted, err := redisClient.SetNX(c.Request.Context(), "integration:admin:nonce:"+hex.EncodeToString(nonceHash[:]), "1", integrationNonceTTL).Result()
 	if err != nil {
 		AbortWithError(c, http.StatusServiceUnavailable, "INTEGRATION_NONCE_STORE_UNAVAILABLE", "Integration replay protection is unavailable")
@@ -132,7 +150,7 @@ func verifyIntegrationRequest(c *gin.Context, targetPath string, settings *servi
 		AbortWithError(c, http.StatusConflict, "INTEGRATION_NONCE_REPLAYED", "Integration nonce has already been used")
 		return "", false
 	}
-	return integrationID, true
+	return appid, true
 }
 
 func integrationRouteForbidden(path string) bool {
@@ -147,7 +165,7 @@ func integrationRouteForbidden(path string) bool {
 	return false
 }
 
-func IntegrationCanonicalString(method, targetPath, integrationID, timestamp, nonce string, body []byte) string {
+func IntegrationCanonicalString(method, targetPath, appid, timestamp, nonce string, body []byte) string {
 	hash := sha256.Sum256(body)
-	return fmt.Sprintf("%s\n%s\n%s\n%s\n%s\n%s", method, targetPath, integrationID, timestamp, nonce, hex.EncodeToString(hash[:]))
+	return fmt.Sprintf("%s\n%s\n%s\n%s\n%s\n%s", method, targetPath, appid, timestamp, nonce, hex.EncodeToString(hash[:]))
 }

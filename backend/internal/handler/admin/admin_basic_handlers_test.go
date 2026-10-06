@@ -17,6 +17,7 @@ func setupAdminRouter() (*gin.Engine, *stubAdminService) {
 	adminSvc := newStubAdminService()
 
 	userHandler := NewUserHandler(adminSvc, nil, nil, nil, nil, nil, nil)
+	userHandler.integrationUsage = &adminUsageRepoCapture{}
 	groupHandler := NewGroupHandler(adminSvc, nil, nil)
 	proxyHandler := NewProxyHandler(adminSvc)
 	redeemHandler := NewRedeemHandler(adminSvc, nil)

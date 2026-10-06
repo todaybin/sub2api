@@ -1296,12 +1296,12 @@ export async function deleteAdminApiKey(): Promise<{ message: string }> {
 
 export interface IntegrationAdminCredentialsStatus {
   exists: boolean;
-  masked_integration_id: string;
+  masked_appid: string;
 }
 
 export interface GeneratedIntegrationAdminCredentials {
-  integration_id: string;
-  signing_secret: string;
+  appid: string;
+  secret: string;
 }
 
 export async function getIntegrationAdminCredentials(): Promise<IntegrationAdminCredentialsStatus> {

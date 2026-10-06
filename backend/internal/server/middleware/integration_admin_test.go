@@ -8,12 +8,12 @@ func TestIntegrationCanonicalString(t *testing.T) {
 	got := IntegrationCanonicalString(
 		"POST",
 		"/api/v1/admin/users/123/balance",
-		"int_example",
+		"0123456789abcdef0123456789abcdef",
 		"1735689600",
 		"nonce-123",
 		[]byte(`{"balance":25,"operation":"add"}`),
 	)
-	want := "POST\n/api/v1/admin/users/123/balance\nint_example\n1735689600\nnonce-123\n5635ce8d80e22dbaa22a5157abd8f830d870fbd1105f8bad28c7c015bef5d235"
+	want := "POST\n/api/v1/admin/users/123/balance\n0123456789abcdef0123456789abcdef\n1735689600\nnonce-123\n5635ce8d80e22dbaa22a5157abd8f830d870fbd1105f8bad28c7c015bef5d235"
 	if got != want {
 		t.Fatalf("canonical string mismatch\n got: %q\nwant: %q", got, want)
 	}

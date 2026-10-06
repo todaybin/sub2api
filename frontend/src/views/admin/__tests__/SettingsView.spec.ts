@@ -39,6 +39,7 @@ const {
   adminSettingsFetch,
   showError,
   showSuccess,
+  copyToClipboard,
 } = vi.hoisted(() => ({
   getSettings: vi.fn(),
   updateSettings: vi.fn(),
@@ -47,11 +48,11 @@ const {
   getAdminApiKey: vi.fn(),
   getIntegrationAdminCredentials: vi.fn().mockResolvedValue({
     exists: false,
-    masked_integration_id: "",
+    masked_appid: "",
   }),
   regenerateIntegrationAdminCredentials: vi.fn().mockResolvedValue({
-    integration_id: "int_test",
-    signing_secret: "sec_test",
+    appid: "0123456789abcdef0123456789abcdef",
+    secret: "0123456789abcdef".repeat(4),
   }),
   deleteIntegrationAdminCredentials: vi.fn().mockResolvedValue({ message: "deleted" }),
   getOverloadCooldownSettings: vi.fn(),
@@ -89,6 +90,7 @@ const {
   adminSettingsFetch: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
+  copyToClipboard: vi.fn(),
 }));
 
 const localeRef = vi.hoisted(() => ({ value: "zh-CN" }));
@@ -152,7 +154,7 @@ vi.mock("@/stores/adminSettings", () => ({
 
 vi.mock("@/composables/useClipboard", () => ({
   useClipboard: () => ({
-    copyToClipboard: vi.fn(),
+    copyToClipboard,
   }),
 }));
 
@@ -737,6 +739,37 @@ describe("admin SettingsView payment visible method controls", () => {
     });
     fetchPublicSettings.mockResolvedValue(undefined);
     adminSettingsFetch.mockResolvedValue(undefined);
+  });
+
+  it("shows masked AppID and generates separately copyable AppID and Secret", async () => {
+    getIntegrationAdminCredentials.mockResolvedValueOnce({ exists: true, masked_appid: "01234567...cdef" });
+    copyToClipboard.mockClear();
+    const wrapper = mountView();
+    await flushPromises();
+    await openSecurityTab(wrapper);
+    expect(wrapper.text()).toContain("01234567...cdef");
+    expect(wrapper.find('[data-testid="integration-secret"]').exists()).toBe(false);
+    const regenerateButton = wrapper.findAll("button").find((node) => node.text().includes("admin.settings.integrationAdmin.regenerate"));
+    expect(regenerateButton).toBeDefined();
+    await regenerateButton?.trigger("click");
+    await flushPromises();
+    expect(regenerateIntegrationAdminCredentials).toHaveBeenCalled();
+    expect(wrapper.get('[data-testid="integration-appid"]').text()).toBe("0123456789abcdef0123456789abcdef");
+    expect(wrapper.get('[data-testid="integration-secret"]').text()).toBe("0123456789abcdef".repeat(4));
+    await wrapper.get('[data-testid="copy-integration-appid"]').trigger("click");
+    expect(copyToClipboard).toHaveBeenLastCalledWith("0123456789abcdef0123456789abcdef");
+    await wrapper.get('[data-testid="copy-integration-secret"]').trigger("click");
+    expect(copyToClipboard).toHaveBeenLastCalledWith("0123456789abcdef".repeat(4));
+    wrapper.unmount();
+  });
+
+  it("explains combined authentication and legacy credential migration in both locales", () => {
+    for (const messages of [zhSettings.settings, enSettings.settings]) {
+      expect(messages.adminApiKey.usage).toContain("x-api-key");
+      expect(messages.integrationAdmin.signatureHint).toContain("X-App-Id");
+      expect(messages.integrationAdmin.signatureHint).toContain("x-api-key");
+      expect(messages.integrationAdmin.migrationHint).toContain("int_ / sec_");
+    }
   });
 
   it("submits the Codex ticket harvest toggle", async () => {

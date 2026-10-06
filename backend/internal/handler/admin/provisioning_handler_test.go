@@ -11,8 +11,13 @@ import (
 )
 
 type provisioningAPIKeyServiceStub struct {
+	groups  []service.Group
 	created []service.CreateAPIKeyRequest
 	deleted []int64
+}
+
+func (s *provisioningAPIKeyServiceStub) GetAvailableGroups(context.Context, int64) ([]service.Group, error) {
+	return s.groups, nil
 }
 
 type provisioningAdminServiceStub struct {
@@ -47,7 +52,7 @@ func (s *provisioningAdminServiceStub) UpdateUser(_ context.Context, id int64, i
 func (s *provisioningAPIKeyServiceStub) Create(_ context.Context, userID int64, req service.CreateAPIKeyRequest) (*service.APIKey, error) {
 	s.created = append(s.created, req)
 	id := int64(100 + len(s.created))
-	return &service.APIKey{ID: id, UserID: userID, Name: req.Name, GroupID: req.GroupID, Key: "sk-created", Status: service.StatusActive}, nil
+	return &service.APIKey{ID: id, UserID: userID, Name: req.Name, GroupID: req.GroupID, RoutingMode: req.RoutingMode, RoutingStrategy: req.RoutingStrategy, SmartGroupIDs: req.SmartGroupIDs, Key: "sk-created", Status: service.StatusActive}, nil
 }
 
 func (s *provisioningAPIKeyServiceStub) Delete(_ context.Context, id int64, _ int64) error {

@@ -58,10 +58,10 @@ func (h *SettingHandler) GetIntegrationAdminCredentials(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, gin.H{"exists": exists, "masked_integration_id": maskedID})
+	response.Success(c, gin.H{"exists": exists, "masked_appid": maskedID})
 }
 
-// RegenerateIntegrationAdminCredentials creates a dedicated integration ID and
+// RegenerateIntegrationAdminCredentials creates an AppID and
 // HMAC secret. The secret is returned only by this response.
 func (h *SettingHandler) RegenerateIntegrationAdminCredentials(c *gin.Context) {
 	credentials, err := h.settingService.GenerateIntegrationAdminCredentials(c.Request.Context())
@@ -70,8 +70,8 @@ func (h *SettingHandler) RegenerateIntegrationAdminCredentials(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{
-		"integration_id": credentials.IntegrationID,
-		"signing_secret": credentials.SigningSecret,
+		"appid":  credentials.AppID,
+		"secret": credentials.Secret,
 	})
 }
 

@@ -230,10 +230,19 @@
                   <p class="text-xs text-gray-500 dark:text-gray-400">
                     {{ t("admin.settings.integrationAdmin.signatureHint") }}
                   </p>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">{{ t("admin.settings.integrationAdmin.migrationHint") }}</p>
                   <div v-if="newIntegrationAdminCredentials" class="rounded border border-green-200 bg-green-50 p-3 text-sm dark:border-green-800 dark:bg-green-900/20">
                     <p class="font-medium text-green-700 dark:text-green-300">{{ t("admin.settings.integrationAdmin.secretWarning") }}</p>
-                    <code class="mt-2 block select-all break-all font-mono text-xs">{{ newIntegrationAdminCredentials.integration_id }}</code>
-                    <code class="mt-1 block select-all break-all font-mono text-xs">{{ newIntegrationAdminCredentials.signing_secret }}</code>
+                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                      <span>AppID:</span>
+                      <code data-testid="integration-appid" class="select-all break-all font-mono text-xs">{{ newIntegrationAdminCredentials.appid }}</code>
+                      <button type="button" data-testid="copy-integration-appid" class="btn btn-secondary btn-sm" @click="copyToClipboard(newIntegrationAdminCredentials.appid)">{{ t("admin.settings.integrationAdmin.copyAppId") }}</button>
+                    </div>
+                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                      <span>Secret:</span>
+                      <code data-testid="integration-secret" class="select-all break-all font-mono text-xs">{{ newIntegrationAdminCredentials.secret }}</code>
+                      <button type="button" data-testid="copy-integration-secret" class="btn btn-secondary btn-sm" @click="copyToClipboard(newIntegrationAdminCredentials.secret)">{{ t("admin.settings.integrationAdmin.copySecret") }}</button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -9280,7 +9289,7 @@ const integrationAdminLoading = ref(true);
 const integrationAdminExists = ref(false);
 const integrationAdminMaskedID = ref("");
 const integrationAdminOperating = ref(false);
-const newIntegrationAdminCredentials = ref<{ integration_id: string; signing_secret: string } | null>(null);
+const newIntegrationAdminCredentials = ref<{ appid: string; secret: string } | null>(null);
 const subscriptionGroups = ref<AdminGroup[]>([]);
 
 // Upstream billing probe state
@@ -12148,7 +12157,7 @@ async function loadIntegrationAdminCredentials() {
   try {
     const status = await adminAPI.settings.getIntegrationAdminCredentials();
     integrationAdminExists.value = status.exists;
-    integrationAdminMaskedID.value = status.masked_integration_id;
+    integrationAdminMaskedID.value = status.masked_appid;
   } finally {
     integrationAdminLoading.value = false;
   }
@@ -12159,7 +12168,7 @@ async function createIntegrationAdminCredentials() {
   try {
     const result = await adminAPI.settings.regenerateIntegrationAdminCredentials();
     integrationAdminExists.value = true;
-    integrationAdminMaskedID.value = `${result.integration_id.slice(0, 8)}...${result.integration_id.slice(-4)}`;
+    integrationAdminMaskedID.value = `${result.appid.slice(0, 8)}...${result.appid.slice(-4)}`;
     newIntegrationAdminCredentials.value = result;
     appStore.showSuccess(t("admin.settings.integrationAdmin.generated"));
   } catch (error) {

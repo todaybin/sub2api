@@ -40,6 +40,20 @@ func executeAdminIdempotentWithTimeout(
 	execute func(context.Context) (any, error),
 ) (*service.IdempotencyExecuteResult, error) {
 	coordinator := service.DefaultIdempotencyCoordinator()
+	// Integrations are a new contract: require keys even when legacy clients
+	// remain in observe-only mode, and never execute without a coordinator.
+	if c.GetString(middleware2.IntegrationAppIDContextKey) != "" {
+		key, err := service.NormalizeIdempotencyKey(c.GetHeader("Idempotency-Key"))
+		if err != nil {
+			return nil, err
+		}
+		if key == "" {
+			return nil, infraerrors.BadRequest("IDEMPOTENCY_KEY_REQUIRED", "Idempotency-Key is required")
+		}
+		if coordinator == nil {
+			return nil, service.ErrIdempotencyStoreUnavail
+		}
+	}
 	if coordinator == nil {
 		ctx := c.Request.Context()
 		if executionTimeout > 0 {
@@ -55,21 +69,22 @@ func executeAdminIdempotentWithTimeout(
 	}
 
 	return coordinator.Execute(c.Request.Context(), service.IdempotencyExecuteOptions{
-		Scope:            scope,
-		ActorScope:       adminActorScope(c),
-		Method:           c.Request.Method,
-		Route:            c.FullPath(),
-		IdempotencyKey:   c.GetHeader("Idempotency-Key"),
-		Payload:          payload,
-		RequireKey:       true,
-		TTL:              ttl,
-		ExecutionTimeout: executionTimeout,
+		Scope:             scope,
+		ActorScope:        adminActorScope(c),
+		Method:            c.Request.Method,
+		Route:             c.FullPath(),
+		IdempotencyKey:    c.GetHeader("Idempotency-Key"),
+		Payload:           payload,
+		RequireKey:        true,
+		SensitiveResponse: scope == "admin.users.token.issue" || (c.GetString(middleware2.IntegrationAppIDContextKey) != "" && (scope == "admin.users.api-keys.create" || scope == "admin.users.provision")),
+		TTL:               ttl,
+		ExecutionTimeout:  executionTimeout,
 	}, execute)
 }
 
 func adminActorScope(c *gin.Context) string {
-	if integrationID := c.GetString(middleware2.IntegrationIDContextKey); integrationID != "" {
-		return "integration:" + integrationID
+	if appid := c.GetString(middleware2.IntegrationAppIDContextKey); appid != "" {
+		return "integration:" + appid
 	}
 	actorScope := "admin:0"
 	if subject, ok := middleware2.GetAuthSubjectFromContext(c); ok {
@@ -120,14 +135,15 @@ func executeAdminIdempotentJSONWithMode(
 ) {
 	result, err := executeAdminIdempotentWithTimeout(c, scope, payload, ttl, executionTimeout, execute)
 	if err != nil {
+		failOpen := mode == idempotencyStoreUnavailableFailOpen && c.GetString(middleware2.IntegrationAppIDContextKey) == ""
 		if infraerrors.Code(err) == infraerrors.Code(service.ErrIdempotencyStoreUnavail) {
 			strategy := "fail_close"
-			if mode == idempotencyStoreUnavailableFailOpen {
+			if failOpen {
 				strategy = "fail_open"
 			}
 			service.RecordIdempotencyStoreUnavailable(c.FullPath(), scope, "handler_"+strategy)
 			logger.LegacyPrintf("handler.idempotency", "[Idempotency] store unavailable: method=%s route=%s scope=%s strategy=%s", c.Request.Method, c.FullPath(), scope, strategy)
-			if mode == idempotencyStoreUnavailableFailOpen {
+			if failOpen {
 				data, fallbackErr := execute(c.Request.Context())
 				if fallbackErr != nil {
 					response.ErrorFrom(c, fallbackErr)

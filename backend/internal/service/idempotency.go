@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/cipher"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -65,6 +66,8 @@ type IdempotencyConfig struct {
 	FailedRetryBackoff   time.Duration
 	MaxStoredResponseLen int
 	ObserveOnly          bool
+	// ResponseEncryptionSecret is supplied internally from the persistent JWT secret.
+	ResponseEncryptionSecret string
 }
 
 func DefaultIdempotencyConfig() IdempotencyConfig {
@@ -87,6 +90,8 @@ type IdempotencyExecuteOptions struct {
 	Payload        any
 	TTL            time.Duration
 	RequireKey     bool
+	// SensitiveResponse preserves credentials in encrypted storage for exact retries.
+	SensitiveResponse bool
 	// ExecutionTimeout opts into bounded execution independent of client cancellation,
 	// with lease renewal and a separate short window to persist the final result.
 	ExecutionTimeout time.Duration
@@ -98,8 +103,9 @@ type IdempotencyExecuteResult struct {
 }
 
 type IdempotencyCoordinator struct {
-	repo IdempotencyRepository
-	cfg  IdempotencyConfig
+	repo           IdempotencyRepository
+	cfg            IdempotencyConfig
+	responseCipher cipher.AEAD
 }
 
 var (
@@ -137,8 +143,9 @@ func DefaultSystemOperationIdempotencyTTL() time.Duration {
 
 func NewIdempotencyCoordinator(repo IdempotencyRepository, cfg IdempotencyConfig) *IdempotencyCoordinator {
 	return &IdempotencyCoordinator{
-		repo: repo,
-		cfg:  cfg,
+		repo:           repo,
+		cfg:            cfg,
+		responseCipher: newIdempotencyResponseCipher(cfg.ResponseEncryptionSecret),
 	}
 }
 
@@ -212,6 +219,9 @@ func (c *IdempotencyCoordinator) Execute(
 	}
 	if execute == nil {
 		return nil, infraerrors.InternalServer("IDEMPOTENCY_EXECUTOR_NIL", "idempotency executor is nil")
+	}
+	if opts.SensitiveResponse && c.responseCipher == nil {
+		return nil, ErrIdempotencyStoreUnavail
 	}
 
 	key, err := NormalizeIdempotencyKey(opts.IdempotencyKey)
@@ -340,7 +350,7 @@ func (c *IdempotencyCoordinator) Execute(
 		if !reclaimedByExpired {
 			switch existing.Status {
 			case IdempotencyStatusSucceeded:
-				data, parseErr := c.decodeStoredResponse(existing.ResponseBody)
+				data, parseErr := c.decodeReplayResponse(existing.ResponseBody, opts.SensitiveResponse, fingerprint)
 				if parseErr != nil {
 					RecordIdempotencyStoreUnavailable(opts.Route, opts.Scope, "decode_stored_response_error")
 					logIdempotencyAudit(opts.Route, opts.Scope, keyHash, "succeeded->store_unavailable", false, map[string]string{
@@ -439,7 +449,7 @@ func (c *IdempotencyCoordinator) Execute(
 		return nil, execErr
 	}
 
-	storedBody, marshalErr := c.marshalStoredResponse(data)
+	storedBody, marshalErr := c.marshalReplayResponse(data, opts.SensitiveResponse, fingerprint)
 	if marshalErr != nil {
 		RecordIdempotencyStoreUnavailable(opts.Route, opts.Scope, "marshal_response_error")
 		logIdempotencyAudit(opts.Route, opts.Scope, keyHash, "processing->store_unavailable", false, map[string]string{

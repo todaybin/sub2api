@@ -94,6 +94,29 @@ func newUserUsageRequestTypeTestRouter(repo *userUsageRepoCapture) *gin.Engine {
 	return router
 }
 
+func TestCurrentUserUsageTimestampRangeAndIdentity(t *testing.T) {
+	repo := &userUsageRepoCapture{stats: &usagestats.UsageStats{TotalRequests: 2, TotalTokens: 135}}
+	router := newUserUsageRequestTypeTestRouter(repo)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/usage/stats?user_id=999&start_time=2026-10-01T00:00:00Z&end_time=2026-10-01T01:00:00Z", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, int64(42), repo.statsFilters.UserID)
+	require.Equal(t, time.Hour, repo.statsFilters.EndTime.Sub(*repo.statsFilters.StartTime))
+	require.Contains(t, rec.Body.String(), `"total_tokens":135`)
+	for _, query := range []string{
+		"start_time=bad&end_time=bad",
+		"start_time=2026-10-01T00:00:00Z",
+		"start_time=2026-10-01T00:00:00Z&end_time=2026-10-01T00:00:00Z",
+		"start_time=2026-10-01T00:00:00Z&end_time=2026-10-01T01:00:00Z&start_date=2026-10-01",
+		"start_date=2026-10-02&end_date=2026-10-01",
+		"timezone=Invalid",
+	} {
+		rec = httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/usage/stats?"+query, nil))
+		require.Equal(t, http.StatusBadRequest, rec.Code, query)
+	}
+}
+
 func TestUserUsageListRequestTypePriority(t *testing.T) {
 	repo := &userUsageRepoCapture{}
 	router := newUserUsageRequestTypeTestRouter(repo)

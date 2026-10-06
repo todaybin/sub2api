@@ -22,6 +22,7 @@ const provisioningExternalIDPrefix = "integration_external_id:"
 type provisioningAPIKeyService interface {
 	Create(ctx context.Context, userID int64, req service.CreateAPIKeyRequest) (*service.APIKey, error)
 	Delete(ctx context.Context, id int64, userID int64) error
+	GetAvailableGroups(ctx context.Context, userID int64) ([]service.Group, error)
 }
 
 // ProvisioningHandler 为可信集成幂等确保普通用户和模型分组 Key。
@@ -38,16 +39,19 @@ func NewProvisioningHandler(adminService service.AdminService, apiKeyService *se
 
 // ProvisioningAPIKeyRequest 描述需要确保存在的一个分组 Key。
 type ProvisioningAPIKeyRequest struct {
-	Name          string   `json:"name" binding:"required"`
-	GroupID       *int64   `json:"group_id"`
-	CustomKey     *string  `json:"custom_key"`
-	IPWhitelist   []string `json:"ip_whitelist"`
-	IPBlacklist   []string `json:"ip_blacklist"`
-	Quota         float64  `json:"quota" binding:"gte=0"`
-	ExpiresInDays *int     `json:"expires_in_days" binding:"omitempty,min=1,max=36500"`
-	RateLimit5h   float64  `json:"rate_limit_5h" binding:"gte=0"`
-	RateLimit1d   float64  `json:"rate_limit_1d" binding:"gte=0"`
-	RateLimit7d   float64  `json:"rate_limit_7d" binding:"gte=0"`
+	Name            string   `json:"name" binding:"required"`
+	GroupID         *int64   `json:"group_id"`
+	RoutingMode     string   `json:"routing_mode" binding:"omitempty,oneof=single smart"`
+	RoutingStrategy string   `json:"routing_strategy" binding:"omitempty,oneof=auto price speed random"`
+	SmartGroupIDs   []int64  `json:"smart_group_ids"`
+	CustomKey       *string  `json:"custom_key"`
+	IPWhitelist     []string `json:"ip_whitelist"`
+	IPBlacklist     []string `json:"ip_blacklist"`
+	Quota           float64  `json:"quota" binding:"gte=0"`
+	ExpiresInDays   *int     `json:"expires_in_days" binding:"omitempty,min=1,max=36500"`
+	RateLimit5h     float64  `json:"rate_limit_5h" binding:"gte=0"`
+	RateLimit1d     float64  `json:"rate_limit_1d" binding:"gte=0"`
+	RateLimit7d     float64  `json:"rate_limit_7d" binding:"gte=0"`
 }
 
 // ProvisioningSubscriptionRequest 描述可选的首次订阅。
@@ -74,14 +78,17 @@ type ProvisionUserRequest struct {
 }
 
 type provisioningAPIKeyResponse struct {
-	ID             int64  `json:"id"`
-	UserID         int64  `json:"user_id"`
-	Name           string `json:"name"`
-	GroupID        *int64 `json:"group_id"`
-	Status         string `json:"status"`
-	Key            string `json:"key,omitempty"`
-	KeyFingerprint string `json:"key_fingerprint"`
-	Created        bool   `json:"created"`
+	RoutingMode     string  `json:"routing_mode"`
+	RoutingStrategy string  `json:"routing_strategy"`
+	SmartGroupIDs   []int64 `json:"smart_group_ids,omitempty"`
+	ID              int64   `json:"id"`
+	UserID          int64   `json:"user_id"`
+	Name            string  `json:"name"`
+	GroupID         *int64  `json:"group_id"`
+	Status          string  `json:"status"`
+	Key             string  `json:"key,omitempty"`
+	KeyFingerprint  string  `json:"key_fingerprint"`
+	Created         bool    `json:"created"`
 }
 
 // Create 创建或认领普通用户，合并分组权限并只创建缺失的分组 Key。
@@ -135,10 +142,6 @@ func (h *ProvisioningHandler) ensureProvisioned(ctx context.Context, c *gin.Cont
 		}
 	}()
 
-	keyResponses, createdKeyIDs, err := h.ensureAPIKeys(ctx, user.ID, keyRequests)
-	if err != nil {
-		return nil, err
-	}
 	var subscription *service.UserSubscription
 	if createdUser && req.Subscription != nil {
 		subscription, err = h.subscriptionService.AssignSubscription(ctx, &service.AssignSubscriptionInput{
@@ -148,6 +151,11 @@ func (h *ProvisioningHandler) ensureProvisioned(ctx context.Context, c *gin.Cont
 		if err != nil {
 			return nil, fmt.Errorf("assign subscription: %w", err)
 		}
+	}
+	keyResponses, newKeyIDs, err := h.ensureAPIKeys(ctx, user.ID, keyRequests)
+	createdKeyIDs = newKeyIDs
+	if err != nil {
+		return nil, err
 	}
 	committed = true
 	result := gin.H{
@@ -244,7 +252,10 @@ func (h *ProvisioningHandler) ensureAPIKeys(ctx context.Context, userID int64, r
 	}
 	byGroup := make(map[string]service.APIKey, len(existing))
 	for _, item := range existing {
-		key := provisionGroupKey(item.GroupID)
+		if !item.IsActive() || item.IsExpired() || item.IsQuotaExhausted() {
+			continue
+		}
+		key := provisionRouteKey(item.RoutingMode, item.GroupID, item.SmartGroupIDs)
 		if _, ok := byGroup[key]; !ok {
 			byGroup[key] = item
 		}
@@ -252,21 +263,21 @@ func (h *ProvisioningHandler) ensureAPIKeys(ctx context.Context, userID int64, r
 	responses := make([]provisioningAPIKeyResponse, 0, len(requests))
 	createdIDs := make([]int64, 0, len(requests))
 	for _, request := range requests {
-		groupKey := provisionGroupKey(request.GroupID)
+		input, resolveErr := resolveIntegrationKey(ctx, h.apiKeyService, userID, request.serviceRequest())
+		if resolveErr != nil {
+			return nil, createdIDs, resolveErr
+		}
+		groupKey := provisionRouteKey(input.RoutingMode, input.GroupID, input.SmartGroupIDs)
 		if item, ok := byGroup[groupKey]; ok {
 			responses = append(responses, provisioningKeyResponse(item, false))
 			continue
 		}
-		created, createErr := h.apiKeyService.Create(ctx, userID, service.CreateAPIKeyRequest{
-			Name: request.Name, GroupID: request.GroupID, CustomKey: request.CustomKey,
-			IPWhitelist: request.IPWhitelist, IPBlacklist: request.IPBlacklist, Quota: request.Quota,
-			ExpiresInDays: request.ExpiresInDays, RateLimit5h: request.RateLimit5h,
-			RateLimit1d: request.RateLimit1d, RateLimit7d: request.RateLimit7d,
-		})
+		created, createErr := h.apiKeyService.Create(ctx, userID, input)
 		if createErr != nil {
 			return nil, createdIDs, fmt.Errorf("create api key for group %s: %w", groupKey, createErr)
 		}
 		createdIDs = append(createdIDs, created.ID)
+		byGroup[groupKey] = *created
 		responses = append(responses, provisioningKeyResponse(*created, true))
 	}
 	return responses, createdIDs, nil
@@ -293,7 +304,18 @@ func normalizeProvisionAPIKeys(req ProvisionUserRequest) ([]ProvisioningAPIKeyRe
 		if items[i].GroupID != nil && *items[i].GroupID <= 0 {
 			return nil, fmt.Errorf("api key group_id must be greater than zero")
 		}
-		key := provisionGroupKey(items[i].GroupID)
+		for _, id := range items[i].SmartGroupIDs {
+			if id <= 0 {
+				return nil, fmt.Errorf("smart_group_ids must be positive")
+			}
+		}
+		if items[i].GroupID != nil && (items[i].RoutingMode == "smart" || len(items[i].SmartGroupIDs) > 0) {
+			return nil, fmt.Errorf("group_id conflicts with smart routing")
+		}
+		if items[i].GroupID == nil && items[i].RoutingMode == "single" {
+			return nil, fmt.Errorf("single routing requires group_id")
+		}
+		key := provisionRouteKey(items[i].RoutingMode, items[i].GroupID, items[i].SmartGroupIDs)
 		if _, ok := seen[key]; ok {
 			return nil, fmt.Errorf("duplicate api key group_id: %s", key)
 		}
@@ -308,6 +330,7 @@ func mergedProvisionGroups(groups []int64, keys []ProvisioningAPIKeyRequest) []i
 		if item.GroupID != nil {
 			result = append(result, *item.GroupID)
 		}
+		result = append(result, item.SmartGroupIDs...)
 	}
 	return mergeInt64Sets(nil, result)
 }
@@ -388,6 +411,7 @@ func provisioningKeyResponse(key service.APIKey, created bool) provisioningAPIKe
 		fingerprint = hex.EncodeToString(sum[:8])
 	}
 	result := provisioningAPIKeyResponse{
+		RoutingMode: key.RoutingMode, RoutingStrategy: key.RoutingStrategy, SmartGroupIDs: key.SmartGroupIDs,
 		ID: key.ID, UserID: key.UserID, Name: key.Name, GroupID: key.GroupID,
 		Status: key.Status, KeyFingerprint: fingerprint, Created: created,
 	}
@@ -395,4 +419,15 @@ func provisioningKeyResponse(key service.APIKey, created bool) provisioningAPIKe
 		result.Key = key.Key
 	}
 	return result
+}
+
+func (r ProvisioningAPIKeyRequest) serviceRequest() service.CreateAPIKeyRequest {
+	return service.CreateAPIKeyRequest{Name: r.Name, GroupID: r.GroupID, RoutingMode: r.RoutingMode, RoutingStrategy: r.RoutingStrategy, SmartGroupIDs: r.SmartGroupIDs, CustomKey: r.CustomKey, IPWhitelist: r.IPWhitelist, IPBlacklist: r.IPBlacklist, Quota: r.Quota, ExpiresInDays: r.ExpiresInDays, RateLimit5h: r.RateLimit5h, RateLimit1d: r.RateLimit1d, RateLimit7d: r.RateLimit7d}
+}
+
+func provisionRouteKey(mode string, groupID *int64, ids []int64) string {
+	if mode == "smart" || (mode == "" && groupID == nil) {
+		return fmt.Sprintf("smart:%v", mergeInt64Sets(nil, ids))
+	}
+	return provisionGroupKey(groupID)
 }

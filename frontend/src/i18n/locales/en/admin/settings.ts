@@ -1064,17 +1064,20 @@ export default {
         keyCopied: 'Key copied to clipboard',
         keyWarning: 'This key will only be shown once. Please copy it now.',
         securityWarning: 'Warning: This key provides full admin access. Keep it secure.',
-        usage: 'Usage: Add to request header - x-api-key: <your-admin-api-key>'
+        usage: 'Gateway only: Send x-api-key together with an AppID / Secret signature. This key cannot call admin routes on its own.'
       },
       integrationAdmin: {
         title: 'Third-party Integration Gateway',
-        description: 'Signed gateway for external systems to call existing admin APIs without exposing the global admin key.',
+        description: 'External systems must use the admin API key together with an AppID / Secret signature to call admin APIs through the integration gateway.',
         create: 'Create Credentials',
         regenerate: 'Rotate Credentials',
-        currentId: 'Integration ID',
+        currentId: 'AppID',
+        copyAppId: 'Copy AppID',
+        copySecret: 'Copy Secret',
+        migrationHint: 'Legacy credentials with int_ / sec_ prefixes are disabled. Generate new credentials and update your client configuration. Keep using the existing admin API key with the new credentials.',
         generated: 'Integration credentials generated',
         secretWarning: 'Copy both values now. The signing secret is shown only once.',
-        signatureHint: 'Requests require X-Integration-ID, X-Timestamp, X-Nonce, X-Signature, and Idempotency-Key. See docs/ADMIN_INTEGRATION_GATEWAY_API.md for signing examples.'
+        signatureHint: 'Requests require x-api-key, X-App-Id, X-Timestamp, X-Nonce, and X-Signature; writes also require Idempotency-Key. Use Secret only for signing, never send it directly. See docs/ADMIN_INTEGRATION_GATEWAY_API.md for signing examples.'
       },
       soraS3: {
         title: 'Sora Storage',

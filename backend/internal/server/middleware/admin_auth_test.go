@@ -48,6 +48,28 @@ func TestAdminAuthJWTValidatesTokenVersion(t *testing.T) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 
+	t.Run("direct_api_key_never_falls_back_to_jwt_or_app_signature", func(t *testing.T) {
+		token, err := authService.GenerateToken(context.Background(), admin)
+		require.NoError(t, err)
+		for _, value := range []string{"admin-key", ""} {
+			for _, withJWT := range []bool{false, true} {
+				w := httptest.NewRecorder()
+				req := httptest.NewRequest(http.MethodGet, "/t", nil)
+				req.Header.Set("x-api-key", value)
+				req.Header.Set("X-App-Id", "0123456789abcdef0123456789abcdef")
+				req.Header.Set("X-Timestamp", "1735689600")
+				req.Header.Set("X-Nonce", "nonce")
+				req.Header.Set("X-Signature", "signature")
+				if withJWT {
+					req.Header.Set("Authorization", "Bearer "+token)
+				}
+				router.ServeHTTP(w, req)
+				require.Equal(t, http.StatusUnauthorized, w.Code)
+				require.Contains(t, w.Body.String(), "ADMIN_API_KEY_GATEWAY_REQUIRED")
+			}
+		}
+	})
+
 	t.Run("token_version_mismatch_rejected", func(t *testing.T) {
 		token, err := authService.GenerateToken(context.Background(), &service.User{
 			ID:           admin.ID,

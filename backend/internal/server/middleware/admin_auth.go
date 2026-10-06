@@ -2,7 +2,6 @@
 package middleware
 
 import (
-	"crypto/subtle"
 	"errors"
 	"strings"
 
@@ -22,9 +21,7 @@ func NewAdminAuthMiddleware(
 }
 
 // adminAuth 管理员认证中间件实现
-// 支持两种认证方式（通过不同的 header 区分）：
-// 1. Admin API Key: x-api-key: <admin-api-key>
-// 2. JWT Token: Authorization: Bearer <jwt-token> (需要管理员角色)
+// 管理员入口使用 JWT；外部程序必须通过已校验 API Key 和 App 签名的集成网关。
 func adminAuth(
 	authService *service.AuthService,
 	userService *service.UserService,
@@ -36,10 +33,10 @@ func adminAuth(
 		// installed a synthetic admin subject for the existing admin handlers.
 		if identity, ok := integrationIdentityFromRequest(c.Request.Context()); ok {
 			c.Set(IntegrationAuthenticatedContextKey, true)
-			c.Set(IntegrationIDContextKey, identity.IntegrationID)
+			c.Set(IntegrationAppIDContextKey, identity.AppID)
 			c.Set(string(ContextKeyUser), identity.Admin)
 			c.Set(string(ContextKeyUserRole), identity.AdminRole)
-			c.Set(ContextKeyAuthEmail, "integration:"+identity.IntegrationID)
+			c.Set(ContextKeyAuthEmail, "integration:"+identity.AppID)
 			c.Set("auth_method", "integration")
 			c.Next()
 			return
@@ -58,13 +55,10 @@ func adminAuth(
 			}
 		}
 
-		// 检查 x-api-key header（Admin API Key 认证）
-		apiKey := c.GetHeader("x-api-key")
-		if apiKey != "" {
-			if !validateAdminAPIKey(c, apiKey, settingService, userService) {
-				return
-			}
-			c.Next()
+		// Never fall back to JWT for a direct API-key request. Only the gateway
+		// may install the verified request identity used above.
+		if _, supplied := c.Request.Header["X-Api-Key"]; supplied {
+			AbortWithError(c, 401, "ADMIN_API_KEY_GATEWAY_REQUIRED", "Admin API key authentication requires the integration gateway and App signature")
 			return
 		}
 
@@ -127,42 +121,6 @@ func extractJWTFromWebSocketSubprotocol(c *gin.Context) string {
 		}
 	}
 	return ""
-}
-
-// validateAdminAPIKey 验证管理员 API Key
-func validateAdminAPIKey(
-	c *gin.Context,
-	key string,
-	settingService *service.SettingService,
-	userService *service.UserService,
-) bool {
-	storedKey, err := settingService.GetAdminAPIKey(c.Request.Context())
-	if err != nil {
-		AbortWithError(c, 500, "INTERNAL_ERROR", "Internal server error")
-		return false
-	}
-
-	// 未配置或不匹配，统一返回相同错误（避免信息泄露）
-	if storedKey == "" || subtle.ConstantTimeCompare([]byte(key), []byte(storedKey)) != 1 {
-		AbortWithError(c, 401, "INVALID_ADMIN_KEY", "Invalid admin API key")
-		return false
-	}
-
-	// 获取真实的管理员用户
-	admin, err := userService.GetFirstAdmin(c.Request.Context())
-	if err != nil {
-		AbortWithError(c, 500, "INTERNAL_ERROR", "No admin user found")
-		return false
-	}
-
-	c.Set(string(ContextKeyUser), AuthSubject{
-		UserID:      admin.ID,
-		Concurrency: admin.Concurrency,
-	})
-	c.Set(string(ContextKeyUserRole), admin.Role)
-	c.Set(ContextKeyAuthEmail, admin.Email)
-	c.Set("auth_method", "admin_api_key")
-	return true
 }
 
 // validateJWTForAdmin 验证 JWT 并检查管理员权限

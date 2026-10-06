@@ -154,6 +154,12 @@ func (h *UsageHandler) parseUserUsageFilters(c *gin.Context, requireRange bool) 
 	}
 
 	userTZ := c.Query("timezone")
+	if userTZ != "" {
+		if _, err := time.LoadLocation(userTZ); err != nil {
+			response.BadRequest(c, "Invalid timezone")
+			return nil, false
+		}
+	}
 	now := timezone.NowInUserLocation(userTZ)
 	var startTime, endTime time.Time
 	var startPtr, endPtr *time.Time
@@ -179,6 +185,28 @@ func (h *UsageHandler) parseUserUsageFilters(c *gin.Context, requireRange bool) 
 		endPtr = &endTime
 	}
 
+	if c.Query("start_time") != "" || c.Query("end_time") != "" {
+		if c.Query("start_time") == "" || c.Query("end_time") == "" || startDateStr != "" || endDateStr != "" {
+			response.BadRequest(c, "Provide both start_time and end_time without date parameters")
+			return nil, false
+		}
+		var err error
+		startTime, err = time.Parse(time.RFC3339, c.Query("start_time"))
+		if err != nil {
+			response.BadRequest(c, "Invalid start_time, use RFC3339")
+			return nil, false
+		}
+		endTime, err = time.Parse(time.RFC3339, c.Query("end_time"))
+		if err != nil {
+			response.BadRequest(c, "Invalid end_time, use RFC3339")
+			return nil, false
+		}
+		startPtr, endPtr = &startTime, &endTime
+	}
+	if startPtr != nil && endPtr != nil && !startPtr.Before(*endPtr) {
+		response.BadRequest(c, "Start time must precede end time")
+		return nil, false
+	}
 	if requireRange {
 		if startPtr == nil {
 			switch c.DefaultQuery("period", "") {
@@ -203,6 +231,10 @@ func (h *UsageHandler) parseUserUsageFilters(c *gin.Context, requireRange bool) 
 		}
 	}
 
+	if startPtr != nil && endPtr != nil && !startPtr.Before(*endPtr) {
+		response.BadRequest(c, "Start time must precede end time")
+		return nil, false
+	}
 	return &userUsageFilters{
 		Filters: usagestats.UsageLogFilters{
 			UserID:             subject.UserID,

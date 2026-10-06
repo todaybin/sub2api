@@ -34,6 +34,10 @@ type UserHandler struct {
 	totpService           *service.TotpService                // 角色提升为管理员的 step-up 门控
 	userService           *service.UserService
 	settingService        *service.SettingService // step-up 功能开关
+	integrationKeys       integrationKeyService
+	integrationAuth       integrationAuthService
+	integrationUsage      integrationUsageService
+	integrationModels     integrationModelService
 }
 
 // NewUserHandler creates a new admin user handler
@@ -285,25 +289,36 @@ func (h *UserHandler) Create(c *gin.Context) {
 		}
 	}
 
-	user, err := h.adminService.CreateUser(c.Request.Context(), &service.CreateUserInput{
-		Email:                req.Email,
-		Password:             req.Password,
-		Username:             req.Username,
-		Notes:                req.Notes,
-		Role:                 req.Role,
-		Balance:              req.Balance,
-		Concurrency:          req.Concurrency,
-		RPMLimit:             req.RPMLimit,
-		AllowedGroups:        req.AllowedGroups,
-		RestrictPublicGroups: req.RestrictPublicGroups,
-		ActorAdminID:         getAdminIDFromContext(c),
-	})
+	create := func(ctx context.Context) (any, error) {
+		user, err := h.adminService.CreateUser(ctx, &service.CreateUserInput{
+			Email:                req.Email,
+			Password:             req.Password,
+			Username:             req.Username,
+			Notes:                req.Notes,
+			Role:                 req.Role,
+			Balance:              req.Balance,
+			Concurrency:          req.Concurrency,
+			RPMLimit:             req.RPMLimit,
+			AllowedGroups:        req.AllowedGroups,
+			RestrictPublicGroups: req.RestrictPublicGroups,
+			ActorAdminID:         getAdminIDFromContext(c),
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		return dto.UserFromServiceAdmin(user), nil
+	}
+	if c.GetString(middleware.IntegrationAppIDContextKey) != "" {
+		executeAdminIdempotentJSON(c, "admin.users.create", req, service.DefaultWriteIdempotencyTTL(), create)
+		return
+	}
+	result, err := create(c.Request.Context())
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
-
-	response.Success(c, dto.UserFromServiceAdmin(user))
+	response.Success(c, result)
 }
 
 // Update handles updating a user
@@ -451,15 +466,7 @@ func (h *UserHandler) GetUserUsage(c *gin.Context) {
 		return
 	}
 
-	period := c.DefaultQuery("period", "month")
-
-	stats, err := h.adminService.GetUserUsageStats(c.Request.Context(), userID, period)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-
-	response.Success(c, stats)
+	h.getIntegrationUserUsage(c, userID)
 }
 
 // GetBalanceHistory handles getting user's balance/concurrency change history

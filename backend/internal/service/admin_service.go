@@ -23,7 +23,6 @@ type AdminService interface {
 	BatchUpdateConcurrency(ctx context.Context, userIDs []int64, value int, mode string) (int, error)
 	BatchUpdateLimits(ctx context.Context, userIDs []int64, concurrency, rpmLimit *int) (int, error)
 	GetUserAPIKeys(ctx context.Context, userID int64, page, pageSize int, sortBy, sortOrder string) ([]APIKey, int64, error)
-	GetUserUsageStats(ctx context.Context, userID int64, period string) (any, error)
 	GetUserRPMStatus(ctx context.Context, userID int64) (*UserRPMStatus, error)
 	// GetUserBalanceHistory returns paginated balance/concurrency change records for a user.
 	// codeType is optional - pass empty string to return all types.
@@ -687,33 +686,33 @@ var ErrRPMStatusUnavailable = infraerrors.New(http.StatusNotImplemented, "RPM_ST
 
 // adminServiceImpl implements AdminService
 type adminServiceImpl struct {
-	cfg                      *config.Config
-	userRepo                 UserRepository
-	groupRepo                GroupRepository
-	groupDuplicateRepo       GroupDuplicateRepository
-	emptyGroupDeleteRepo     EmptyGroupDeleteRepository
-	accountRepo              AccountRepository
-	accountDuplicateRepo     AccountDuplicateRepository
-	accountBillingRepo       AccountBillingSettingsRepository
-	proxyRepo                ProxyRepository
-	apiKeyRepo               APIKeyRepository
-	redeemCodeRepo           RedeemCodeRepository
-	userGroupRateRepo        UserGroupRateRepository
-	userRPMCache             UserRPMCache
-	billingCacheService      *BillingCacheService
-	proxyProber              ProxyExitInfoProber
-	proxyLatencyCache        ProxyLatencyCache
-	authCacheInvalidator     APIKeyAuthCacheInvalidator
-	entClient                *dbent.Client // 用于开启数据库事务
-	settingService           *SettingService
-	defaultSubAssigner       DefaultSubscriptionAssigner
-	userSubRepo              UserSubscriptionRepository
-	privacyClientFactory     PrivacyClientFactory
-	runtimeBlocker           AccountRuntimeBlocker
-	affiliateService         adminRechargeAffiliateAccruer
-	compositeRouteRepo       CompositeModelRouteRepository
-	compositeResolver        *CompositeRouteResolver
-	dynamicGroupRate         *DynamicGroupRateService
+	cfg                  *config.Config
+	userRepo             UserRepository
+	groupRepo            GroupRepository
+	groupDuplicateRepo   GroupDuplicateRepository
+	emptyGroupDeleteRepo EmptyGroupDeleteRepository
+	accountRepo          AccountRepository
+	accountDuplicateRepo AccountDuplicateRepository
+	accountBillingRepo   AccountBillingSettingsRepository
+	proxyRepo            ProxyRepository
+	apiKeyRepo           APIKeyRepository
+	redeemCodeRepo       RedeemCodeRepository
+	userGroupRateRepo    UserGroupRateRepository
+	userRPMCache         UserRPMCache
+	billingCacheService  *BillingCacheService
+	proxyProber          ProxyExitInfoProber
+	proxyLatencyCache    ProxyLatencyCache
+	authCacheInvalidator APIKeyAuthCacheInvalidator
+	entClient            *dbent.Client // 用于开启数据库事务
+	settingService       *SettingService
+	defaultSubAssigner   DefaultSubscriptionAssigner
+	userSubRepo          UserSubscriptionRepository
+	privacyClientFactory PrivacyClientFactory
+	runtimeBlocker       AccountRuntimeBlocker
+	affiliateService     adminRechargeAffiliateAccruer
+	compositeRouteRepo   CompositeModelRouteRepository
+	compositeResolver    *CompositeRouteResolver
+	dynamicGroupRate     *DynamicGroupRateService
 	// 分组平台变更后用来失效渠道缓存；可为 nil（缓存会在 TTL 到期后自然重建）
 	channelCacheInvalidator ChannelCacheInvalidator
 }
@@ -759,33 +758,33 @@ func NewAdminService(
 	channelCacheInvalidator ChannelCacheInvalidator,
 ) AdminService {
 	return &adminServiceImpl{
-		cfg:                      cfg,
-		userRepo:                 userRepo,
-		groupRepo:                groupRepo,
-		groupDuplicateRepo:       groupRepo,
-		emptyGroupDeleteRepo:     groupRepo,
-		accountRepo:              accountRepo,
-		accountDuplicateRepo:     accountRepo,
-		accountBillingRepo:       accountRepo,
-		proxyRepo:                proxyRepo,
-		apiKeyRepo:               apiKeyRepo,
-		redeemCodeRepo:           redeemCodeRepo,
-		userGroupRateRepo:        userGroupRateRepo,
-		userRPMCache:             userRPMCache,
-		billingCacheService:      billingCacheService,
-		proxyProber:              proxyProber,
-		proxyLatencyCache:        proxyLatencyCache,
-		authCacheInvalidator:     authCacheInvalidator,
-		entClient:                entClient,
-		settingService:           settingService,
-		defaultSubAssigner:       defaultSubAssigner,
-		userSubRepo:              userSubRepo,
-		privacyClientFactory:     privacyClientFactory,
-		runtimeBlocker:           runtimeBlocker,
-		affiliateService:         affiliateService,
-		compositeRouteRepo:       compositeRouteRepo,
-		compositeResolver:        compositeResolver,
-		dynamicGroupRate:         dynamicGroupRate,
+		cfg:                     cfg,
+		userRepo:                userRepo,
+		groupRepo:               groupRepo,
+		groupDuplicateRepo:      groupRepo,
+		emptyGroupDeleteRepo:    groupRepo,
+		accountRepo:             accountRepo,
+		accountDuplicateRepo:    accountRepo,
+		accountBillingRepo:      accountRepo,
+		proxyRepo:               proxyRepo,
+		apiKeyRepo:              apiKeyRepo,
+		redeemCodeRepo:          redeemCodeRepo,
+		userGroupRateRepo:       userGroupRateRepo,
+		userRPMCache:            userRPMCache,
+		billingCacheService:     billingCacheService,
+		proxyProber:             proxyProber,
+		proxyLatencyCache:       proxyLatencyCache,
+		authCacheInvalidator:    authCacheInvalidator,
+		entClient:               entClient,
+		settingService:          settingService,
+		defaultSubAssigner:      defaultSubAssigner,
+		userSubRepo:             userSubRepo,
+		privacyClientFactory:    privacyClientFactory,
+		runtimeBlocker:          runtimeBlocker,
+		affiliateService:        affiliateService,
+		compositeRouteRepo:      compositeRouteRepo,
+		compositeResolver:       compositeResolver,
+		dynamicGroupRate:        dynamicGroupRate,
 		channelCacheInvalidator: channelCacheInvalidator,
 	}
 }

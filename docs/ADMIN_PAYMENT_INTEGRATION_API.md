@@ -4,6 +4,30 @@
 
 ---
 
+### 签名调用函数 / Signed request helper
+
+以下所有示例共用该函数。配置 `BASE`、`SUB2API_ADMIN_API_KEY`、`SUB2API_APP_ID`、`SUB2API_APP_SECRET`。每次重试重新签名，并保留相同业务的幂等键和请求体。
+
+All examples below use this helper. Configure the four variables above. Sign each retry with a fresh nonce while preserving the same business idempotency key and body.
+
+```bash
+signed_admin() {
+  local method="$1" path="$2" body="$3" idem="$4"
+  local timestamp nonce body_hash canonical signature
+  timestamp="$(date +%s)"
+  nonce="$(openssl rand -hex 16)"
+  body_hash="$(printf '%s' "$body" | openssl dgst -sha256 -hex | sed 's/^.* //')"
+  canonical="$(printf '%s\n%s\n%s\n%s\n%s\n%s' "$method" "/api/v1/admin$path" "$SUB2API_APP_ID" "$timestamp" "$nonce" "$body_hash")"
+  signature="$(printf '%s' "$canonical" | openssl dgst -sha256 -hmac "$SUB2API_APP_SECRET" -hex | sed 's/^.* //')"
+  local args=(-X "$method" "${BASE}/api/v1/integrations/admin${path}"
+    -H "x-api-key: $SUB2API_ADMIN_API_KEY" -H "X-App-Id: $SUB2API_APP_ID"
+    -H "X-Timestamp: $timestamp" -H "X-Nonce: $nonce" -H "X-Signature: $signature")
+  if [ -n "$idem" ]; then args+=(-H "Idempotency-Key: $idem"); fi
+  if [ "$method" != GET ]; then args+=(-H 'Content-Type: application/json' --data-binary "$body"); fi
+  curl "${args[@]}"
+}
+```
+
 ## 中文
 
 ### 目标
@@ -18,20 +42,21 @@
 - Beta：`http://<your-server-ip>:8084`
 
 ### 认证
-推荐使用：
+所有外部调用必须经过 `/api/v1/integrations/admin/*`，同时提供：
 - `x-api-key: admin-<64hex>`
+- `X-App-Id`, `X-Timestamp`, `X-Nonce`, `X-Signature`
 - `Content-Type: application/json`
 - 幂等接口额外传：`Idempotency-Key`
 
-说明：管理员 JWT 也可访问 admin 路由，但服务间调用建议使用 Admin API Key。
+管理员 JWT 用于原管理员入口。Admin API Key 不能独立使用；AppID / Secret 由管理员登录后生成，旧版带前缀凭据需重新生成。签名协议和迁移步骤见 [集成网关文档](ADMIN_INTEGRATION_GATEWAY_API.md)。
 
 ### 1) 一步完成创建并兑换
-`POST /api/v1/admin/redeem-codes/create-and-redeem`
+`POST /api/v1/integrations/admin/redeem-codes/create-and-redeem`
 
 用途：原子完成“创建兑换码 + 兑换到指定用户”。
 
 请求头：
-- `x-api-key`
+- `x-api-key` + `X-App-Id` + `X-Timestamp` + `X-Nonce` + `X-Signature`
 - `Idempotency-Key`
 
 请求体示例：
@@ -52,29 +77,20 @@
 
 curl 示例：
 ```bash
-curl -X POST "${BASE}/api/v1/admin/redeem-codes/create-and-redeem" \
-  -H "x-api-key: ${KEY}" \
-  -H "Idempotency-Key: pay-cm1234567890-success" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "code":"s2p_cm1234567890",
-    "type":"balance",
-    "value":100.00,
-    "user_id":123,
-    "notes":"sub2apipay order: cm1234567890"
-  }'
+signed_admin POST /redeem-codes/create-and-redeem \
+  '{"code":"s2p_cm1234567890","type":"balance","value":100.00,"user_id":123,"notes":"sub2apipay order: cm1234567890"}' \
+  pay-cm1234567890-success
 ```
 
 ### 2) 查询用户（可选前置校验）
-`GET /api/v1/admin/users/:id`
+`GET /api/v1/integrations/admin/users/:id`
 
 ```bash
-curl -s "${BASE}/api/v1/admin/users/123" \
-  -H "x-api-key: ${KEY}"
+signed_admin GET /users/123 '' ''
 ```
 
 ### 3) 余额调整（已有接口）
-`POST /api/v1/admin/users/:id/balance`
+`POST /api/v1/integrations/admin/users/:id/balance`
 
 用途：人工补偿 / 扣减，支持 `set` / `add` / `subtract`。
 
@@ -88,15 +104,9 @@ curl -s "${BASE}/api/v1/admin/users/123" \
 ```
 
 ```bash
-curl -X POST "${BASE}/api/v1/admin/users/123/balance" \
-  -H "x-api-key: ${KEY}" \
-  -H "Idempotency-Key: balance-subtract-cm1234567890" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "balance":100.00,
-    "operation":"subtract",
-    "notes":"manual correction"
-  }'
+signed_admin POST /users/123/balance \
+  '{"balance":100.00,"operation":"subtract","notes":"manual correction"}' \
+  balance-subtract-cm1234567890
 ```
 
 ### 4) 购买页 / 自定义页面 URL Query 透传（iframe / 新窗口一致）
@@ -116,7 +126,7 @@ https://pay.example.com/pay?user_id=123&token=<jwt>&theme=light&lang=zh&ui_mode=
 - 支付成功与充值成功分状态落库
 - 回调验签成功后立即标记“支付成功”
 - 支付成功但充值失败的订单允许后续重试
-- 重试保持相同 `code`，并使用新的 `Idempotency-Key`
+- 重试保持相同 `code`、请求体和 `Idempotency-Key`，使用新的时间戳、Nonce 和签名
 
 ### 6) `doc_url` 配置建议
 - 查看链接：`https://github.com/Wei-Shaw/sub2api/blob/main/docs/ADMIN_PAYMENT_INTEGRATION_API.md`
@@ -138,20 +148,21 @@ This document describes the minimal Sub2API Admin API surface for external payme
 - Beta: `http://<your-server-ip>:8084`
 
 ### Authentication
-Recommended headers:
+All external calls must use `/api/v1/integrations/admin/*` with:
 - `x-api-key: admin-<64hex>`
+- `X-App-Id`, `X-Timestamp`, `X-Nonce`, `X-Signature`
 - `Content-Type: application/json`
 - `Idempotency-Key` for idempotent endpoints
 
-Note: Admin JWT can also access admin routes, but Admin API Key is recommended for server-to-server integration.
+Admin JWT is used for the original admin routes. Admin API Key cannot be used alone. Generate AppID / Secret after signing in as an administrator and rotate legacy prefixed credentials. See the [gateway signing and migration guide](ADMIN_INTEGRATION_GATEWAY_API.md).
 
 ### 1) Create and Redeem in one step
-`POST /api/v1/admin/redeem-codes/create-and-redeem`
+`POST /api/v1/integrations/admin/redeem-codes/create-and-redeem`
 
 Use case: atomically create a redeem code and redeem it to a target user.
 
 Headers:
-- `x-api-key`
+- `x-api-key` + `X-App-Id` + `X-Timestamp` + `X-Nonce` + `X-Signature`
 - `Idempotency-Key`
 
 Request body:
@@ -172,29 +183,20 @@ Idempotency behavior:
 
 curl example:
 ```bash
-curl -X POST "${BASE}/api/v1/admin/redeem-codes/create-and-redeem" \
-  -H "x-api-key: ${KEY}" \
-  -H "Idempotency-Key: pay-cm1234567890-success" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "code":"s2p_cm1234567890",
-    "type":"balance",
-    "value":100.00,
-    "user_id":123,
-    "notes":"sub2apipay order: cm1234567890"
-  }'
+signed_admin POST /redeem-codes/create-and-redeem \
+  '{"code":"s2p_cm1234567890","type":"balance","value":100.00,"user_id":123,"notes":"sub2apipay order: cm1234567890"}' \
+  pay-cm1234567890-success
 ```
 
 ### 2) Query User (optional pre-check)
-`GET /api/v1/admin/users/:id`
+`GET /api/v1/integrations/admin/users/:id`
 
 ```bash
-curl -s "${BASE}/api/v1/admin/users/123" \
-  -H "x-api-key: ${KEY}"
+signed_admin GET /users/123 '' ''
 ```
 
 ### 3) Balance Adjustment (existing API)
-`POST /api/v1/admin/users/:id/balance`
+`POST /api/v1/integrations/admin/users/:id/balance`
 
 Use case: manual correction with `set` / `add` / `subtract`.
 
@@ -208,15 +210,9 @@ Request body example (`subtract`):
 ```
 
 ```bash
-curl -X POST "${BASE}/api/v1/admin/users/123/balance" \
-  -H "x-api-key: ${KEY}" \
-  -H "Idempotency-Key: balance-subtract-cm1234567890" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "balance":100.00,
-    "operation":"subtract",
-    "notes":"manual correction"
-  }'
+signed_admin POST /users/123/balance \
+  '{"balance":100.00,"operation":"subtract","notes":"manual correction"}' \
+  balance-subtract-cm1234567890
 ```
 
 ### 4) Purchase / Custom Page URL query forwarding (iframe and new tab)
@@ -236,7 +232,7 @@ https://pay.example.com/pay?user_id=123&token=<jwt>&theme=light&lang=zh&ui_mode=
 - Persist payment success and recharge success as separate states
 - Mark payment as successful immediately after verified callback
 - Allow retry for orders with payment success but recharge failure
-- Keep the same `code` for retry, and use a new `Idempotency-Key`
+- Keep the same `code`, body, and `Idempotency-Key` for retries; use a fresh timestamp, nonce, and signature
 
 ### 6) Recommended `doc_url`
 - View URL: `https://github.com/Wei-Shaw/sub2api/blob/main/docs/ADMIN_PAYMENT_INTEGRATION_API.md`
