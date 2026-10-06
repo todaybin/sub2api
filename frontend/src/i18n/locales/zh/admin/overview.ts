@@ -998,6 +998,7 @@ export default {
           minimax: 'MiniMax',
           codebuddy: 'CodeBuddy',
           opencode_go: 'OpenCode',
+          typesafe: 'TypeSafe / Jev',
         composite: 'Composite',
       },
       saving: '保存中...',
