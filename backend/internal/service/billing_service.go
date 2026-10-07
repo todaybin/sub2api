@@ -123,12 +123,6 @@ type ModelPricing struct {
 	ImageOutputPriceExplicit           bool               // 是否由渠道定价显式设定（为 true 时即使 == 0 也不回退）
 }
 
-const (
-	openAIGPT54LongContextInputThreshold   = 272000
-	openAIGPT54LongContextInputMultiplier  = 2.0
-	openAIGPT54LongContextOutputMultiplier = 1.5
-)
-
 func codeBuddyTokenCostUnitPerToken(unitsPerMillion float64) float64 {
 	return unitsPerMillion / 1_000_000
 }

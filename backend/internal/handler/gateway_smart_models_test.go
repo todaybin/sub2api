@@ -30,13 +30,18 @@ func TestSmartModelsUnionAliasesAndEmpty(t *testing.T) {
 		require.Equal(t, http.StatusOK, w.Code)
 		var got map[string]any
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
-		data := got["data"].([]any)
+		data, ok := got["data"].([]any)
+		require.True(t, ok)
 		if empty {
 			require.Empty(t, data)
 		} else {
 			require.Len(t, data, 2)
-			require.Equal(t, "alias", data[0].(map[string]any)["id"])
-			require.Equal(t, "same", data[1].(map[string]any)["id"])
+			first, ok := data[0].(map[string]any)
+			require.True(t, ok)
+			second, ok := data[1].(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, "alias", first["id"])
+			require.Equal(t, "same", second["id"])
 		}
 		require.Nil(t, key.GroupID)
 	}
@@ -45,13 +50,19 @@ func TestSmartCodexDuplicateCapabilitiesConservative(t *testing.T) {
 	a := map[string]any{"slug": "same", "supports_tools": true, "context_window": float64(200000), "supported_reasoning_levels": []any{"low", "high"}, "input_modalities": []any{"text", "image"}}
 	b := map[string]any{"slug": "same", "supports_tools": false, "context_window": float64(100000), "supported_reasoning_levels": []any{"low"}, "input_modalities": []any{"text"}}
 	got := conservativeSmartDescriptor(a, b)
-	require.False(t, got["supports_tools"].(bool))
+	supportsTools, ok := got["supports_tools"].(bool)
+	require.True(t, ok)
+	require.False(t, supportsTools)
 	require.Equal(t, float64(100000), got["context_window"])
 	require.Equal(t, []any{"low"}, got["supported_reasoning_levels"])
 	require.Equal(t, []any{"text"}, got["input_modalities"])
-	require.True(t, a["supports_tools"].(bool))
+	supportsTools, ok = a["supports_tools"].(bool)
+	require.True(t, ok)
+	require.True(t, supportsTools)
 	require.Equal(t, float64(200000), a["context_window"])
 	missing := conservativeSmartDescriptor(a, map[string]any{"slug": "same"})
 	require.NotContains(t, missing, "context_window")
-	require.False(t, missing["supports_tools"].(bool))
+	supportsTools, ok = missing["supports_tools"].(bool)
+	require.True(t, ok)
+	require.False(t, supportsTools)
 }

@@ -222,19 +222,21 @@ func (h *GatewayHandler) smartKeyBillingInfo(c *gin.Context, key *service.APIKey
 			}
 		}
 		info.BillingMode, info.SubscriptionID = mode, subID
+		imagePricing := gin.H{"rate_independent": group.ImageRateIndependent, "rate_multiplier": rate, "price_1k": group.ImagePrice1K, "price_2k": group.ImagePrice2K, "price_4k": group.ImagePrice4K}
+		videoPricing := gin.H{"rate_independent": group.VideoRateIndependent, "rate_multiplier": rate, "price_480p": group.VideoPrice480P, "price_720p": group.VideoPrice720P, "price_1080p": group.VideoPrice1080P, "model_prices": group.VideoModelPrices}
+		if group.ImageRateIndependent {
+			imagePricing["rate_multiplier"] = group.ImageRateMultiplier
+		}
+		if group.VideoRateIndependent {
+			videoPricing["rate_multiplier"] = group.VideoRateMultiplier
+		}
 		pricing := gin.H{
 			"token": info, "model_pricing": group.ModelPricing,
 			"long_context_pricing_enabled": group.LongContextPricingEnabled,
-			"image":                        gin.H{"rate_independent": group.ImageRateIndependent, "rate_multiplier": rate, "price_1k": group.ImagePrice1K, "price_2k": group.ImagePrice2K, "price_4k": group.ImagePrice4K},
-			"video":                        gin.H{"rate_independent": group.VideoRateIndependent, "rate_multiplier": rate, "price_480p": group.VideoPrice480P, "price_720p": group.VideoPrice720P, "price_1080p": group.VideoPrice1080P, "model_prices": group.VideoModelPrices},
+			"image":                        imagePricing,
+			"video":                        videoPricing,
 			"audio":                        gin.H{"realtime_price_per_min": group.AudioRealtimePricePerMin, "tts_price_per_million_chars": group.AudioTTSPricePerMillionChars, "stt_price_per_hour": group.AudioSTTPricePerHour},
 			"web_search_price_per_call":    group.WebSearchPricePerCall, "search_price_per_1k": group.SearchPricePer1k,
-		}
-		if group.ImageRateIndependent {
-			pricing["image"].(gin.H)["rate_multiplier"] = group.ImageRateMultiplier
-		}
-		if group.VideoRateIndependent {
-			pricing["video"].(gin.H)["rate_multiplier"] = group.VideoRateMultiplier
 		}
 		groups = append(groups, map[string]any{"group_id": group.ID, "group_name": group.Name, "billing_mode": mode, "available": available, "subscription_id": subID, "pricing": pricing})
 	}

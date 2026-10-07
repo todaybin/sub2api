@@ -38,7 +38,7 @@ func (h *GatewayHandler) smartModels(c *gin.Context, key *service.APIKey, codex 
 			} else {
 				response, _, err = h.openAIGatewayService.FetchPinnedOpenAIModelsList(c.Request.Context(), group, h.maxAccountSwitches, "")
 			}
-			if err != nil && !(errors.Is(err, service.ErrNoPinnedCodexModelsAccounts) && group.CodexModelsManifestConfig.FallbackToScheduler) {
+			if err != nil && (!errors.Is(err, service.ErrNoPinnedCodexModelsAccounts) || !group.CodexModelsManifestConfig.FallbackToScheduler) {
 				writeOpenAIModelsError(c, http.StatusServiceUnavailable, "upstream_error", "Failed to load pinned smart model catalogue")
 				return
 			}

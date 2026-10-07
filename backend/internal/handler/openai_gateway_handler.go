@@ -2431,7 +2431,6 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				return
 			}
 			apiKey, _ = middleware2.GetAPIKeyFromContext(c)
-			ctx = c.Request.Context()
 		}
 	}
 	// 分组级模型白名单：首帧校验客户端模型，不通过则关闭连接并标记运维原因。

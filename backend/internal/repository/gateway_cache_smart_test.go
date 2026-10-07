@@ -15,7 +15,8 @@ func TestSmartGroupAffinityAtomicOwnershipAndExpiry(t *testing.T) {
 	server := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
-	cache := NewGatewayCache(client).(service.SmartGroupAffinityCache)
+	cache, ok := NewGatewayCache(client).(service.SmartGroupAffinityCache)
+	require.True(t, ok)
 	ctx := context.Background()
 	var wg sync.WaitGroup
 	wins := make(chan int64, 16)
