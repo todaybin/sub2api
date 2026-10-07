@@ -852,6 +852,7 @@ func (s *CodeBuddyOAuthService) fetchModelCatalogDetailed(ctx context.Context, s
 	// /config/models. Try them in order and accept only a response containing
 	// model objects, so a successful but unrelated config response is ignored.
 	var discovered []CodeBuddyModel
+	validEmptyCatalog := false
 	for _, configPath := range []string{"/v3/config", "/v2/config", "/config/models"} {
 		raw, status, err := s.do(ctx, sess, http.MethodGet, configPath, nil, headers)
 		if err != nil || status >= 400 {
@@ -865,6 +866,9 @@ func (s *CodeBuddyOAuthService) fetchModelCatalogDetailed(ctx context.Context, s
 		}
 		catalog := codeBuddyModelCatalogFromValue(value)
 		record(configPath, status, nil, len(catalog))
+		if len(catalog) == 0 && codeBuddyValueHasModelContainer(value) {
+			validEmptyCatalog = true
+		}
 		if len(catalog) > 0 {
 			discovered = mergeCodeBuddyModelCatalog(discovered, catalog)
 		}
@@ -886,6 +890,8 @@ func (s *CodeBuddyOAuthService) fetchModelCatalogDetailed(ctx context.Context, s
 					// The VS Code client classifies custom enterprise models by ID
 					// after receiving this endpoint's top-level array.
 					discovered = mergeCodeBuddyModelCatalog(discovered, markCodeBuddyEnterprise(catalog))
+				} else if codeBuddyValueHasModelContainer(value) {
+					validEmptyCatalog = true
 				}
 				record(codeBuddyEnterpriseModelsPath(effectiveEnterpriseID), status, nil, len(codeBuddyModelCatalogFromValue(value)))
 			} else {
@@ -905,6 +911,12 @@ func (s *CodeBuddyOAuthService) fetchModelCatalogDetailed(ctx context.Context, s
 			return result
 		}
 	}
+	if validEmptyCatalog {
+		result.uid = effectiveUserID
+		result.enterprise = effectiveEnterpriseID
+		result.live = true
+		return result
+	}
 	// Older domestic tenants expose the model IDs through the plugin account
 	// endpoint. Keep this compatibility path, but never mix in another region.
 	if raw, status, err := s.do(ctx, sess, http.MethodGet, "/v2/plugin/accounts", nil, headers); err == nil && status < 400 {
@@ -923,6 +935,8 @@ func (s *CodeBuddyOAuthService) fetchModelCatalogDetailed(ctx context.Context, s
 				} else {
 					result.diagnostics = append(result.diagnostics, "/v2/plugin/accounts: models exist but none match region")
 				}
+			} else if codeBuddyValueHasModelContainer(value) {
+				validEmptyCatalog = true
 			}
 			record("/v2/plugin/accounts", status, nil, 0)
 		} else {
@@ -936,6 +950,37 @@ func (s *CodeBuddyOAuthService) fetchModelCatalogDetailed(ctx context.Context, s
 	result.uid = effectiveUserID
 	result.enterprise = effectiveEnterpriseID
 	return result
+}
+
+func codeBuddyValueHasModelContainer(value any) bool {
+	switch raw := value.(type) {
+	case map[string]any:
+		for _, key := range []string{"data", "models", "availableModels", "available_models", "modelList", "model_list", "modelConfig", "model_config", "llmModels", "llm_models"} {
+			if nested, ok := raw[key]; ok {
+				if key != "data" || nested == nil {
+					return true
+				}
+				if codeBuddyValueHasModelContainer(nested) || isEmptyCodeBuddyArray(nested) {
+					return true
+				}
+			}
+		}
+	case []any:
+		if len(raw) == 0 {
+			return true
+		}
+		for _, nested := range raw {
+			if codeBuddyValueHasModelContainer(nested) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isEmptyCodeBuddyArray(value any) bool {
+	items, ok := value.([]any)
+	return ok && len(items) == 0
 }
 
 // Keep these values aligned with the VS Code client used for compatibility.

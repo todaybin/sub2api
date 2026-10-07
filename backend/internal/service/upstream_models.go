@@ -23,9 +23,95 @@ const (
 	modelsDevRegistryURL                      = "https://models.dev/api.json"
 	modelsDevRegistryTTL                      = 6 * time.Hour
 	UpstreamModelMetadataExtraKey             = "upstream_model_metadata"
+	UpstreamSupportedModelsExtraKey           = "upstream_supported_models"
 	UpstreamModelMetadataIncompleteCode       = "upstream_model_metadata_incomplete"
 	UpstreamModelMetadataPartialCode          = "upstream_model_metadata_partial"
 )
+
+// UpstreamSupportedModelsSnapshot is the last successfully fetched live model
+// catalogue. A successful empty Models slice is meaningful and must not be
+// confused with a missing or failed snapshot.
+type UpstreamSupportedModelsSnapshot struct {
+	Models   []string `json:"models"`
+	SyncedAt string   `json:"synced_at"`
+	Status   string   `json:"status"`
+	Source   string   `json:"source,omitempty"`
+}
+
+const UpstreamSupportedModelsStatusSuccess = "success"
+
+func normalizeUpstreamSupportedModels(models []string) []string {
+	seen := make(map[string]struct{}, len(models))
+	result := make([]string, 0, len(models))
+	for _, model := range models {
+		model = strings.TrimSpace(model)
+		if model == "" || strings.ContainsAny(model, "*?") {
+			continue
+		}
+		if _, ok := seen[model]; ok {
+			continue
+		}
+		seen[model] = struct{}{}
+		result = append(result, model)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func (a *Account) SetUpstreamSupportedModelsSnapshot(snapshot UpstreamSupportedModelsSnapshot) {
+	if a == nil {
+		return
+	}
+	snapshot.Models = normalizeUpstreamSupportedModels(snapshot.Models)
+	if a.Extra == nil {
+		a.Extra = make(map[string]any)
+	}
+	a.Extra[UpstreamSupportedModelsExtraKey] = snapshot
+}
+
+func (a *Account) GetUpstreamSupportedModelsSnapshot() *UpstreamSupportedModelsSnapshot {
+	if a == nil || a.Extra == nil {
+		return nil
+	}
+	raw, ok := a.Extra[UpstreamSupportedModelsExtraKey]
+	if !ok || raw == nil {
+		return nil
+	}
+	body, err := json.Marshal(raw)
+	if err != nil {
+		return nil
+	}
+	var snapshot UpstreamSupportedModelsSnapshot
+	if err := json.Unmarshal(body, &snapshot); err != nil || snapshot.Status != UpstreamSupportedModelsStatusSuccess {
+		return nil
+	}
+	if _, err := time.Parse(time.RFC3339, snapshot.SyncedAt); err != nil {
+		return nil
+	}
+	snapshot.Models = normalizeUpstreamSupportedModels(snapshot.Models)
+	return &snapshot
+}
+
+func (a *Account) GetUpstreamSupportedModels() ([]string, bool) {
+	snapshot := a.GetUpstreamSupportedModelsSnapshot()
+	if snapshot == nil {
+		return nil, false
+	}
+	return append([]string(nil), snapshot.Models...), true
+}
+
+func (a *Account) HasFreshUpstreamSupportedModels(now time.Time, ttl time.Duration) bool {
+	snapshot := a.GetUpstreamSupportedModelsSnapshot()
+	if snapshot == nil {
+		return false
+	}
+	syncedAt, err := time.Parse(time.RFC3339, snapshot.SyncedAt)
+	if err != nil {
+		return false
+	}
+	age := now.UTC().Sub(syncedAt.UTC())
+	return age >= 0 && age < ttl
+}
 
 type UpstreamModelMetadata struct {
 	ID                       string                     `json:"id"`
@@ -200,7 +286,8 @@ func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, a
 
 // SyncUpstreamModelCatalog fetches the account's live model list, enriches
 // missing capability fields from the provider registry used by the upstream,
-// and persists a normalized account snapshot when complete metadata is available.
+// and persists a normalized live-model snapshot independently from capability
+// metadata when the upstream list request succeeds.
 //
 // Persistence is per-model: models with complete capability fields are saved even
 // when other IDs in the same sync remain incomplete. An incomplete warning is
@@ -224,6 +311,8 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 			"model_count", len(models),
 		)
 	}
+	metadataEnrichmentFailed := false
+	hadMetadataSnapshot := account != nil && account.GetUpstreamModelMetadataSnapshot() != nil
 	catalog := &UpstreamModelCatalog{Models: models, Metadata: make(map[string]UpstreamModelMetadata)}
 	if len(body) > 0 {
 		_, directMetadata, parseErr := extractUpstreamModelCatalog(body, account != nil && account.IsGrok())
@@ -253,12 +342,22 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 				}
 			}
 		} else {
+			metadataEnrichmentFailed = true
 			slog.Warn("upstream model capability metadata enrichment failed",
 				"account_id", upstreamModelSyncAccountID(account),
 				"platform", upstreamModelSyncPlatform(account),
 				"error", registryErr,
 			)
 		}
+	}
+	// Existing metadata snapshots are retained atomically when the registry is
+	// unavailable. This keeps the legacy metadata sync contract while allowing a
+	// first live sync to establish the automatic model catalogue.
+	var pendingSupportedSnapshot *UpstreamSupportedModelsSnapshot
+	if liveListAvailable && (!metadataEnrichmentFailed || !hadMetadataSnapshot || len(models) == 0) && account != nil && account.ID > 0 && s.accountRepo != nil {
+		snapshot := &UpstreamSupportedModelsSnapshot{Models: normalizeUpstreamSupportedModels(models), SyncedAt: time.Now().UTC().Format(time.RFC3339), Status: UpstreamSupportedModelsStatusSuccess, Source: strings.TrimSpace(account.Platform)}
+		pendingSupportedSnapshot = snapshot
+		models = snapshot.Models
 	}
 
 	completeMetadata := completeUpstreamModelMetadataSubset(capabilityIDs, catalog.Metadata)
@@ -294,11 +393,24 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 			SyncedAt: time.Now().UTC().Format(time.RFC3339),
 			Models:   completeMetadata,
 		}
-		if err := s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{UpstreamModelMetadataExtraKey: snapshot}); err != nil {
+		updates := map[string]any{UpstreamModelMetadataExtraKey: snapshot}
+		if pendingSupportedSnapshot != nil {
+			updates[UpstreamSupportedModelsExtraKey] = *pendingSupportedSnapshot
+		}
+		if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {
 			return nil, newUpstreamModelSyncInternalError("Failed to save upstream model metadata", err)
 		}
 		account.SetUpstreamModelMetadataSnapshot(snapshot)
+		if pendingSupportedSnapshot != nil {
+			account.SetUpstreamSupportedModelsSnapshot(*pendingSupportedSnapshot)
+		}
 		persistedCapabilities = true
+	}
+	if pendingSupportedSnapshot != nil && !persistedCapabilities {
+		if err := s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{UpstreamSupportedModelsExtraKey: *pendingSupportedSnapshot}); err != nil {
+			return nil, newUpstreamModelSyncInternalError("Failed to save upstream supported models", err)
+		}
+		account.SetUpstreamSupportedModelsSnapshot(*pendingSupportedSnapshot)
 	}
 
 	if upstreamCatalogNeedsRegistry(capabilityIDs, catalog.Metadata) {
@@ -780,7 +892,16 @@ func (s *AccountTestService) fetchUpstreamModelList(ctx context.Context, account
 		return nil, nil, newUpstreamModelSyncUpstreamError("Upstream model list response was not valid JSON", err)
 	}
 	if len(models) == 0 {
-		return nil, nil, newUpstreamModelSyncUpstreamError("Upstream returned no supported models", nil)
+		entries, parseErr := extractUpstreamModelRawEntries(body)
+		if parseErr != nil {
+			return nil, nil, newUpstreamModelSyncUpstreamError("Upstream model list response was not valid JSON", parseErr)
+		}
+		// An empty data/models array is a valid upstream result and clears the
+		// previous automatic catalogue. Non-empty responses with no usable IDs
+		// are malformed and must retain the previous snapshot.
+		if len(entries) > 0 {
+			return nil, nil, newUpstreamModelSyncUpstreamError("Upstream returned no supported models", nil)
+		}
 	}
 
 	return models, body, nil
@@ -1179,8 +1300,11 @@ func (s *AccountTestService) fetchAntigravityOAuthUpstreamModels(ctx context.Con
 	if err != nil {
 		return nil, newUpstreamModelSyncUpstreamError("Failed to fetch Antigravity available models", err)
 	}
-	if modelsResp == nil || len(modelsResp.Models) == 0 {
+	if modelsResp == nil {
 		return nil, newUpstreamModelSyncUpstreamError("Upstream returned no supported models", nil)
+	}
+	if len(modelsResp.Models) == 0 {
+		return []string{}, nil
 	}
 
 	models := make([]string, 0, len(modelsResp.Models))

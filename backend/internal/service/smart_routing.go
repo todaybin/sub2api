@@ -152,24 +152,44 @@ func (s *GatewayService) SmartModelCatalogForEndpoint(ctx context.Context, group
 			continue
 		}
 		mapping := a.GetModelMapping()
-		if a.Platform == PlatformCodeBuddy {
-			catalog := filterCodeBuddyCatalogForRegion(CodeBuddyStoredModelCatalog(a), CodeBuddyRegionForAccount(a))
-			if len(catalog) > 0 {
-				for _, m := range catalog {
-					add(m.ID)
+		if models, synced := a.GetUpstreamSupportedModels(); synced {
+			if len(mapping) == 0 || a.IsOpenAIPassthroughEnabled() {
+				for _, id := range models {
+					if a.Platform == group.Platform || group.Platform == PlatformComposite || mixedListingModelAllowed(group.Platform, id) {
+						add(id)
+					}
 				}
-			} else {
-				for _, id := range CodeBuddyModelsForRegion(CodeBuddyRegionForAccount(a)) {
+			}
+			for public, target := range mapping {
+				if upstreamSupportedModelMatches(a.Platform, models, target) && (a.Platform == group.Platform || group.Platform == PlatformComposite || mixedListingModelAllowed(group.Platform, public)) {
+					add(public)
+				}
+			}
+		} else {
+			if a.Platform == PlatformCodeBuddy {
+				catalog := filterCodeBuddyCatalogForRegion(CodeBuddyStoredModelCatalog(a), CodeBuddyRegionForAccount(a))
+				if len(catalog) > 0 {
+					for _, m := range catalog {
+						add(m.ID)
+					}
+				} else {
+					for _, id := range CodeBuddyModelsForRegion(CodeBuddyRegionForAccount(a)) {
+						add(id)
+					}
+				}
+			}
+			for id := range mapping {
+				if a.Platform == group.Platform || group.Platform == PlatformComposite || mixedListingModelAllowed(group.Platform, id) {
 					add(id)
 				}
 			}
 		}
-		for id := range mapping {
-			if a.Platform == group.Platform || group.Platform == PlatformComposite || mixedListingModelAllowed(group.Platform, id) {
-				add(id)
-			}
-		}
 		if len(mapping) == 0 || a.IsOpenAIPassthroughEnabled() {
+			// An empty successful snapshot is authoritative and must not fall back
+			// to the platform defaults.
+			if _, synced := a.GetUpstreamSupportedModels(); synced {
+				continue
+			}
 			switch a.Platform {
 			case PlatformOpenAI:
 				for _, m := range openai.DefaultModels {

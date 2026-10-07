@@ -870,6 +870,17 @@ func (a *Account) IsModelSupported(requestedModel string) bool {
 		return true
 	}
 	mapping := a.GetModelMapping()
+	if models, synced := a.GetUpstreamSupportedModels(); synced {
+		candidate := requestedModel
+		if len(mapping) > 0 {
+			var matched bool
+			candidate, matched = a.ResolveMappedModel(requestedModel)
+			if !matched {
+				return false
+			}
+		}
+		return upstreamSupportedModelMatches(a.Platform, models, candidate)
+	}
 	if a.Platform == PlatformCodeBuddy {
 		upstreamModel := requestedModel
 		if len(mapping) > 0 {
@@ -895,6 +906,26 @@ func (a *Account) IsModelSupported(requestedModel string) bool {
 	}
 	normalized := normalizeRequestedModelForLookup(a.Platform, requestedModel)
 	return normalized != requestedModel && mappingSupportsRequestedModel(mapping, normalized)
+}
+
+func upstreamSupportedModelMatches(platform string, models []string, requested string) bool {
+	requested = strings.TrimSpace(requested)
+	if requested == "" {
+		return false
+	}
+	for _, model := range models {
+		model = strings.TrimSpace(model)
+		if model == requested {
+			return true
+		}
+		if normalized := normalizeRequestedModelForLookup(platform, requested); normalized != requested && model == normalized {
+			return true
+		}
+		if normalized := normalizeRequestedModelForLookup(platform, model); normalized != model && normalized == requested {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *Account) codeBuddyCatalogSupportsModel(requestedModel string) bool {

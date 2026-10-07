@@ -99,6 +99,7 @@ const (
 	UpstreamBillingProbeStatusOK          = "ok"
 	UpstreamBillingProbeStatusUnsupported = "unsupported"
 	UpstreamBillingProbeStatusFailed      = "failed"
+	upstreamSupportedModelsTTL            = 6 * time.Hour
 )
 
 // UpstreamBillingProbeSettings controls the periodic probe runner.
@@ -132,6 +133,10 @@ type UpstreamBillingProbeSnapshot struct {
 	// AutoDisableZeroBalance is an internal persistence instruction. It is not
 	// stored in accounts.extra or exposed by the admin API.
 	AutoDisableZeroBalance bool `json:"-"`
+	// AutoRestoreBalance is an internal instruction used by the repository to
+	// re-enable an account previously disabled by the automatic zero-balance
+	// path. It is never persisted or exposed.
+	AutoRestoreBalance bool `json:"-"`
 }
 
 // UpstreamBillingProbeResult is returned by manual probe endpoints.
@@ -267,6 +272,7 @@ func normalizeUpstreamBillingProbeSettings(settings *UpstreamBillingProbeSetting
 type UpstreamBillingProbeService struct {
 	accountRepo        AccountRepository
 	accountTestService *AccountTestService
+	codeBuddyOAuth     *CodeBuddyOAuthService
 	settingService     *SettingService
 
 	parentCtx    context.Context
@@ -325,11 +331,18 @@ func (s *UpstreamBillingProbeService) SetDynamicGroupRateService(dynamicRate *Dy
 	}
 }
 
+func (s *UpstreamBillingProbeService) SetCodeBuddyOAuthService(codeBuddy *CodeBuddyOAuthService) {
+	if s != nil {
+		s.codeBuddyOAuth = codeBuddy
+	}
+}
+
 // ProvideUpstreamBillingProbeService starts the process-wide periodic runner.
 func ProvideUpstreamBillingProbeService(
 	accountRepo AccountRepository,
 	accountTestService *AccountTestService,
 	settingService *SettingService,
+	codeBuddyOAuth *CodeBuddyOAuthService,
 	lockCache LeaderLockCache,
 	db *sql.DB,
 	dynamicRate *DynamicGroupRateService,
@@ -337,6 +350,7 @@ func ProvideUpstreamBillingProbeService(
 	svc := NewUpstreamBillingProbeService(accountRepo, accountTestService, settingService)
 	svc.SetLeaderLock(lockCache, db)
 	svc.SetDynamicGroupRateService(dynamicRate)
+	svc.SetCodeBuddyOAuthService(codeBuddyOAuth)
 	svc.Start()
 	return svc
 }
@@ -469,13 +483,96 @@ func (s *UpstreamBillingProbeService) RunDue(ctx context.Context) error {
 	for i := range due {
 		accountID := due[i].ID
 		group.Go(func() error {
-			if _, probeErr := s.probeScheduledAccount(ctx, accountID, settings.IntervalMinutes, settings.AutoDisableZeroBalance); probeErr != nil {
+			snapshot, probeErr := s.probeScheduledAccount(ctx, accountID, settings.IntervalMinutes, settings.AutoDisableZeroBalance)
+			if probeErr != nil {
 				logger.LegacyPrintf("service.upstream_billing_probe", "probe_due_failed: account_id=%d err=%v", accountID, probeErr)
+				return nil
+			}
+			if snapshot != nil && snapshot.Status == UpstreamBillingProbeStatusOK {
+				if syncErr := s.syncScheduledAccountModels(ctx, accountID); syncErr != nil {
+					slog.Error("upstream_model_sync_failed", "account_id", accountID, "error", syncErr)
+				}
 			}
 			return nil
 		})
 	}
 	return group.Wait()
+}
+
+func (s *UpstreamBillingProbeService) syncScheduledAccountModels(ctx context.Context, accountID int64) error {
+	if s == nil || s.accountRepo == nil {
+		return ErrUpstreamBillingProbeUnavailable
+	}
+	account, err := s.accountRepo.GetByID(ctx, accountID)
+	if err != nil {
+		return err
+	}
+	if account == nil {
+		return ErrUpstreamBillingProbeAccountInvalid
+	}
+	now := s.currentTime()
+	previous := account.GetUpstreamSupportedModelsSnapshot()
+	if account.HasFreshUpstreamSupportedModels(now, upstreamSupportedModelsTTL) {
+		previousSyncedAt := ""
+		if previous != nil {
+			previousSyncedAt = previous.SyncedAt
+		}
+		slog.Info("upstream_model_sync_skipped", "account_id", accountID, "skipped_by_ttl", true, "previous_synced_at", previousSyncedAt)
+		return nil
+	}
+	if account.Platform == PlatformCodeBuddy {
+		if s.codeBuddyOAuth == nil {
+			return fmt.Errorf("codebuddy model sync service is not configured")
+		}
+		models, catalog, err := s.codeBuddyOAuth.SyncModelsWithCatalog(ctx, account)
+		if err != nil {
+			return err
+		}
+		models = normalizeUpstreamSupportedModels(models)
+		if account.Credentials == nil {
+			account.Credentials = make(map[string]any)
+		}
+		account.Credentials["models"] = models
+		account.Credentials["model_catalog"] = catalog
+		if updater, ok := s.accountRepo.(interface {
+			UpdateCredentials(context.Context, int64, map[string]any) error
+		}); ok {
+			if err := updater.UpdateCredentials(ctx, account.ID, account.Credentials); err != nil {
+				return err
+			}
+		}
+		snapshot := UpstreamSupportedModelsSnapshot{Models: models, SyncedAt: now.UTC().Format(time.RFC3339), Status: UpstreamSupportedModelsStatusSuccess, Source: PlatformCodeBuddy}
+		if err := s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{
+			UpstreamSupportedModelsExtraKey: snapshot,
+			"codebuddy_models":              models,
+			"codebuddy_model_catalog":       catalog,
+			"codebuddy_model_source":        "upstream",
+		}); err != nil {
+			return err
+		}
+		account.SetUpstreamSupportedModelsSnapshot(snapshot)
+		slog.Info("upstream_model_sync_succeeded", "account_id", accountID, "platform", account.Platform, "model_count", len(models), "sync_source", PlatformCodeBuddy, "previous_synced_at", previousSyncedAt(previous))
+		return nil
+	}
+	if s.accountTestService == nil {
+		return ErrUpstreamBillingProbeUnavailable
+	}
+	catalog, err := s.accountTestService.SyncUpstreamModelCatalog(ctx, account)
+	if err == nil {
+		modelCount := 0
+		if catalog != nil {
+			modelCount = len(catalog.Models)
+		}
+		slog.Info("upstream_model_sync_succeeded", "account_id", accountID, "platform", account.Platform, "model_count", modelCount, "sync_source", account.Platform, "previous_synced_at", previousSyncedAt(previous))
+	}
+	return err
+}
+
+func previousSyncedAt(snapshot *UpstreamSupportedModelsSnapshot) string {
+	if snapshot == nil {
+		return ""
+	}
+	return snapshot.SyncedAt
 }
 
 func (s *UpstreamBillingProbeService) listDueAccounts(ctx context.Context, now time.Time) ([]Account, error) {
@@ -835,6 +932,7 @@ func (s *UpstreamBillingProbeService) persistFallbackBalanceAfterPrimaryFailure(
 	now time.Time,
 	primaryHTTPStatus int,
 	autoDisableZeroBalance bool,
+	scheduled bool,
 ) (*UpstreamBillingProbeSnapshot, bool, error) {
 	balanceData, balanceResult := s.probeFallbackBalance(ctx, account, normalizedBaseURL, proxyURL, apiKey)
 	if balanceResult.reason != "" {
@@ -860,6 +958,7 @@ func (s *UpstreamBillingProbeService) persistFallbackBalanceAfterPrimaryFailure(
 			snapshot.AutoDisableZeroBalance = true
 		}
 	}
+	setUpstreamBillingAutoRestore(snapshot, balanceData, scheduled)
 	if err := s.updateSnapshot(ctx, account, snapshot, nil); err != nil {
 		return nil, true, err
 	}
@@ -929,6 +1028,7 @@ func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, ac
 				snapshot.AutoDisableZeroBalance = true
 			}
 		}
+		setUpstreamBillingAutoRestore(snapshot, balanceData, scheduled)
 		if err := s.updateSnapshot(ctx, account, snapshot, nil); err != nil {
 			return nil, err
 		}
@@ -972,7 +1072,7 @@ func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, ac
 	}
 	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed {
 		if balanceRequested {
-			if snapshot, handled, fallbackErr := s.persistFallbackBalanceAfterPrimaryFailure(ctx, account, normalizedBaseURL, proxyURL, apiKey, intervalMinutes, now, resp.StatusCode, autoDisableZeroBalance); handled {
+			if snapshot, handled, fallbackErr := s.persistFallbackBalanceAfterPrimaryFailure(ctx, account, normalizedBaseURL, proxyURL, apiKey, intervalMinutes, now, resp.StatusCode, autoDisableZeroBalance, scheduled); handled {
 				return snapshot, fallbackErr
 			}
 		}
@@ -980,7 +1080,7 @@ func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, ac
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if balanceRequested {
-			if snapshot, handled, fallbackErr := s.persistFallbackBalanceAfterPrimaryFailure(ctx, account, normalizedBaseURL, proxyURL, apiKey, intervalMinutes, now, resp.StatusCode, autoDisableZeroBalance); handled {
+			if snapshot, handled, fallbackErr := s.persistFallbackBalanceAfterPrimaryFailure(ctx, account, normalizedBaseURL, proxyURL, apiKey, intervalMinutes, now, resp.StatusCode, autoDisableZeroBalance, scheduled); handled {
 				return snapshot, fallbackErr
 			}
 		}
@@ -989,7 +1089,7 @@ func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, ac
 	data, err := parseUpstreamBillingProbeResponse(body)
 	if err != nil {
 		if balanceRequested {
-			if snapshot, handled, fallbackErr := s.persistFallbackBalanceAfterPrimaryFailure(ctx, account, normalizedBaseURL, proxyURL, apiKey, intervalMinutes, now, resp.StatusCode, autoDisableZeroBalance); handled {
+			if snapshot, handled, fallbackErr := s.persistFallbackBalanceAfterPrimaryFailure(ctx, account, normalizedBaseURL, proxyURL, apiKey, intervalMinutes, now, resp.StatusCode, autoDisableZeroBalance, scheduled); handled {
 				return snapshot, fallbackErr
 			}
 		}
@@ -1033,6 +1133,7 @@ func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, ac
 			snapshot.AutoDisableZeroBalance = true
 		}
 	}
+	setUpstreamBillingAutoRestore(snapshot, data, scheduled)
 	// 账号级值域与精度只在真要写回时才有影响：只观察上游声明、未开启同步的
 	// 账号不因声明值不适配 accounts.rate_multiplier 而被记成探测失败并进入
 	// 指数退避——探测本身成功了，原始声明照常存进快照供展示。
@@ -1371,6 +1472,20 @@ func upstreamBillingBalanceExhausted(data map[string]any) bool {
 	}
 	balance, ok := resolveAccountExtraNumber(data, "balance")
 	return ok && !math.IsNaN(balance) && !math.IsInf(balance, 0) && balance <= 0
+}
+
+func setUpstreamBillingAutoRestore(snapshot *UpstreamBillingProbeSnapshot, data map[string]any, scheduled bool) {
+	if snapshot == nil || !scheduled || data == nil {
+		return
+	}
+	mode, _ := data["billing_mode"].(string)
+	if mode != "balance" {
+		return
+	}
+	balance, ok := resolveAccountExtraNumber(data, "balance")
+	if ok && balance > 0 && !math.IsNaN(balance) && !math.IsInf(balance, 0) {
+		snapshot.AutoRestoreBalance = true
+	}
 }
 
 func upstreamBillingRateAt(data map[string]any, now time.Time) (float64, bool) {

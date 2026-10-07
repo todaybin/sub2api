@@ -2845,6 +2845,7 @@ func (r *accountRepository) UpdateUpstreamBillingProbeSnapshot(
 	if snapshot.Status != service.UpstreamBillingProbeStatusOK {
 		rateMultiplier = nil
 		snapshot.AutoDisableZeroBalance = false
+		snapshot.AutoRestoreBalance = false
 	}
 	if dbent.TxFromContext(ctx) == nil {
 		tx, err := r.client.Tx(ctx)
@@ -2876,7 +2877,13 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
 	snapshot *service.UpstreamBillingProbeSnapshot,
 	rateMultiplier *float64,
 ) error {
-	payload, err := json.Marshal(map[string]any{service.UpstreamBillingProbeExtraKey: snapshot})
+	payloadValue := map[string]any{service.UpstreamBillingProbeExtraKey: snapshot}
+	if snapshot.AutoRestoreBalance {
+		// Internal transaction marker. The SQL consumes and removes it so it is
+		// never exposed through accounts.extra.
+		payloadValue["__upstream_billing_auto_restore"] = true
+	}
+	payload, err := json.Marshal(payloadValue)
 	if err != nil {
 		return err
 	}
@@ -2937,12 +2944,16 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
 	result, err := client.ExecContext(ctx, `
 		UPDATE accounts
 		SET
-				extra = (COALESCE(extra, '{}'::jsonb) || $1::jsonb) || CASE
+				extra = ((COALESCE(extra, '{}'::jsonb) || $1::jsonb) || CASE
 				WHEN $11::boolean
 					AND schedulable IS TRUE
 					AND (extra @> '{"upstream_billing_probe_enabled": true}'::jsonb OR extra @> '{"upstream_billing_balance_probe_enabled": true}'::jsonb)
 				THEN $12::jsonb
 				ELSE '{}'::jsonb
+			END) - '__upstream_billing_auto_restore' - CASE
+				WHEN $1::jsonb ? '__upstream_billing_auto_restore' AND schedulable IS FALSE AND extra ? 'upstream_billing_balance_auto_disabled_at'
+				THEN 'upstream_billing_balance_auto_disabled_at'
+				ELSE ''
 			END,
 				rate_multiplier = CASE
 				WHEN $10::numeric IS NOT NULL
@@ -2952,6 +2963,10 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
 				ELSE rate_multiplier
 			END,
 				schedulable = CASE
+				WHEN $1::jsonb ? '__upstream_billing_auto_restore'
+					AND schedulable IS FALSE
+					AND extra ? 'upstream_billing_balance_auto_disabled_at'
+				THEN TRUE
 				WHEN $11::boolean
 					AND schedulable IS TRUE
 					AND (extra @> '{"upstream_billing_probe_enabled": true}'::jsonb OR extra @> '{"upstream_billing_balance_probe_enabled": true}'::jsonb)
