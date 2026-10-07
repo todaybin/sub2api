@@ -52,6 +52,10 @@ func resolveIntegrationKey(ctx context.Context, keys interface {
 }, userID int64, req service.CreateAPIKeyRequest) (service.CreateAPIKeyRequest, error) {
 	req.Name = strings.TrimSpace(req.Name)
 	req.RoutingMode = strings.ToLower(strings.TrimSpace(req.RoutingMode))
+	req.RoutingStrategy = strings.ToLower(strings.TrimSpace(req.RoutingStrategy))
+	if req.RoutingStrategy == "" {
+		req.RoutingStrategy = "auto"
+	}
 	if req.Name == "" {
 		return req, infraerrors.BadRequest("API_KEY_NAME_REQUIRED", "api key name is required")
 	}
@@ -65,7 +69,9 @@ func resolveIntegrationKey(ctx context.Context, keys interface {
 			return req, infraerrors.BadRequest("API_KEY_GROUP_REQUIRED", "single routing requires group_id")
 		}
 		req.RoutingMode = "smart"
-		if len(req.SmartGroupIDs) == 0 {
+		if req.RoutingStrategy != "sequential" {
+			// Automatic and metric-based strategies default to every currently
+			// available group. Sequential routing requires an explicit order.
 			groups, err := keys.GetAvailableGroups(ctx, userID)
 			if err != nil {
 				return req, err
@@ -75,17 +81,18 @@ func resolveIntegrationKey(ctx context.Context, keys interface {
 			}
 		}
 		if len(req.SmartGroupIDs) == 0 {
-			return req, infraerrors.BadRequest("API_KEY_SMART_GROUPS_REQUIRED", "user has no available groups")
+			message := "sequential smart routing requires at least one group"
+			if req.RoutingStrategy != "sequential" {
+				message = "user has no available groups"
+			}
+			return req, infraerrors.BadRequest("API_KEY_SMART_GROUPS_REQUIRED", message)
 		}
 		for _, id := range req.SmartGroupIDs {
 			if id <= 0 {
 				return req, infraerrors.BadRequest("API_KEY_GROUP_INVALID", "smart_group_ids must be positive")
 			}
 		}
-		req.SmartGroupIDs = mergeInt64Sets(nil, req.SmartGroupIDs)
-	}
-	if req.RoutingStrategy == "" {
-		req.RoutingStrategy = "auto"
+		req.SmartGroupIDs = orderedUniqueInt64s(req.SmartGroupIDs)
 	}
 	return req, nil
 }

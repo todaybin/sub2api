@@ -42,7 +42,7 @@ type ProvisioningAPIKeyRequest struct {
 	Name            string   `json:"name" binding:"required"`
 	GroupID         *int64   `json:"group_id"`
 	RoutingMode     string   `json:"routing_mode" binding:"omitempty,oneof=single smart"`
-	RoutingStrategy string   `json:"routing_strategy" binding:"omitempty,oneof=auto price speed random"`
+	RoutingStrategy string   `json:"routing_strategy" binding:"omitempty,oneof=auto sequential price speed random"`
 	SmartGroupIDs   []int64  `json:"smart_group_ids"`
 	CustomKey       *string  `json:"custom_key"`
 	IPWhitelist     []string `json:"ip_whitelist"`
@@ -255,7 +255,7 @@ func (h *ProvisioningHandler) ensureAPIKeys(ctx context.Context, userID int64, r
 		if !item.IsActive() || item.IsExpired() || item.IsQuotaExhausted() {
 			continue
 		}
-		key := provisionRouteKey(item.RoutingMode, item.GroupID, item.SmartGroupIDs)
+		key := provisionRouteKey(item.RoutingMode, item.RoutingStrategy, item.GroupID, item.SmartGroupIDs)
 		if _, ok := byGroup[key]; !ok {
 			byGroup[key] = item
 		}
@@ -267,7 +267,7 @@ func (h *ProvisioningHandler) ensureAPIKeys(ctx context.Context, userID int64, r
 		if resolveErr != nil {
 			return nil, createdIDs, resolveErr
 		}
-		groupKey := provisionRouteKey(input.RoutingMode, input.GroupID, input.SmartGroupIDs)
+		groupKey := provisionRouteKey(input.RoutingMode, input.RoutingStrategy, input.GroupID, input.SmartGroupIDs)
 		if item, ok := byGroup[groupKey]; ok {
 			responses = append(responses, provisioningKeyResponse(item, false))
 			continue
@@ -315,7 +315,7 @@ func normalizeProvisionAPIKeys(req ProvisionUserRequest) ([]ProvisioningAPIKeyRe
 		if items[i].GroupID == nil && items[i].RoutingMode == "single" {
 			return nil, fmt.Errorf("single routing requires group_id")
 		}
-		key := provisionRouteKey(items[i].RoutingMode, items[i].GroupID, items[i].SmartGroupIDs)
+		key := provisionRouteKey(items[i].RoutingMode, items[i].RoutingStrategy, items[i].GroupID, items[i].SmartGroupIDs)
 		if _, ok := seen[key]; ok {
 			return nil, fmt.Errorf("duplicate api key group_id: %s", key)
 		}
@@ -349,6 +349,22 @@ func mergeInt64Sets(left, right []int64) []int64 {
 		result = append(result, value)
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i] < result[j] })
+	return result
+}
+
+func orderedUniqueInt64s(ids []int64) []int64 {
+	seen := make(map[int64]struct{}, len(ids))
+	result := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		result = append(result, id)
+	}
 	return result
 }
 
@@ -425,8 +441,11 @@ func (r ProvisioningAPIKeyRequest) serviceRequest() service.CreateAPIKeyRequest 
 	return service.CreateAPIKeyRequest{Name: r.Name, GroupID: r.GroupID, RoutingMode: r.RoutingMode, RoutingStrategy: r.RoutingStrategy, SmartGroupIDs: r.SmartGroupIDs, CustomKey: r.CustomKey, IPWhitelist: r.IPWhitelist, IPBlacklist: r.IPBlacklist, Quota: r.Quota, ExpiresInDays: r.ExpiresInDays, RateLimit5h: r.RateLimit5h, RateLimit1d: r.RateLimit1d, RateLimit7d: r.RateLimit7d}
 }
 
-func provisionRouteKey(mode string, groupID *int64, ids []int64) string {
+func provisionRouteKey(mode, strategy string, groupID *int64, ids []int64) string {
 	if mode == "smart" || (mode == "" && groupID == nil) {
+		if strategy == "sequential" {
+			return fmt.Sprintf("smart:%s:%v", strategy, orderedUniqueInt64s(ids))
+		}
 		return fmt.Sprintf("smart:%v", mergeInt64Sets(nil, ids))
 	}
 	return provisionGroupKey(groupID)

@@ -92,6 +92,8 @@ func TestIntegrationCreateKeyDefaultsAndExplicitGroup(t *testing.T) {
 		status int
 	}{
 		{`{"name":"default"}`, "smart", 200},
+		{`{"name":"sequential","routing_strategy":"sequential","smart_group_ids":[2,1]}`, "smart", 200},
+		{`{"name":"sequential-missing","routing_strategy":"sequential"}`, "", 400},
 		{`{"name":"single","group_id":2}`, "single", 200},
 		{`{"name":"restricted","smart_group_ids":[2,2],"routing_strategy":"price"}`, "smart", 200},
 		{`{"name":"bad","group_id":0}`, "", 400},
@@ -112,6 +114,9 @@ func TestIntegrationCreateKeyDefaultsAndExplicitGroup(t *testing.T) {
 				if tt.mode == "smart" {
 					require.Nil(t, keys.created[0].GroupID)
 					require.NotEmpty(t, keys.created[0].SmartGroupIDs)
+					if keys.created[0].RoutingStrategy == "sequential" {
+						require.Equal(t, []int64{2, 1}, keys.created[0].SmartGroupIDs)
+					}
 				}
 			} else {
 				require.Empty(t, keys.created)

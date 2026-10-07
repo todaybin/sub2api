@@ -41,14 +41,8 @@ POST /api/v1/integrations/admin/users/123/balance
 | 接口名称 | 方法与路径 | 用途 | 传入字段 | 响应 `data` 字段 |
 | --- | --- | --- | --- | --- |
 | 查询网关凭据状态 | `GET /api/v1/admin/settings/integration-admin` | 查询是否已配置，仅返回脱敏 AppID。 | 无。 | `exists`：boolean，是否已配置；`masked_appid`：string，脱敏后的 AppID。 |
-| 生成或轮换网关凭据 | `POST /api/v1/admin/settings/integration-admin/regenerate` | 首次生成或轮换凭据。轮换后旧密钥立即失效。 | 无请求体。 | `appid`：string；`secret`：string，仅本次响应返回。 |
+| 生成或轮换网关凭据 | `POST /api/v1/admin/settings/integration-admin/regenerate` | 首次生成或轮换凭据。轮换后原凭据立即失效。 | 无请求体。 | `appid`：string；`secret`：string，仅本次响应返回。 |
 | 删除网关凭据 | `DELETE /api/v1/admin/settings/integration-admin` | 删除凭据并立即停用网关。 | 无请求体。 | `message`：string，操作结果。 |
-
-### 2.2 旧版凭据迁移
-
-旧 `integration_id` / `signing_secret` 凭据（带 `int_` / `sec_` 前缀）已停用，状态接口返回 `exists=false`。不会自动截断旧值或在读取时改写配置。管理员需使用 JWT 登录，重新生成 AppID / Secret，再更新调用方的字段、请求头和配置。原全局 Admin API Key 可继续配合新凭据使用。
-
-外部程序必须改用 `/api/v1/integrations/admin/*`。直接向 `/api/v1/admin/*` 发送 `x-api-key` 会返回 401，即使附带完整 App 签名或 JWT 也不会回退认证。管理员页面及 WebSocket JWT 认证继续保留。
 
 ## 3. 请求头与签名
 
@@ -235,7 +229,7 @@ curl -X POST "${BASE}${GATEWAY}" \
 POST /api/v1/integrations/admin/users/provision
 ```
 
-原管理员路径为 `POST /api/v1/admin/users/provision`。用途：幂等确保普通用户存在、合并可用模型分组，并为缺失分组创建独立 API Key。接口兼容原有一次性创建语义和单个 `api_key` 字段；新接入方应使用稳定的 `external_id` 和批量 `api_keys`。该接口是写操作，必须提供 `Idempotency-Key`。
+原管理员路径为 `POST /api/v1/admin/users/provision`。用途：幂等确保普通用户存在、合并可用模型分组，并为缺失分组创建独立 API Key。调用方应使用稳定的 `external_id`，并通过 `api_keys` 定义需要创建的 Key。该接口是写操作，必须提供 `Idempotency-Key`。
 
 重复调用时先按 `external_id` 查找账号，未找到时才按邮箱精确认领。若命中多个 `external_id`、邮箱已属于管理员账号，或同一请求重复声明分组，返回冲突或参数错误。已存在且有效、路由模式及分组集合相同的 Key 不会重复创建，也不会再次返回密钥明文；新增 Key 的明文只在本次响应返回。
 
@@ -255,8 +249,8 @@ POST /api/v1/integrations/admin/users/provision
 | `api_key.name` | string | 是 | API Key 显示名称。 |
 | `api_key.group_id` | integer | 否 | 大于 0；提供时创建 `single` 单分组 Key，省略时默认创建 `smart` 智能 Key。 |
 | `api_key.routing_mode` | string | 否 | `smart` 或 `single`；与 `group_id` 必须一致。 |
-| `api_key.routing_strategy` | string | 否 | `auto`（默认）、`price`、`speed`、`random`。 |
-| `api_key.smart_group_ids` | integer[] | 否 | 智能 Key 的候选分组；省略或空数组时取创建时用户所有有权绑定的有效分组，不会随新分组自动扩展。与 `group_id` 互斥。 |
+| `api_key.routing_strategy` | string | 否 | `auto`（默认）、`sequential`（按顺序）、`price`、`speed`、`random`。`auto` 自动使用当前账号全部可用分组。 |
+| `api_key.smart_group_ids` | integer[] | 按策略 | `auto` 不需要传，系统自动使用该用户当前有权使用的全部有效分组；`sequential` 必须传入至少一个分组并严格按数组顺序尝试；`price`、`speed`、`random` 可传入以限制候选分组，省略时使用该用户当前有权使用的全部有效分组。候选集合在创建时固定，不会随新分组自动扩展。与 `group_id` 互斥。 |
 | `api_key.custom_key` | string | 否 | 自定义 API Key；省略时自动生成。 |
 | `api_key.quota` | number | 否 | Key 配额，`0` 表示不限。 |
 | `api_key.expires_in_days` | integer | 否 | 有效天数，范围为 1-36500。 |
@@ -305,7 +299,7 @@ POST /api/v1/integrations/admin/users/provision
 }
 ```
 
-成功响应的 `data` 包含 `created`、`external_id`、`user`、`api_keys` 和 `subscription`；为兼容旧调用方，首个结果也放在 `api_key`。每个 `api_keys[]` 项包含 `routing_mode`、`routing_strategy`、`smart_group_ids`（智能模式）、`created` 和 `key_fingerprint`，只有 `created=true` 时才包含完整 `key`；同一个幂等请求的重放会恢复原成功响应，包括该密钥。密码不会返回。创建用户后的订阅或 API Key 创建失败时，服务端会删除刚创建的用户；更新已有用户失败时会删除本轮新 Key 并恢复原分组和备注。
+成功响应的 `data` 包含 `created`、`external_id`、`user`、`api_keys` 和 `subscription`。每个 `api_keys[]` 项包含 `routing_mode`、`routing_strategy`、`smart_group_ids`（智能模式）、`created` 和 `key_fingerprint`，只有 `created=true` 时才包含完整 `key`；同一个幂等请求的重放会恢复原成功响应，包括该密钥。密码不会返回。创建用户后的订阅或 API Key 创建失败时，服务端会删除刚创建的用户；更新已有用户失败时会删除本轮新 Key 并恢复原分组和备注。
 
 ## 5. 账号、余额、Key、登录 Token 与用量接口
 
@@ -422,7 +416,7 @@ Idempotency-Key: create-key-user-123-001
 {"name":"default-smart"}
 ```
 
-不传 `group_id` 默认创建 `routing_mode=smart`、`routing_strategy=auto`，候选分组为创建时该用户有权限绑定的全部有效分组。这是一份固定集合，后续新增分组不会自动加入。没有可用分组时返回 400，不创建无分组 Key。
+不传 `group_id` 默认创建 `routing_mode=smart`、`routing_strategy=auto`，候选分组为创建时该用户有权限绑定的全部有效分组。这是一份固定集合，后续新增分组不会自动加入。没有可用分组时返回 400，不创建无分组 Key。使用 `routing_strategy=sequential` 时必须传 `smart_group_ids`，服务端严格保留数组顺序并按该顺序尝试分组。
 
 指定智能候选分组及规则：
 
@@ -446,9 +440,9 @@ Idempotency-Key: create-key-user-123-001
 {"id":456,"user_id":123,"name":"default-smart","key":"sk-example-replace-me","routing_mode":"smart","routing_strategy":"auto","group_id":null,"smart_group_ids":[12,18],"status":"active","quota":0,"quota_used":0,"expires_at":null}
 ```
 
-该接口是“新增”，新幂等键可以创建另一个同模式 Key；同一幂等键的重试返回原结果。provision 是“确保存在”，按路由模式及候选分组集合复用有效 Key。旧的无分组 `single` Key 不会被误当成智能 Key。
+该接口创建新的 Key；每个新的业务操作应使用新的幂等键，同一幂等键的重试返回原结果。provision 用于确保目标路由模式及候选分组集合存在有效 Key。
 
-策略说明：`auto` 使用现有调度规则；`price` 比较预估用户费用；`speed` 优先有样本的低首字延迟线路；`random` 在有容量的候选分组间等概率选择。会话和续传优先遵守原线路归属。实际计费按最终选中的分组记录。详见 [智能路由规则](SMART_ROUTING.md)。
+策略说明：`auto` 使用账号当前全部可用分组并按系统默认调度规则选择；`sequential` 严格按 `smart_group_ids` 顺序依次尝试；`price` 比较预估用户费用；`speed` 优先有样本的低首字延迟线路；`random` 在有容量的候选分组间等概率选择。会话和续传优先遵守原线路归属。实际计费按最终选中的分组记录。详见 [智能路由规则](SMART_ROUTING.md)。
 
 ### 5.5 签发用户登录 Token（JWT）
 
@@ -525,7 +519,7 @@ GET /api/v1/usage/stats?start_time=2026-10-01T00%3A00%3A00Z&end_time=2026-10-02T
 Authorization: Bearer <access_token>
 ```
 
-也支持 `api_key_id`、`start_date`、`end_date`、`timezone`、`period=today|week|month`。账号始终取 JWT 身份，传入 `user_id` 不会改变统计对象；指定其他账号的 Key 返回 403。未指定范围和 period 时沿用用户面板默认范围：用户时区最近 7 天起始日零点至明日零点。用户日期参数兼容单侧范围；完整日期范围按包含结束自然日处理。省略 timezone 沿用系统默认时区。
+也支持 `api_key_id`、`start_date`、`end_date`、`timezone`、`period=today|week|month`。账号始终取 JWT 身份，传入 `user_id` 不会改变统计对象；指定其他账号的 Key 返回 403。未指定范围和 period 时沿用用户面板默认范围：用户时区最近 7 天起始日零点至明日零点。用户日期参数允许单侧范围；完整日期范围按包含结束自然日处理。省略 timezone 沿用系统默认时区。
 
 响应字段与 5.6 的统计指标相同，但不含管理员内部账号成本、上游路径及额外的 `user_id/start_time/end_time` 字段。需要详细请求记录时调用 `GET /api/v1/usage`，使用相同时间过滤与分页参数。该用户接口接受登录 JWT；模型 API Key 的标准模型列表入口见下节。
 
@@ -615,9 +609,9 @@ if (!currentResponse.ok || currentUsage.code !== 0) throw new Error('当前账�
 // account、createdKey.key、login 和统计结果由业务后端按需要保存或使用。
 ```
 
-成功幂等重放响应头为 `X-Idempotency-Replayed: true`。相同幂等键用于不同 body 返回 409。幂等记录有保留期限，超过期限不保证继续阻止新执行；充值应由订单系统长期保存处理状态，避免过期后再次发起旧充值。
+成功幂等重放响应头为 `X-Idempotency-Replayed: true`。相同幂等键用于不同 body 返回 409。幂等记录有保留期限，超过期限不保证继续阻止新执行；充值应由订单系统长期保存处理状态，避免过期后重复处理充值请求。
 
-集成 Key 创建、provision 与登录会话的幂等响应使用 AES-256-GCM 加密保存，重试可取回首次返回的密钥或 Token。加密密钥从持久 JWT Secret 派生；多实例必须使用一致的 JWT Secret，修改该 Secret 后旧加密响应无法重放（返回 503）。幂等存储不可用时拒绝执行集成写操作。
+集成 Key 创建、provision 与登录会话的幂等响应使用 AES-256-GCM 加密保存，重试可取回首次返回的密钥或 Token。加密密钥从持久 JWT Secret 派生；多实例必须使用一致的 JWT Secret，修改该 Secret 后原幂等响应无法重放（返回 503）。幂等存储不可用时拒绝执行集成写操作。
 
 ## 6. 常见错误
 
@@ -628,7 +622,7 @@ if (!currentResponse.ok || currentUsage.code !== 0) throw new Error('当前账�
 | 403 | 权限不足 | 分组未授权；签发登录 Token 的目标为管理员、停用账号或启用了 TOTP。 |
 | 404 | 账号、Key 或分组不存在 | 包括为某账号查询不属于它的 Key。 |
 | 401 | `ADMIN_API_KEY_GATEWAY_REQUIRED` | 直接使用 API Key 调用原管理员入口，必须改用集成网关并提供 App 签名。 |
-| 401 | `INTEGRATION_AUTH_FAILED` | 缺少认证请求头、Admin API Key 错误或未配置、AppID 不匹配或凭据已停用（含旧版凭据）。 |
+| 401 | `INTEGRATION_AUTH_FAILED` | 缺少认证请求头、Admin API Key 错误或未配置、AppID 不匹配或凭据已停用。 |
 | 401 | `INTEGRATION_SIGNATURE_INVALID` | 方法、原路径、请求头或原始请求体与签名不匹配。 |
 | 401 | `INTEGRATION_TIMESTAMP_EXPIRED` | 时间戳超过服务端 5 分钟允许窗口。 |
 | 403 | `INTEGRATION_ROUTE_FORBIDDEN` | 请求了禁止第三方调用的管理员路径。 |

@@ -66,7 +66,7 @@ export async function create(
   quota?: number,
   expiresInDays?: number,
   rateLimitData?: { rate_limit_5h?: number; rate_limit_1d?: number; rate_limit_7d?: number },
-  routing?: { mode?: 'single' | 'smart'; strategy?: 'auto' | 'price' | 'speed' | 'random'; groupIds?: number[] }
+  routing?: { mode?: 'single' | 'smart'; strategy?: 'auto' | 'sequential' | 'price' | 'speed' | 'random'; groupIds?: number[] }
 ): Promise<ApiKey> {
   const payload: CreateApiKeyRequest = { name }
   if (groupId !== undefined) {

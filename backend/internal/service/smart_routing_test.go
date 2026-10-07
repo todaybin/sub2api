@@ -114,6 +114,19 @@ func TestSmartRandomChoosesGroupsWithoutAccountCountBias(t *testing.T) {
 	require.InDelta(t, 2000, counts[1], 200)
 	require.InDelta(t, 2000, counts[2], 200)
 }
+
+func TestSmartSequentialPreservesCandidateGroupOrder(t *testing.T) {
+	candidates := []smartRouteCandidate{
+		{group: &Group{ID: 12}, account: &Account{ID: 1}},
+		{group: &Group{ID: 12}, account: &Account{ID: 2}},
+		{group: &Group{ID: 4}, account: &Account{ID: 3}},
+		{group: &Group{ID: 9}, account: &Account{ID: 4}},
+	}
+	orderSmartCandidates(context.Background(), "sequential", candidates, nil)
+	require.Equal(t, []int64{12, 12, 4, 9}, []int64{
+		candidates[0].group.ID, candidates[1].group.ID, candidates[2].group.ID, candidates[3].group.ID,
+	})
+}
 func TestSmartPriceAvailableFreeUnknownAndSpeed(t *testing.T) {
 	candidates := []smartRouteCandidate{
 		{group: &Group{ID: 1}, account: &Account{ID: 1, Concurrency: 1}, load: &AccountLoadInfo{}, price: math.Inf(1)},

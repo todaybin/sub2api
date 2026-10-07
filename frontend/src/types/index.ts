@@ -744,7 +744,7 @@ export interface ApiKey {
   name: string
   group_id: number | null
   routing_mode?: 'single' | 'smart'
-  routing_strategy?: 'auto' | 'price' | 'speed' | 'random'
+  routing_strategy?: 'auto' | 'sequential' | 'price' | 'speed' | 'random'
   smart_group_ids?: number[]
   status: 'active' | 'inactive' | 'quota_exhausted' | 'expired'
   ip_whitelist: string[]
@@ -776,7 +776,7 @@ export interface CreateApiKeyRequest {
   name: string
   group_id?: number | null
   routing_mode?: 'single' | 'smart'
-  routing_strategy?: 'auto' | 'price' | 'speed' | 'random'
+  routing_strategy?: 'auto' | 'sequential' | 'price' | 'speed' | 'random'
   smart_group_ids?: number[]
   custom_key?: string // Optional custom API Key
   ip_whitelist?: string[]
@@ -792,7 +792,7 @@ export interface UpdateApiKeyRequest {
   name?: string
   group_id?: number | null
   routing_mode?: 'single' | 'smart'
-  routing_strategy?: 'auto' | 'price' | 'speed' | 'random'
+  routing_strategy?: 'auto' | 'sequential' | 'price' | 'speed' | 'random'
   smart_group_ids?: number[]
   status?: 'active' | 'inactive'
   ip_whitelist?: string[]

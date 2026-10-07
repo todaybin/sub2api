@@ -871,6 +871,11 @@ func smartImmediatelyAvailable(c smartRouteCandidate) bool {
 }
 
 func orderSmartCandidates(ctx context.Context, strategy string, candidates []smartRouteCandidate, openAI *OpenAIGatewayService) {
+	if strategy == "sequential" {
+		// SelectSmartRoute appends candidates in SmartGroupIDs order. Preserve
+		// that group order while retaining scheduler order within each group.
+		return
+	}
 	// Shuffle ties rather than allowing configured group order to become policy.
 	rand.Shuffle(len(candidates), func(i, j int) { candidates[i], candidates[j] = candidates[j], candidates[i] })
 	if strategy == "random" {

@@ -124,11 +124,12 @@ export default {
     smartGroups: 'Smart group members',
     smartGroupCount: '{count} child groups',
     reorderSmartGroups: 'Drag to reorder display',
-    smartGroupsHint: 'Select groups. Existing sessions reuse their group and account. Exhausted subscriptions may fall back to selected balance groups and charge your balance.',
+    smartGroupsHint: 'Groups are tried in the listed order. Existing sessions reuse their group and account. Exhausted subscriptions may fall back to later balance groups and charge your balance.',
     smartGroupRequired: 'Select at least one smart group member',
-    routingStrategy: { auto: 'Automatic', price: 'Price first', speed: 'Speed first', random: 'Random' },
+    routingStrategy: { auto: 'Automatic', sequential: 'In order', price: 'Price first', speed: 'Speed first', random: 'Random' },
     routingStrategyHint: {
-      auto: 'Use account scheduling priorities, load, queues and administrator settings. Display order does not affect priority.',
+      auto: 'Automatically use all groups currently available to you; account scheduling uses priorities, load, queues and administrator settings.',
+      sequential: 'Try the selected groups in order; the account scheduler still chooses within each group. Existing sessions prefer their original route.',
       price: 'Prefer available capacity and lower estimated user charges for the same workload using actual group billing rules. Final charges use actual usage. Unknown prices rank after known prices.',
       speed: 'Prefer available capacity, then observed time to first token for this model. Routes without samples use normal scheduling.',
       random: 'Choose equally among eligible available groups, then use the account scheduler within that group. Existing sessions prefer their original route.'

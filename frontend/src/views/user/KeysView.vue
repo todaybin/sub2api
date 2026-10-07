@@ -609,6 +609,7 @@
         </div>
 
         <div v-else class="space-y-3">
+          <template v-if="formData.routing_strategy !== 'auto'">
           <label class="input-label">{{ t('keys.smartGroups') }}</label>
           <div class="grid max-h-56 gap-2 overflow-y-auto rounded-lg border border-gray-200 p-2 dark:border-dark-600">
             <label
@@ -626,8 +627,9 @@
             </label>
           </div>
           <p class="input-hint">{{ t('keys.smartGroupsHint') }}</p>
+          </template>
           <div class="flex gap-2">
-            <button v-for="strategy in ['auto', 'price', 'speed', 'random']" :key="strategy" type="button" class="flex-1 rounded-md border px-2 py-2 text-xs" :class="formData.routing_strategy === strategy ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 dark:border-dark-600'" @click="formData.routing_strategy = strategy as 'auto' | 'price' | 'speed' | 'random'">{{ t(`keys.routingStrategy.${strategy}`) }}</button>
+            <button v-for="strategy in ['auto', 'sequential', 'price', 'speed', 'random']" :key="strategy" type="button" class="flex-1 rounded-md border px-2 py-2 text-xs" :class="formData.routing_strategy === strategy ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 dark:border-dark-600'" @click="formData.routing_strategy = strategy as 'auto' | 'sequential' | 'price' | 'speed' | 'random'">{{ t(`keys.routingStrategy.${strategy}`) }}</button>
           </div>
           <p class="input-hint">{{ t(`keys.routingStrategyHint.${formData.routing_strategy}`) }}</p>
         </div>
@@ -1493,7 +1495,7 @@ const formData = ref({
   name: '',
   group_id: null as number | null,
   routing_mode: 'single' as 'single' | 'smart',
-  routing_strategy: 'auto' as 'auto' | 'price' | 'speed' | 'random',
+  routing_strategy: 'auto' as 'auto' | 'sequential' | 'price' | 'speed' | 'random',
   smart_group_ids: [] as number[],
   status: 'active' as 'active' | 'inactive',
   use_custom_key: false,
@@ -1922,7 +1924,7 @@ const handleSubmit = async () => {
     appStore.showError(t('keys.groupRequired'))
     return
   }
-  if (formData.value.routing_mode === 'smart' && formData.value.smart_group_ids.length === 0) {
+  if (formData.value.routing_mode === 'smart' && formData.value.routing_strategy !== 'auto' && formData.value.smart_group_ids.length === 0) {
     appStore.showError(t('keys.smartGroupRequired'))
     return
   }
@@ -1982,7 +1984,7 @@ const handleSubmit = async () => {
         group_id: formData.value.group_id,
         routing_mode: formData.value.routing_mode,
         routing_strategy: formData.value.routing_strategy,
-        smart_group_ids: formData.value.smart_group_ids,
+        smart_group_ids: formData.value.routing_strategy !== 'auto' ? formData.value.smart_group_ids : [],
         ip_whitelist: ipWhitelist,
         ip_blacklist: ipBlacklist,
         quota: quota,
@@ -2007,7 +2009,7 @@ const handleSubmit = async () => {
         quota,
         expiresInDays,
         rateLimitData,
-        { mode: formData.value.routing_mode, strategy: formData.value.routing_strategy, groupIds: formData.value.smart_group_ids }
+        { mode: formData.value.routing_mode, strategy: formData.value.routing_strategy, groupIds: formData.value.routing_strategy !== 'auto' ? formData.value.smart_group_ids : [] }
       )
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
       // Only advance tour if active, on submit step, and creation succeeded

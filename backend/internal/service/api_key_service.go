@@ -285,10 +285,10 @@ func validateCreateAPIKeyRequest(req CreateAPIKeyRequest) error {
 	if strategy == "" {
 		strategy = "auto"
 	}
-	if strategy != "auto" && strategy != "price" && strategy != "speed" && strategy != "random" {
-		return infraerrors.BadRequest("API_KEY_ROUTING_STRATEGY_INVALID", "routing_strategy must be auto, price, speed, or random")
+	if strategy != "auto" && strategy != "sequential" && strategy != "price" && strategy != "speed" && strategy != "random" {
+		return infraerrors.BadRequest("API_KEY_ROUTING_STRATEGY_INVALID", "routing_strategy must be auto, sequential, price, speed, or random")
 	}
-	if mode == "smart" && len(req.SmartGroupIDs) == 0 {
+	if mode == "smart" && strategy != "auto" && len(req.SmartGroupIDs) == 0 {
 		return infraerrors.BadRequest("API_KEY_SMART_GROUPS_REQUIRED", "smart API key requires at least one group")
 	}
 	if mode == "smart" && req.GroupID != nil {
@@ -313,8 +313,8 @@ func validateUpdateAPIKeyRequest(req UpdateAPIKeyRequest) error {
 	}
 	if req.RoutingStrategy != nil {
 		strategy := strings.ToLower(strings.TrimSpace(*req.RoutingStrategy))
-		if strategy != "auto" && strategy != "price" && strategy != "speed" && strategy != "random" {
-			return infraerrors.BadRequest("API_KEY_ROUTING_STRATEGY_INVALID", "routing_strategy must be auto, price, speed, or random")
+		if strategy != "auto" && strategy != "sequential" && strategy != "price" && strategy != "speed" && strategy != "random" {
+			return infraerrors.BadRequest("API_KEY_ROUTING_STRATEGY_INVALID", "routing_strategy must be auto, sequential, price, speed, or random")
 		}
 	}
 	return nil
@@ -573,6 +573,21 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 	}
 	if req.RoutingMode == "single" {
 		req.SmartGroupIDs = nil
+	}
+	if req.RoutingMode == "smart" && req.RoutingStrategy == "auto" {
+		// Automatic routing always snapshots every group currently available to
+		// the user. The client does not need to select or maintain this list.
+		groups, groupsErr := s.GetAvailableGroups(ctx, userID)
+		if groupsErr != nil {
+			return nil, fmt.Errorf("get smart groups: %w", groupsErr)
+		}
+		req.SmartGroupIDs = make([]int64, 0, len(groups))
+		for _, group := range groups {
+			req.SmartGroupIDs = append(req.SmartGroupIDs, group.ID)
+		}
+		if len(req.SmartGroupIDs) == 0 {
+			return nil, infraerrors.BadRequest("API_KEY_SMART_GROUPS_REQUIRED", "user has no available groups")
+		}
 	}
 	// 验证分组权限（如果指定了分组）
 	if req.GroupID != nil {
@@ -972,11 +987,24 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 		if req.SmartGroupIDs != nil {
 			ids = append([]int64(nil), (*req.SmartGroupIDs)...)
 		}
+		if mode == "smart" && strategy == "auto" {
+			groups, groupsErr := s.GetAvailableGroups(ctx, userID)
+			if groupsErr != nil {
+				return nil, fmt.Errorf("get smart groups: %w", groupsErr)
+			}
+			ids = make([]int64, 0, len(groups))
+			for _, group := range groups {
+				ids = append(ids, group.ID)
+			}
+			if len(ids) == 0 {
+				return nil, infraerrors.BadRequest("API_KEY_SMART_GROUPS_REQUIRED", "user has no available groups")
+			}
+		}
 		if mode == "smart" {
 			if req.GroupID != nil && *req.GroupID > 0 {
 				return nil, infraerrors.BadRequest("API_KEY_SMART_GROUP_CONFLICT", "smart API key cannot set group_id")
 			}
-			if len(ids) == 0 {
+			if strategy != "auto" && len(ids) == 0 {
 				return nil, infraerrors.BadRequest("API_KEY_SMART_GROUPS_REQUIRED", "smart API key requires at least one group")
 			}
 			user, err := s.userRepo.GetByID(ctx, userID)

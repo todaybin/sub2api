@@ -31,11 +31,19 @@ func (r *smartCRUDGroupRepo) GetByID(_ context.Context, id int64) (*Group, error
 	return r.groups[id], nil
 }
 
+func (r *smartCRUDGroupRepo) ListActive(context.Context) ([]Group, error) {
+	groups := make([]Group, 0, len(r.groups))
+	for _, group := range r.groups {
+		groups = append(groups, *group)
+	}
+	return groups, nil
+}
+
 func TestSmartKeyUpdateNormalizesAndClearsSingleGroup(t *testing.T) {
 	group := &Group{ID: 9, Status: StatusActive}
 	key := &APIKey{ID: 1, UserID: 7, GroupID: &group.ID, Group: group, RoutingMode: "single"}
 	repo := &smartCRUDKeyRepo{key: key}
-	svc := &APIKeyService{apiKeyRepo: repo, userRepo: &visibilityUserRepo{user: &User{ID: 7}}, groupRepo: &smartCRUDGroupRepo{groups: map[int64]*Group{9: group}}}
+	svc := &APIKeyService{apiKeyRepo: repo, userRepo: &visibilityUserRepo{user: &User{ID: 7}}, groupRepo: &smartCRUDGroupRepo{groups: map[int64]*Group{9: group}}, userSubRepo: &visibilitySubRepo{}}
 	mode, strategy := " SMART ", " PRICE "
 	ids := []int64{9}
 	result, err := svc.Update(context.Background(), 1, 7, UpdateAPIKeyRequest{RoutingMode: &mode, RoutingStrategy: &strategy, SmartGroupIDs: &ids})
@@ -74,9 +82,9 @@ func TestSmartKeyUnauthorizedUpdateDoesNotMutateSharedKey(t *testing.T) {
 	key := &APIKey{ID: 1, UserID: 7, Name: "before", RoutingMode: "single"}
 	repo := &smartCRUDKeyRepo{key: key}
 	svc := &APIKeyService{apiKeyRepo: repo, userRepo: &visibilityUserRepo{user: &User{ID: 7}}, groupRepo: &smartCRUDGroupRepo{groups: map[int64]*Group{9: group}}}
-	mode, name := "smart", "changed"
+	mode, strategy, name := "smart", "sequential", "changed"
 	ids := []int64{9}
-	_, err := svc.Update(context.Background(), 1, 7, UpdateAPIKeyRequest{Name: &name, RoutingMode: &mode, SmartGroupIDs: &ids})
+	_, err := svc.Update(context.Background(), 1, 7, UpdateAPIKeyRequest{Name: &name, RoutingMode: &mode, RoutingStrategy: &strategy, SmartGroupIDs: &ids})
 	require.ErrorIs(t, err, ErrGroupNotAllowed)
 	require.Nil(t, repo.updated)
 	require.Equal(t, "before", key.Name)

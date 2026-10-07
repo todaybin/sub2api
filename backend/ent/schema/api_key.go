@@ -51,7 +51,7 @@ func (APIKey) Fields() []ent.Field {
 		field.String("routing_strategy").
 			MaxLen(16).
 			Default("auto").
-			Comment("auto, price, speed, or random smart routing strategy"),
+			Comment("auto, sequential, price, speed, or random smart routing strategy"),
 		field.JSON("smart_group_ids", []int64{}).
 			Optional().
 			SchemaType(map[string]string{dialect.Postgres: "jsonb"}).

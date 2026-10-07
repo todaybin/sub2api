@@ -36,7 +36,7 @@ type APIKey struct {
 	GroupID *int64 `json:"group_id,omitempty"`
 	// single or smart API key group routing mode
 	RoutingMode string `json:"routing_mode,omitempty"`
-	// auto, price, speed, or random smart routing strategy
+	// auto, sequential, price, speed, or random smart routing strategy
 	RoutingStrategy string `json:"routing_strategy,omitempty"`
 	// ordered group IDs used by smart API key routing
 	SmartGroupIds []int64 `json:"smart_group_ids,omitempty"`
