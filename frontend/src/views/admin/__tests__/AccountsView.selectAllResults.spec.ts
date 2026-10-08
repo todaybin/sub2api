@@ -7,6 +7,8 @@ const {
   listAccounts,
   listWithEtag,
   batchRefresh,
+  bulkUpdate,
+  setSchedulable,
   getBatchTodayStats,
   getUpstreamBillingProbeSettings,
   getAllProxies,
@@ -16,6 +18,8 @@ const {
   listAccounts: vi.fn(),
   listWithEtag: vi.fn(),
   batchRefresh: vi.fn(),
+  bulkUpdate: vi.fn(),
+  setSchedulable: vi.fn(),
   getBatchTodayStats: vi.fn(),
   getUpstreamBillingProbeSettings: vi.fn(),
   getAllProxies: vi.fn(),
@@ -33,7 +37,8 @@ vi.mock('@/api/admin', () => ({
       batchDelete: vi.fn(),
       batchClearError: vi.fn(),
       batchRefresh,
-      bulkUpdate: vi.fn()
+      bulkUpdate,
+      setSchedulable
     },
     proxies: {
       getAll: getAllProxies
@@ -81,7 +86,7 @@ const makeAccounts = (count: number) => Array.from({ length: count }, (_, index)
 
 const AccountBulkActionsBarStub = {
   props: ['selectedIds', 'totalResults', 'selectingAll', 'allResultsSelected'],
-  emits: ['select-all-results', 'select-page', 'clear', 'refresh-token'],
+  emits: ['select-all-results', 'select-page', 'clear', 'refresh-token', 'toggle-schedulable'],
   template: `
     <div>
       <span data-test="selected-count">{{ selectedIds.length }}</span>
@@ -91,6 +96,7 @@ const AccountBulkActionsBarStub = {
       <button data-test="select-all-results" @click="$emit('select-all-results')">select all</button>
       <button data-test="clear" @click="$emit('clear')">clear</button>
       <button data-test="refresh-token" @click="$emit('refresh-token')">refresh token</button>
+      <button data-test="pause" @click="$emit('toggle-schedulable', false)">pause</button>
     </div>
   `
 }
@@ -108,8 +114,9 @@ const mountView = () => mount(AccountsView, {
         template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>'
       },
       DataTable: {
+        name: 'DataTable',
         props: ['data'],
-        template: '<div data-test="data-table"><div v-for="row in data" :key="row.id"><slot name="cell-select" :row="row" /></div></div>'
+        template: '<div data-test="data-table"><div v-for="row in data" :key="row.id"><slot name="cell-select" :row="row" /><span data-test="schedule-switch"><slot name="cell-schedulable" :row="row" /></span></div></div>'
       },
       Pagination: true,
       ConfirmDialog: true,
@@ -146,6 +153,8 @@ describe('admin AccountsView select all filtered results', () => {
     listAccounts.mockReset()
     listWithEtag.mockReset()
     batchRefresh.mockReset()
+    bulkUpdate.mockReset()
+    setSchedulable.mockReset()
     getBatchTodayStats.mockReset()
     getUpstreamBillingProbeSettings.mockReset()
     getAllProxies.mockReset()
@@ -165,6 +174,40 @@ describe('admin AccountsView select all filtered results', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+  })
+
+  it('immediately clears automatic recovery after bulk manual pause, including an already paused account', async () => {
+    listAccounts.mockResolvedValue({ items: makeAccounts(2).map(account => ({
+      ...account, schedulable: false, extra: { balance_auto_restore_token: 'automatic', codebuddy_checkin: { auto_disabled_by_balance: true } }
+    })), total: 2, page: 1, page_size: 20, pages: 1 })
+    bulkUpdate.mockResolvedValue({ success_ids: [1], failed_ids: [2] })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-test="select-page"]').trigger('click')
+    await wrapper.get('[data-test="pause"]').trigger('click')
+    await flushPromises()
+    const rows = wrapper.getComponent({ name: 'DataTable' }).props('data')
+    expect(rows[0].extra.balance_auto_restore_token).toBeUndefined()
+    expect(rows[0].extra.scheduling_manual_paused_at).toBeTruthy()
+    expect(rows[0].extra.codebuddy_checkin.auto_disabled_by_balance).toBe(false)
+    expect(rows[1].extra.balance_auto_restore_token).toBe('automatic')
+    expect(bulkUpdate).toHaveBeenCalledWith([1, 2], { schedulable: false })
+    wrapper.unmount()
+  })
+
+  it('uses the full server scheduling state after a single manual pause', async () => {
+    const account = { ...makeAccounts(1)[0], extra: { balance_auto_restore_token: 'automatic' } }
+    listAccounts.mockResolvedValue({ items: [account], total: 1, page: 1, page_size: 20, pages: 1 })
+    setSchedulable.mockResolvedValue({ ...account, schedulable: false, extra: { scheduling_manual_paused_at: '2026-10-08T00:00:00Z' } })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-test="schedule-switch"] button').trigger('click')
+    await flushPromises()
+    const rows = wrapper.getComponent({ name: 'DataTable' }).props('data')
+    expect(rows[0].schedulable).toBe(false)
+    expect(rows[0].extra).toEqual({ scheduling_manual_paused_at: '2026-10-08T00:00:00Z' })
+    expect(setSchedulable).toHaveBeenCalledWith(1, false)
+    wrapper.unmount()
   })
 
   it.each([

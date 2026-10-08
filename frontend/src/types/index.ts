@@ -1273,6 +1273,9 @@ export interface Account {
     upstream_billing_balance_query_mode?: 'auto' | 'generic' | 'new_api' | 'custom'
     upstream_billing_usage_query_config?: Record<string, unknown>
     upstream_billing_balance_auto_disabled_at?: string
+    balance_auto_restore_token?: string
+    scheduling_revision?: string
+    scheduling_manual_paused_at?: string
 	upstream_billing_balance_currency?: '' | 'USD' | 'CNY'
     upstream_billing_probe?: UpstreamBillingProbeSnapshot
     codex_reset_credit_snapshot?: {

@@ -68,6 +68,21 @@ describe('UpstreamBillingRateCell', () => {
     vi.useRealTimers()
   })
 
+  it.each([-12, -0.18, -0.000001])('preserves a negative upstream balance %s in the account list', (balance) => {
+    const wrapper = mount(UpstreamBillingRateCell, {
+      props: {
+        account: makeAccount({ schedulable: false, extra: {
+          upstream_billing_probe: {
+            status: 'ok', data: { ...billingData, billing_mode: 'balance', balance },
+            received_at: '2026-07-13T00:00:00Z', fresh_until: '2026-07-14T00:00:00Z',
+            last_attempt_at: '2026-07-13T00:00:00Z', next_probe_at: '2026-07-13T00:30:00Z'
+          }
+        } }), now: Date.now()
+      }
+    })
+    expect(wrapper.get('[data-testid="upstream-billing-identity"]').text()).toContain('-')
+  })
+
   it('recomputes the current effective rate and keeps the icon-only probe action', async () => {
     const wrapper = mount(UpstreamBillingRateCell, {
       props: {

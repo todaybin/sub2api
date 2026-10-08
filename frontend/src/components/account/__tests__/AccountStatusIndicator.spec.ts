@@ -51,6 +51,33 @@ function makeAccount(overrides: Partial<Account>): Account {
 }
 
 describe('AccountStatusIndicator', () => {
+  it.each([
+    { name: 'automatic balance pause', extra: { balance_auto_restore_token: 'new-token' }, hint: 'balanceAutoRecovery' },
+    { name: 'manual pause wins', extra: { scheduling_manual_paused_at: '2026-10-08T00:00:00Z', balance_auto_restore_token: 'stale' }, hint: 'manualRecoveryRequired' },
+    { name: 'unknown pause', extra: {}, hint: 'manualRecoveryRequired' },
+    { name: 'legacy pause', extra: { upstream_billing_balance_auto_disabled_at: '2026-10-08T00:00:00Z' }, hint: 'legacyPauseConfirmation' },
+    { name: 'legacy CodeBuddy pause', extra: { codebuddy_checkin: { auto_disabled_by_balance: true } }, hint: 'legacyPauseConfirmation' },
+  ])('shows recovery policy for $name', ({ extra, hint }) => {
+    const wrapper = mount(AccountStatusIndicator, {
+      props: { account: makeAccount({ schedulable: false, extra }) },
+      global: { stubs: { Icon: true } }
+    })
+    expect(wrapper.get('[data-testid="account-recovery-hint"]').text()).toBe(`admin.accounts.status.${hint}`)
+  })
+
+  it('hides recovery policy for an enabled account', () => {
+    const wrapper = mount(AccountStatusIndicator, { props: { account: makeAccount({ schedulable: true }) } })
+    expect(wrapper.find('[data-testid="account-recovery-hint"]').exists()).toBe(false)
+  })
+
+  it('requires manual recovery when the account status is disabled', () => {
+    const wrapper = mount(AccountStatusIndicator, {
+      props: { account: makeAccount({ status: 'disabled', schedulable: false, extra: { balance_auto_restore_token: 'token' } }) },
+      global: { stubs: { Icon: true } }
+    })
+    expect(wrapper.get('[data-testid="account-recovery-hint"]').text()).toBe('admin.accounts.status.manualRecoveryRequired')
+  })
+
   it('Claude 5 系列模型限流时显示 Opus 和 Sonnet 的短别名', () => {
     const wrapper = mount(AccountStatusIndicator, {
       props: {

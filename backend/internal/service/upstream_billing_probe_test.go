@@ -159,12 +159,18 @@ type upstreamBillingProbeSettingRepo struct {
 
 type upstreamBillingProbeHTTPStub struct {
 	calls          atomic.Int64
+	modelCalls     atomic.Int64
 	active         atomic.Int64
 	maxActive      atomic.Int64
 	beforeResponse func()
 }
 
 func (u *upstreamBillingProbeHTTPStub) Do(req *http.Request, proxyURL string, accountID int64, accountConcurrency int) (*http.Response, error) {
+	// Scheduler assertions count billing requests independently of model sync.
+	if strings.HasSuffix(req.URL.Path, "/models") {
+		u.modelCalls.Add(1)
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"data":[]}`))}, nil
+	}
 	u.calls.Add(1)
 	active := u.active.Add(1)
 	defer u.active.Add(-1)
@@ -469,6 +475,137 @@ func TestParseSub2APIUsageResponse(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 56.63329189, data["balance"])
 	require.Equal(t, "CNY", data["currency"])
+}
+
+func TestParseSub2APIUsageResponseInvalidKeyBalance(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		body    string
+		balance float64
+		wantErr bool
+	}{
+		{name: "negative decimal", body: `{"isValid":false,"remaining":-0.18,"unit":"USD"}`, balance: -0.18},
+		{name: "negative integer", body: `{"isValid":false,"remaining":-12,"unit":"USD"}`, balance: -12},
+		{name: "negative string", body: `{"isValid":false,"remaining":"-0.000001","unit":"USD"}`, balance: -0.000001},
+		{name: "zero", body: `{"isValid":false,"remaining":0,"unit":"USD"}`, balance: 0},
+		{name: "positive", body: `{"isValid":false,"remaining":2,"unit":"USD"}`, wantErr: true},
+		{name: "missing", body: `{"isValid":false,"unit":"USD"}`, wantErr: true},
+		{name: "other balance only", body: `{"isValid":false,"balance":0,"unit":"USD"}`, wantErr: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := parseSub2APIUsageResponse([]byte(tt.body))
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.balance, data["balance"])
+		})
+	}
+}
+
+func TestUpstreamBillingProbeAutoKeepsNegativeUsageBalance(t *testing.T) {
+	account := &Account{
+		ID:          22,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Schedulable: false,
+		Concurrency: 1,
+		Credentials: map[string]any{"api_key": "sk-sensitive", "base_url": "https://upstream.example"},
+		Extra: map[string]any{
+			UpstreamBillingProbeEnabledExtraKey:          true,
+			UpstreamBillingBalanceQueryModeExtraKey:      "auto",
+			UpstreamBillingBalanceAutoDisabledAtExtraKey: "2026-07-13T01:00:00Z",
+		},
+	}
+	repo := &upstreamBillingProbeAccountRepo{accounts: map[int64]*Account{account.ID: account}}
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		{StatusCode: http.StatusNotFound, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"error":"not found"}`))},
+		{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"isValid":false,"remaining":-0.18,"unit":"USD"}`))},
+		{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"balance":10}`))},
+	}}
+	settingsRepo := &upstreamBillingProbeSettingRepo{values: map[string]string{
+		SettingKeyUpstreamBillingProbeSettings: `{"enabled":true,"interval_minutes":30,"auto_disable_zero_balance":true}`,
+	}}
+	svc := newUpstreamBillingProbeTestService(repo, upstream, settingsRepo)
+
+	snapshot, err := svc.probeScheduledAccount(context.Background(), account.ID, 30, true)
+	require.NoError(t, err)
+	require.Equal(t, UpstreamBillingProbeStatusOK, snapshot.Status)
+	require.Equal(t, -0.18, snapshot.Data["balance"])
+	require.Equal(t, "sub2api_usage", snapshot.Data["balance_source"])
+	require.True(t, snapshot.AutoDisableZeroBalance)
+	require.False(t, snapshot.AutoRestoreBalance)
+	require.False(t, account.Schedulable)
+	require.Contains(t, account.Extra, UpstreamBillingBalanceAutoDisabledAtExtraKey)
+	require.Len(t, upstream.requests, 2)
+	require.Equal(t, "https://upstream.example/v1/usage", upstream.requests[1].URL.String())
+}
+
+func TestUpstreamBillingProbeAutoVerifiesPrimaryBalance(t *testing.T) {
+	primary := `{
+		"object":"sub2api.key_billing",
+		"schema_version":1,
+		"billing_scope":"token",
+		"billing_mode":"balance",
+		"balance":10,
+		"group_rate_multiplier":1,
+		"resolved_rate_multiplier":1,
+		"peak_rate_enabled":false,
+		"effective_rate_multiplier":1,
+		"observed_at":"2026-07-13T01:00:00Z"
+	}`
+	for _, tt := range []struct {
+		name            string
+		usageStatus     int
+		usageBody       string
+		genericStatus   int
+		wantBalance     bool
+		wantBalanceCode string
+	}{
+		{name: "negative usage overrides positive primary", usageStatus: http.StatusOK, usageBody: `{"isValid":false,"remaining":-0.18}`, wantBalance: true, wantBalanceCode: UpstreamBillingProbeStatusOK},
+		{name: "failed verification hides primary", usageStatus: http.StatusInternalServerError, genericStatus: http.StatusInternalServerError, wantBalanceCode: UpstreamBillingProbeStatusFailed},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			account := &Account{
+				ID:          23,
+				Platform:    PlatformOpenAI,
+				Type:        AccountTypeAPIKey,
+				Status:      StatusActive,
+				Schedulable: false,
+				Concurrency: 1,
+				Credentials: map[string]any{"api_key": "sk-sensitive", "base_url": "https://upstream.example"},
+				Extra: map[string]any{
+					UpstreamBillingProbeEnabledExtraKey:          true,
+					UpstreamBillingBalanceQueryModeExtraKey:      "auto",
+					UpstreamBillingBalanceAutoDisabledAtExtraKey: "2026-07-13T01:00:00Z",
+				},
+			}
+			repo := &upstreamBillingProbeAccountRepo{accounts: map[int64]*Account{account.ID: account}}
+			upstream := &httpUpstreamRecorder{responses: []*http.Response{
+				{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(primary))},
+				{StatusCode: tt.usageStatus, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(tt.usageBody))},
+				{StatusCode: tt.genericStatus, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"balance":10}`))},
+			}}
+			svc := newUpstreamBillingProbeTestService(repo, upstream, &upstreamBillingProbeSettingRepo{})
+
+			snapshot, err := svc.probeScheduledAccount(context.Background(), account.ID, 30, true)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantBalanceCode, snapshot.BalanceStatus)
+			if tt.wantBalance {
+				require.Equal(t, -0.18, snapshot.Data["balance"])
+				require.Equal(t, "sub2api_usage", snapshot.Data["balance_source"])
+				require.Len(t, upstream.requests, 2)
+			} else {
+				require.NotContains(t, snapshot.Data, "balance")
+				require.Len(t, upstream.requests, 3)
+			}
+			require.False(t, snapshot.AutoRestoreBalance)
+			require.False(t, account.Schedulable)
+			require.Contains(t, account.Extra, UpstreamBillingBalanceAutoDisabledAtExtraKey)
+		})
+	}
 }
 
 func TestUpstreamBillingProbeAutoUsesSub2APIUsageAndCurrencyOverride(t *testing.T) {
@@ -1233,6 +1370,7 @@ func TestUpstreamBillingProbeRunnerIsBoundedAndManualProbeIgnoresSwitches(t *tes
 
 	require.NoError(t, svc.RunDue(context.Background()))
 	require.Equal(t, int64(20), upstream.calls.Load())
+	require.Equal(t, int64(20), upstream.modelCalls.Load())
 
 	settingsRepo.mu.Lock()
 	settingsRepo.values[SettingKeyUpstreamBillingProbeSettings] = `{"enabled":false,"interval_minutes":30}`

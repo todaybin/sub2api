@@ -112,7 +112,8 @@
             {{ globalAutoDisableEnabled ? t('admin.accounts.upstreamBilling.enabled') : t('admin.accounts.upstreamBilling.disabled') }}
           </span>
         </p>
-        <p v-if="autoDisabledAt" class="text-amber-300" data-testid="upstream-billing-auto-disabled-at">
+        <p v-if="recoveryHint" data-testid="upstream-billing-recovery-hint">{{ t(recoveryHint) }}</p>
+        <p v-if="autoDisabledAt && !account.schedulable && !account.extra?.scheduling_manual_paused_at" class="text-amber-300" data-testid="upstream-billing-auto-disabled-at">
           {{ t('admin.accounts.upstreamBilling.autoDisabledAt', { value: formatDate(autoDisabledAt) }) }}
         </p>
       </div>
@@ -143,6 +144,7 @@ import Icon from '@/components/icons/Icon.vue'
 import { formatCompactNumber, formatCurrency } from '@/utils/format'
 import { formatMultiplier } from '@/utils/formatters'
 import type { Account, UpstreamBillingProbeSnapshot } from '@/types'
+import { accountRecoveryHint } from '@/utils/accountScheduling'
 
 const props = withDefaults(defineProps<{
   account: Account
@@ -177,6 +179,7 @@ const codeBuddyBalanceDisplay = computed(() => {
   if (codeBuddyBalance.value <= 0 && props.account.schedulable === false) return '0 积分 · 已停止调度'
   return `${codeBuddyBalance.value} 积分`
 })
+const recoveryHint = computed(() => accountRecoveryHint(props.account))
 const snapshot = computed<UpstreamBillingProbeSnapshot | undefined>(() => props.account.extra?.upstream_billing_probe)
 const data = computed(() => snapshot.value?.data)
 const autoDisabledAt = computed(() => {

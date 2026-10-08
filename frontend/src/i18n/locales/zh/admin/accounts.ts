@@ -485,6 +485,9 @@ export default {
       accountSchedulingThresholdOverrideDisabledHint:
         '1-100，达到该用量百分比后临时不可调度；100 表示禁用当前账号自动停调。',
       status: {
+        manualRecoveryRequired: '?????',
+        balanceAutoRecovery: '?????????',
+        legacyPauseConfirmation: '???????????',
         active: '正常',
         inactive: '停用',
         expired: '已过期',

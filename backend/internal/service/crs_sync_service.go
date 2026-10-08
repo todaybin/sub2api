@@ -432,7 +432,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		existing.Status = status
 		existing.Schedulable = src.Schedulable
 
-		if err := s.accountRepo.Update(ctx, existing); err != nil {
+		if err := s.updateImportedAccount(ctx, existing); err != nil {
 			item.Action = "failed"
 			item.Error = "update failed: " + err.Error()
 			result.Failed++
@@ -561,7 +561,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		existing.Status = status
 		existing.Schedulable = src.Schedulable
 
-		if err := s.accountRepo.Update(ctx, existing); err != nil {
+		if err := s.updateImportedAccount(ctx, existing); err != nil {
 			item.Action = "failed"
 			item.Error = "update failed: " + err.Error()
 			result.Failed++
@@ -711,7 +711,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		existing.Status = status
 		existing.Schedulable = src.Schedulable
 
-		if err := s.accountRepo.Update(ctx, existing); err != nil {
+		if err := s.updateImportedAccount(ctx, existing); err != nil {
 			item.Action = "failed"
 			item.Error = "update failed: " + err.Error()
 			result.Failed++
@@ -868,7 +868,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		existing.Status = status
 		existing.Schedulable = src.Schedulable
 
-		if err := s.accountRepo.Update(ctx, existing); err != nil {
+		if err := s.updateImportedAccount(ctx, existing); err != nil {
 			item.Action = "failed"
 			item.Error = "update failed: " + err.Error()
 			result.Failed++
@@ -1000,7 +1000,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		existing.Status = mapCRSStatus(src.IsActive, src.Status)
 		existing.Schedulable = src.Schedulable
 
-		if err := s.accountRepo.Update(ctx, existing); err != nil {
+		if err := s.updateImportedAccount(ctx, existing); err != nil {
 			item.Action = "failed"
 			item.Error = "update failed: " + err.Error()
 			result.Failed++
@@ -1127,7 +1127,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		existing.Status = mapCRSStatus(src.IsActive, src.Status)
 		existing.Schedulable = src.Schedulable
 
-		if err := s.accountRepo.Update(ctx, existing); err != nil {
+		if err := s.updateImportedAccount(ctx, existing); err != nil {
 			item.Action = "failed"
 			item.Error = "update failed: " + err.Error()
 			result.Failed++
@@ -1205,6 +1205,13 @@ func reconcileCRSUpstreamBillingProbeExtra(
 
 func mergeCRSOpenAILongContextBillingExtra(existing, updates map[string]any) (map[string]any, error) {
 	return normalizeOpenAILongContextBillingExtra(PlatformOpenAI, mergeMap(existing, updates))
+}
+
+func (s *CRSSyncService) updateImportedAccount(ctx context.Context, account *Account) error {
+	if updater, ok := s.accountRepo.(AccountSchedulingUpdater); ok {
+		return updater.UpdateWithScheduling(ctx, account, account.Schedulable)
+	}
+	return s.accountRepo.Update(ctx, account)
 }
 
 func (s *CRSSyncService) mapOrCreateProxy(ctx context.Context, enabled bool, cached *[]Proxy, src *crsProxy, defaultName string) (*int64, error) {

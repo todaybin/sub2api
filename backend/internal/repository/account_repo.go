@@ -28,6 +28,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 
 	entsql "entgo.io/ent/dialect/sql"
@@ -149,7 +150,7 @@ func createAccountRecord(ctx context.Context, client *dbent.Client, account *ser
 		SetPlatform(account.Platform).
 		SetType(account.Type).
 		SetCredentials(normalizeJSONMap(account.Credentials)).
-		SetExtra(normalizeJSONMap(account.Extra)).
+		SetExtra(normalizeJSONMap(stripBalanceSchedulingExtra(account.Extra))).
 		SetConcurrency(account.Concurrency).
 		SetPriority(account.Priority).
 		SetStatus(account.Status).
@@ -443,7 +444,11 @@ func (r *accountRepository) ListCRSAccountIDs(ctx context.Context) (map[string]i
 }
 
 func (r *accountRepository) Update(ctx context.Context, account *service.Account) error {
-	return r.updateAccount(ctx, account, nil, nil, account.RateMultiplier)
+	return r.updateAccount(ctx, account, nil, nil, account.RateMultiplier, nil)
+}
+
+func (r *accountRepository) UpdateWithScheduling(ctx context.Context, account *service.Account, enabled bool) error {
+	return r.updateAccount(ctx, account, nil, nil, account.RateMultiplier, &enabled)
 }
 
 // UpdateWithAccountBillingSettings applies an admin account edit while
@@ -456,7 +461,7 @@ func (r *accountRepository) UpdateWithAccountBillingSettings(
 	rateSyncEnabled *bool,
 	rateMultiplier *float64,
 ) error {
-	return r.updateAccount(ctx, account, probeEnabled, rateSyncEnabled, rateMultiplier)
+	return r.updateAccount(ctx, account, probeEnabled, rateSyncEnabled, rateMultiplier, nil)
 }
 
 func (r *accountRepository) updateAccount(
@@ -465,6 +470,7 @@ func (r *accountRepository) updateAccount(
 	explicitProbeEnabled *bool,
 	explicitRateSyncEnabled *bool,
 	explicitRateMultiplier *float64,
+	explicitSchedulable *bool,
 ) error {
 	if account == nil {
 		return nil
@@ -496,6 +502,7 @@ func (r *accountRepository) updateAccount(
 		explicitProbeEnabled,
 		explicitRateSyncEnabled,
 		explicitRateMultiplier,
+		explicitSchedulable,
 	)
 	if err != nil {
 		return translatePersistenceError(err, service.ErrAccountNotFound, nil)
@@ -525,10 +532,19 @@ func (r *accountRepository) updateLockedAccount(
 	explicitProbeEnabled *bool,
 	explicitRateSyncEnabled *bool,
 	explicitRateMultiplier *float64,
+	explicitSchedulable *bool,
 ) (*dbent.Account, error) {
 	extra, err := lockAndMergeAccountProbeExtra(ctx, client, account, explicitProbeEnabled, explicitRateSyncEnabled)
 	if err != nil {
 		return nil, err
+	}
+	if explicitSchedulable != nil {
+		account.Schedulable = *explicitSchedulable
+		extra = stripBalanceSchedulingExtra(extra)
+		extra[service.SchedulingRevisionExtraKey] = uuid.NewString()
+		if !*explicitSchedulable {
+			extra[service.SchedulingManualPausedAtExtraKey] = time.Now().UTC().Format(time.RFC3339)
+		}
 	}
 	account.Extra = extra
 
@@ -675,7 +691,8 @@ func lockAndMergeAccountProbeExtra(
 			),
 			extra -> 'opencode_go_usage_auto_refresh',
 			extra -> 'opencode_go_usage_snapshot',
-			COALESCE(extra, '{}'::jsonb)
+			COALESCE(extra, '{}'::jsonb),
+			schedulable
 		FROM accounts
 		WHERE id = $1 AND deleted_at IS NULL
 		FOR NO KEY UPDATE
@@ -705,6 +722,7 @@ func lockAndMergeAccountProbeExtra(
 		currentOpenCodeAutoRefresh     []byte
 		currentOpenCodeSnapshot        []byte
 		currentExtraJSON               []byte
+		currentSchedulable             bool
 	)
 	if err := rows.Scan(
 		&identityUnchanged,
@@ -720,6 +738,7 @@ func lockAndMergeAccountProbeExtra(
 		&currentOpenCodeAutoRefresh,
 		&currentOpenCodeSnapshot,
 		&currentExtraJSON,
+		&currentSchedulable,
 	); err != nil {
 		return nil, err
 	}
@@ -741,6 +760,8 @@ func lockAndMergeAccountProbeExtra(
 		}
 	}
 	extra := service.MergeOpenAICodexTicketExtra(copyJSONMap(normalizeJSONMap(account.Extra)), currentExtra)
+	preserveBalanceSchedulingExtra(extra, currentExtra)
+	account.Schedulable = currentSchedulable
 	for _, key := range []string{
 		service.UpstreamBillingProbeEnabledExtraKey,
 		service.UpstreamBillingRateSyncEnabledExtraKey,
@@ -2693,21 +2714,10 @@ func (r *accountRepository) UpdateSessionWindowEnd(ctx context.Context, id int64
 }
 
 func (r *accountRepository) SetSchedulable(ctx context.Context, id int64, schedulable bool) error {
-	client := clientFromContext(ctx, r.client)
-	_, err := client.ExecContext(ctx, `
-		UPDATE accounts
-		SET schedulable = $2,
-			extra = COALESCE(extra, '{}'::jsonb) - $3,
-			updated_at = NOW()
-		WHERE id = $1 AND deleted_at IS NULL
-	`, id, schedulable, service.UpstreamBillingBalanceAutoDisabledAtExtraKey)
-	if err != nil {
+	if err := r.setManualSchedulable(ctx, id, schedulable); err != nil {
 		return err
 	}
-	if err := enqueueSchedulerOutbox(ctx, client, service.SchedulerOutboxEventAccountChanged, &id, nil, nil); err != nil {
-		logger.LegacyPrintf("repository.account", "[SchedulerOutbox] enqueue schedulable change failed: account=%d err=%v", id, err)
-	}
-	if !schedulable {
+	if dbent.TxFromContext(ctx) == nil {
 		r.syncSchedulerAccountSnapshot(ctx, id)
 	}
 	return nil
@@ -2755,6 +2765,7 @@ func (r *accountRepository) AutoPauseExpiredAccounts(ctx context.Context, now ti
 }
 
 func (r *accountRepository) UpdateExtra(ctx context.Context, id int64, updates map[string]any) error {
+	updates = stripBalanceSchedulingExtra(updates)
 	updates = stripCodexFingerprintSeedFromExtraUpdate(updates)
 	if len(updates) == 0 {
 		return nil
@@ -2785,6 +2796,9 @@ func (r *accountRepository) UpdateExtra(ctx context.Context, id int64, updates m
 		}
 	}
 	extraExpression := "COALESCE(extra, '{}'::jsonb) || $1::jsonb"
+	if _, ok := updates[service.CodeBuddyCheckinExtraKey]; ok {
+		extraExpression += " || CASE WHEN jsonb_typeof(extra -> 'codebuddy_checkin') = 'object' AND jsonb_typeof($1::jsonb -> 'codebuddy_checkin') = 'object' THEN jsonb_build_object('codebuddy_checkin', (extra -> 'codebuddy_checkin') || ($1::jsonb -> 'codebuddy_checkin')) ELSE '{}'::jsonb END"
+	}
 	if clearProbeSnapshot {
 		extraExpression = "(" + extraExpression + ") - 'upstream_billing_probe'"
 	}
@@ -2889,6 +2903,7 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
 	}
 	autoDisablePayload, err := json.Marshal(map[string]any{
 		service.UpstreamBillingBalanceAutoDisabledAtExtraKey: snapshot.LastAttemptAt.UTC(),
+		service.BalanceAutoRestoreTokenExtraKey:              uuid.NewString(),
 	})
 	if err != nil {
 		return err
@@ -2947,13 +2962,14 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
 				extra = ((COALESCE(extra, '{}'::jsonb) || $1::jsonb) || CASE
 				WHEN $11::boolean
 					AND schedulable IS TRUE
+					AND NOT (extra ? 'scheduling_manual_paused_at')
 					AND (extra @> '{"upstream_billing_probe_enabled": true}'::jsonb OR extra @> '{"upstream_billing_balance_probe_enabled": true}'::jsonb)
 				THEN $12::jsonb
 				ELSE '{}'::jsonb
 			END) - '__upstream_billing_auto_restore' - CASE
-				WHEN $1::jsonb ? '__upstream_billing_auto_restore' AND schedulable IS FALSE AND extra ? 'upstream_billing_balance_auto_disabled_at'
-				THEN 'upstream_billing_balance_auto_disabled_at'
-				ELSE ''
+				WHEN $1::jsonb ? '__upstream_billing_auto_restore' AND status = 'active' AND schedulable IS FALSE AND (jsonb_typeof(extra -> 'balance_auto_restore_token') = 'string' AND extra ->> 'balance_auto_restore_token' <> '') AND NOT (extra ? 'scheduling_manual_paused_at')
+				THEN ARRAY['upstream_billing_balance_auto_disabled_at', 'balance_auto_restore_token']
+				ELSE ARRAY[]::text[]
 			END,
 				rate_multiplier = CASE
 				WHEN $10::numeric IS NOT NULL
@@ -2964,11 +2980,14 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
 			END,
 				schedulable = CASE
 				WHEN $1::jsonb ? '__upstream_billing_auto_restore'
+					AND status = 'active'
 					AND schedulable IS FALSE
-					AND extra ? 'upstream_billing_balance_auto_disabled_at'
+					AND (jsonb_typeof(extra -> 'balance_auto_restore_token') = 'string' AND extra ->> 'balance_auto_restore_token' <> '')
+					AND NOT (extra ? 'scheduling_manual_paused_at')
 				THEN TRUE
 				WHEN $11::boolean
 					AND schedulable IS TRUE
+					AND NOT (extra ? 'scheduling_manual_paused_at')
 					AND (extra @> '{"upstream_billing_probe_enabled": true}'::jsonb OR extra @> '{"upstream_billing_balance_probe_enabled": true}'::jsonb)
 				THEN FALSE
 				ELSE schedulable
@@ -2984,8 +3003,9 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
 			AND COALESCE(extra -> 'upstream_billing_rate_sync_enabled', 'null'::jsonb) = $9::jsonb
 			AND schedulable = $13
 			AND COALESCE(extra -> 'upstream_billing_balance_query_mode', 'null'::jsonb) = $14::jsonb
+			AND COALESCE(extra -> 'scheduling_revision', 'null'::jsonb) = $15::jsonb
 			AND deleted_at IS NULL
-	`, string(payload), account.ID, account.Platform, account.Type, string(credentials), proxyID, string(expectedSnapshotJSON), string(expectedEnabledJSON), string(expectedRateSyncEnabledJSON), rateMultiplier, snapshot.AutoDisableZeroBalance, string(autoDisablePayload), account.Schedulable, string(expectedBalanceQueryModeJSON))
+	`, string(payload), account.ID, account.Platform, account.Type, string(credentials), proxyID, string(expectedSnapshotJSON), string(expectedEnabledJSON), string(expectedRateSyncEnabledJSON), rateMultiplier, snapshot.AutoDisableZeroBalance, string(autoDisablePayload), account.Schedulable, string(expectedBalanceQueryModeJSON), schedulingRevisionJSON(account))
 	if err != nil {
 		return err
 	}
@@ -3077,6 +3097,7 @@ func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates
 	if len(ids) == 0 {
 		return 0, nil
 	}
+	updates.Extra = stripBalanceSchedulingExtra(updates.Extra)
 	updates.Extra = stripCodexFingerprintSeedFromExtraUpdate(updates.Extra)
 
 	setClauses := make([]string, 0, 8)
@@ -3197,7 +3218,7 @@ func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates
 				" AND COALESCE(btrim("+credentialPlaceholder+"::jsonb ->> 'account_mode') <> 'zen', true) IS NOT TRUE")
 	}
 
-	if len(updates.Extra) > 0 || len(ollamaGroupIdentityChanges) > 0 || len(opencodeGroupIdentityChanges) > 0 || ollamaProxyIdentityChanged != "" || updates.EnsureCodexFingerprintSeed {
+	if updates.Schedulable != nil || len(updates.Extra) > 0 || len(ollamaGroupIdentityChanges) > 0 || len(opencodeGroupIdentityChanges) > 0 || ollamaProxyIdentityChanged != "" || updates.EnsureCodexFingerprintSeed {
 		extraExpression := "COALESCE(extra, '{}'::jsonb)"
 		if len(updates.Extra) > 0 {
 			payload, err := json.Marshal(updates.Extra)
@@ -3205,6 +3226,10 @@ func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates
 				return 0, err
 			}
 			extraExpression += " || $" + itoa(idx) + "::jsonb"
+			if _, ok := updates.Extra[service.CodeBuddyCheckinExtraKey]; ok {
+				placeholder := "$" + itoa(idx) + "::jsonb"
+				extraExpression += " || CASE WHEN jsonb_typeof(extra -> 'codebuddy_checkin') = 'object' AND jsonb_typeof(" + placeholder + " -> 'codebuddy_checkin') = 'object' THEN jsonb_build_object('codebuddy_checkin', (extra -> 'codebuddy_checkin') || (" + placeholder + " -> 'codebuddy_checkin')) ELSE '{}'::jsonb END"
+			}
 			args = append(args, payload)
 			idx++
 			if upstreamBillingProbeExplicitlyDisabled(updates.Extra) || upstreamBillingProbeSnapshotClearRequested(updates.Extra) {
@@ -3279,6 +3304,13 @@ func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates
 		}
 		if updates.EnsureCodexFingerprintSeed {
 			extraExpression = ensureCodexFingerprintSeedSQL(extraExpression)
+		}
+		if updates.Schedulable != nil {
+			enabled := "FALSE"
+			if *updates.Schedulable {
+				enabled = "TRUE"
+			}
+			extraExpression = manualSchedulingExtraSQL(extraExpression, enabled)
 		}
 		setClauses = append(setClauses, "extra = "+extraExpression)
 	}

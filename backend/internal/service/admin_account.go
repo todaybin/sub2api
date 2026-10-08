@@ -1397,21 +1397,7 @@ func (s *adminServiceImpl) SetAccountSchedulable(ctx context.Context, id int64, 
 	if err != nil {
 		return nil, err
 	}
-	// A direct administrator change is an explicit override. Clear the
-	// CodeBuddy auto-disable marker so a later credit probe cannot undo it.
-	if updated != nil && updated.Platform == PlatformCodeBuddy && updated.Type == AccountTypeOAuth {
-		settings := CodeBuddyCheckinSettingsForAccount(updated)
-		if settings.AutoDisabledByBalance {
-			settings.AutoDisabledByBalance = false
-			if err := s.accountRepo.UpdateExtra(ctx, id, map[string]any{CodeBuddyCheckinExtraKey: settings}); err != nil {
-				return nil, err
-			}
-			if updated.Extra == nil {
-				updated.Extra = make(map[string]any)
-			}
-			updated.Extra[CodeBuddyCheckinExtraKey] = settings
-		}
-	}
+
 	return updated, nil
 }
 

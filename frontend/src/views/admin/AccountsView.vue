@@ -1960,7 +1960,19 @@ const handleBulkProbeUpstreamBilling = async () => {
 const updateSchedulableInList = (accountIds: number[], schedulable: boolean) => {
   if (accountIds.length === 0) return
   const idSet = new Set(accountIds)
-  accounts.value = accounts.value.map((account) => (idSet.has(account.id) ? { ...account, schedulable } : account))
+  accounts.value = accounts.value.map((account) => {
+    if (!idSet.has(account.id)) return account
+    const extra = { ...account.extra }
+    delete extra.balance_auto_restore_token
+    delete extra.upstream_billing_balance_auto_disabled_at
+    if (schedulable) delete extra.scheduling_manual_paused_at
+    else extra.scheduling_manual_paused_at = new Date().toISOString()
+    const checkin = extra.codebuddy_checkin
+    if (checkin && typeof checkin === 'object') {
+      extra.codebuddy_checkin = { ...(checkin as Record<string, unknown>), auto_disabled_by_balance: false }
+    }
+    return { ...account, schedulable, extra }
+  })
 }
 const normalizeBulkSchedulableResult = (
   result: {
@@ -2476,7 +2488,8 @@ const handleToggleSchedulable = async (a: Account) => {
   togglingSchedulable.value = a.id
   try {
     const updated = await adminAPI.accounts.setSchedulable(a.id, nextSchedulable)
-    updateSchedulableInList([a.id], updated?.schedulable ?? nextSchedulable)
+    if (updated) patchAccountInList(updated)
+    else updateSchedulableInList([a.id], nextSchedulable)
     enterAutoRefreshSilentWindow()
   } catch (error) {
     console.error('Failed to toggle schedulable:', error)

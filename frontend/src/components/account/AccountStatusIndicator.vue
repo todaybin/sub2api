@@ -32,6 +32,8 @@
       </span>
     </template>
 
+    <span v-if="recoveryHint" class="max-w-[180px] text-[11px] leading-4 text-gray-500 dark:text-gray-400" data-testid="account-recovery-hint">{{ t(recoveryHint) }}</span>
+
     <!-- Error Info Indicator -->
     <div v-if="hasError && account.error_message" class="group/error relative">
       <svg
@@ -163,6 +165,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import type { Account } from '@/types'
+import { accountRecoveryHint } from '@/utils/accountScheduling'
 import { formatCountdown, formatDateTime, formatDateTimeToMinute, formatCountdownWithSuffix, formatTime } from '@/utils/format'
 
 const { t } = useI18n()
@@ -315,6 +318,8 @@ const tempUnschedRecoveryText = computed(() => {
     time: formatDateTime(props.account.temp_unschedulable_until)
   })
 })
+
+const recoveryHint = computed(() => accountRecoveryHint(props.account))
 
 // Computed: status badge class
 const statusClass = computed(() => {

@@ -1104,12 +1104,19 @@ func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, ac
 		NextProbeAt:   now.Add(nextProbeDelay(intervalMinutes, 0)),
 		HTTPStatus:    resp.StatusCode,
 	}
-	if _, hasBalance := resolveAccountExtraNumber(data, "balance"); !hasBalance && balanceRequested && data["billing_mode"] != "subscription" {
+	_, hasBalance := resolveAccountExtraNumber(data, "balance")
+	balanceQueryMode, _ := account.Extra[UpstreamBillingBalanceQueryModeExtraKey].(string)
+	verifyAutoBalance := balanceRequested && data["billing_mode"] != "subscription" && strings.EqualFold(strings.TrimSpace(balanceQueryMode), "auto")
+	if balanceRequested && data["billing_mode"] != "subscription" && (!hasBalance || verifyAutoBalance) {
 		balanceData, balanceResult := s.probeFallbackBalance(ctx, account, normalizedBaseURL, proxyURL, apiKey)
 		snapshot.BalanceHTTPStatus = balanceResult.statusCode
 		if balanceResult.reason != "" {
 			snapshot.BalanceStatus = UpstreamBillingProbeStatusFailed
 			snapshot.BalanceLastError = balanceResult.reason
+			if verifyAutoBalance {
+				delete(data, "balance")
+				delete(data, "currency")
+			}
 		} else {
 			snapshot.BalanceStatus = UpstreamBillingProbeStatusOK
 			for key, value := range balanceData {
@@ -1379,10 +1386,8 @@ func parseSub2APIUsageResponse(body []byte) (map[string]any, error) {
 	if err := decoder.Decode(&response); err != nil {
 		return nil, err
 	}
-	if valid, exists := response["isValid"]; exists && valid == false {
-		return nil, fmt.Errorf("upstream reported invalid balance")
-	}
-	balance, ok := parseFiniteBalanceNumber(response["remaining"])
+	remaining, hasRemaining := parseFiniteBalanceNumber(response["remaining"])
+	balance, ok := remaining, hasRemaining
 	if !ok {
 		balance, ok = parseFiniteBalanceNumber(response["balance"])
 	}
@@ -1393,6 +1398,11 @@ func parseSub2APIUsageResponse(body []byte) (map[string]any, error) {
 	}
 	if !ok {
 		return nil, fmt.Errorf("missing or invalid remaining balance")
+	}
+	// An exhausted key may report isValid=false while still providing its
+	// remaining balance. Preserve that value instead of trying another endpoint.
+	if valid, exists := response["isValid"]; exists && valid == false && (!hasRemaining || remaining > 0) {
+		return nil, fmt.Errorf("upstream reported invalid balance")
 	}
 	return map[string]any{
 		"balance":  balance,

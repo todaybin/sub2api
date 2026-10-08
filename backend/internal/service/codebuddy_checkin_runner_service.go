@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -98,8 +99,15 @@ func (s *CodeBuddyCheckinRunnerService) runScheduled() {
 }
 
 func (s *CodeBuddyCheckinRunnerService) runOne(ctx context.Context, account *Account, settings CodeBuddyCheckinSettings) error {
+	expected := *account
 	result, updated, err := s.oauth.Checkin(ctx, account)
 	settings.LastRunAt = time.Now().UTC().Format(time.RFC3339)
+	disable, restore := false, false
+	if updated != nil {
+		expected.Credentials = updated.Credentials
+		expected.ProxyID = updated.ProxyID
+		expected.Proxy = updated.Proxy
+	}
 	if err != nil {
 		settings.LastStatus, settings.LastAction, settings.LastError = "failed", "checkin", err.Error()
 		if strings.Contains(err.Error(), "12153") {
@@ -110,31 +118,13 @@ func (s *CodeBuddyCheckinRunnerService) runOne(ctx context.Context, account *Acc
 		settings.LastError, settings.AuthInvalid = "", result.AuthInvalid
 		settings.TrialClaimed = settings.TrialClaimed || result.TrialClaimed
 		settings.LastCreditGranted = result.CreditGranted
-		// A successful upstream grant is sufficient evidence to recover an
-		// account that this service previously disabled, even if the follow-up
-		// resource query is temporarily unavailable.
-		if result.CreditGranted > 0 && settings.AutoDisabledByBalance {
-			if _, recoverErr := s.admin.SetAccountSchedulable(ctx, account.ID, true); recoverErr == nil {
-				settings.AutoDisabledByBalance = false
-			}
-		}
+		// A confirmed remaining balance takes precedence over a check-in grant.
+		restore = result.CreditGranted > 0 && !math.IsInf(result.CreditGranted, 0) && !math.IsNaN(result.CreditGranted)
 		if updated != nil {
-			if remaining, hasData, creditErr := s.oauth.CreditRemaining(ctx, updated); creditErr == nil && hasData {
+			if remaining, hasData, creditErr := s.oauth.CreditRemaining(ctx, updated); creditErr == nil && hasData && !math.IsInf(remaining, 0) && !math.IsNaN(remaining) {
 				settings.LastCreditRemaining = remaining
-				if remaining <= 0 {
-					// Only mark accounts that were schedulable before this probe. A
-					// manually disabled account must never be auto-enabled later.
-					if account.Schedulable && !settings.AutoDisabledByBalance {
-						settings.AutoDisabledByBalance = true
-						_, _ = s.admin.SetAccountSchedulable(ctx, account.ID, false)
-					}
-				} else if settings.AutoDisabledByBalance {
-					// A successful check-in can replenish credits. Restore only the
-					// scheduler state that this service disabled itself.
-					if _, recoverErr := s.admin.SetAccountSchedulable(ctx, account.ID, true); recoverErr == nil {
-						settings.AutoDisabledByBalance = false
-					}
-				}
+				disable = remaining <= 0
+				restore = remaining > 0
 			}
 		}
 	}
@@ -145,11 +135,13 @@ func (s *CodeBuddyCheckinRunnerService) runOne(ctx context.Context, account *Acc
 	} else {
 		settings.NextRunAt = next.UTC().Format(time.RFC3339)
 	}
-	if persistErr := s.admin.UpdateAccountExtra(ctx, account.ID, map[string]any{CodeBuddyCheckinExtraKey: settings}); persistErr != nil {
+	writer, ok := s.admin.(CodeBuddyBalanceSchedulingService)
+	if !ok {
+		return ErrUpstreamBillingProbeUnavailable
+	}
+	if persistErr := writer.UpdateCodeBuddyBalanceScheduling(ctx, &expected, settings, disable, restore); persistErr != nil {
 		logger.LegacyPrintf("service.codebuddy_checkin", "account=%d persist failed: %v", account.ID, persistErr)
-		if err == nil {
-			return persistErr
-		}
+		return persistErr
 	}
 	return err
 }

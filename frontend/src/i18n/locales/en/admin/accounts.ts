@@ -246,6 +246,9 @@ export default {
       accountSchedulingThresholdOverrideDisabledHint:
         'Use 1-100. The account becomes temporarily unschedulable after reaching this usage percent; 100 disables it for this account.',
       status: {
+        manualRecoveryRequired: 'Manual enabling required',
+        balanceAutoRecovery: 'Automatically enabled when balance recovers',
+        legacyPauseConfirmation: 'Previous pause requires manual confirmation',
         active: 'Active',
         inactive: 'Inactive',
         expired: 'Expired',
