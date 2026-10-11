@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -83,7 +84,9 @@ func TestIntegrationAccountCreatesCredentialsAndKeepsOpaqueMetadata(t *testing.T
 	require.JSONEq(t, first.Body.String(), retry.Body.String())
 	require.Len(t, admin.inputs, 1)
 	input := admin.inputs[0]
-	require.Regexp(t, `^[a-f0-9]{32}ai@zoomtk\.com$`, input.Email)
+	require.Regexp(t, `^\d{14}@zoomtk\.com$`, input.Email)
+	_, err = time.Parse("20060102150405", input.Username)
+	require.NoError(t, err)
 	require.Equal(t, strings.TrimSuffix(input.Email, "@zoomtk.com"), input.Username)
 	require.GreaterOrEqual(t, len(input.Password), 40)
 	require.Equal(t, external, input.ExternalID)
@@ -120,6 +123,36 @@ func TestIntegrationAccountEmailCollisionRetriesAreBounded(t *testing.T) {
 		for i := 1; i < len(admin.inputs); i++ {
 			require.NotEqual(t, admin.inputs[i-1].Email, admin.inputs[i].Email)
 		}
+	}
+}
+
+func TestIntegrationAccountNameTimestampAndClockRollback(t *testing.T) {
+	var names integrationAccountNameGenerator
+	now := time.Date(2026, 10, 11, 7, 30, 45, 999, time.UTC)
+	require.Equal(t, "20261011153045", names.next(now))
+	require.Equal(t, "20261011153046", names.next(now))
+	require.Equal(t, "20261011153047", names.next(now.Add(-time.Hour)))
+}
+
+func TestIntegrationAccountNamesConcurrentCreation(t *testing.T) {
+	var names integrationAccountNameGenerator
+	now := time.Date(2026, 10, 11, 7, 30, 45, 0, time.UTC)
+	results := make([]string, 20)
+	var wg sync.WaitGroup
+	for i := range results {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			results[i] = names.next(now)
+		}(i)
+	}
+	wg.Wait()
+	seen := make(map[string]bool)
+	for _, name := range results {
+		require.False(t, seen[name], "concurrent accounts must have distinct timestamps")
+		seen[name] = true
+		_, err := time.Parse("20060102150405", name)
+		require.NoError(t, err)
 	}
 }
 
