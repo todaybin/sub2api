@@ -13,44 +13,35 @@ vi.mock('vue-i18n', () => ({
   }),
 }))
 
-describe('GroupBadge CodeBuddy billing details', () => {
-  it('renders model-level upstream and final costs in the hover content', () => {
+describe('GroupBadge CodeBuddy rates', () => {
+  it('shows the group rate and dynamic adjustment, then respects a user rate override', async () => {
     const wrapper = mount(GroupBadge, {
       props: {
         name: 'CodeBuddy',
         platform: 'codebuddy',
         rateMultiplier: 1.2,
         rateMode: 'dynamic',
-        codeBuddyBilling: {
-          reference_cost_units: 70,
-          reference_credits: 2000,
-          tokens_per_credit: 31874,
-          group_rate_mode: 'dynamic',
-          group_rate_multiplier: 1.2,
-          dynamic_profit_rate: 0.2,
-          dynamic_profit_rate_percent: 20,
-          models: [{
-            model: 'hy3',
-            credits_multiplier: 0.79,
-            upstream_cost_per_token: 0.00000086,
-            final_cost_per_token: 0.00000103,
-            final_multiplier: 0.948,
-          }],
-        },
+        dynamicRateLastDirection: 'increase',
+        dynamicRateLastChange: 0.2,
       },
       global: {
         stubs: {
           PlatformIcon: true,
-          HelpTooltip: {
-            template: '<div data-test="billing-tooltip"><slot name="trigger" /><slot /></div>',
-          },
         },
       },
     })
 
-    const tooltip = wrapper.get('[data-test="billing-tooltip"]')
-    expect(tooltip.text()).toContain('hy3')
-    expect(tooltip.text()).toContain('keys.codeBuddyBillingUpstream')
-    expect(tooltip.text()).toContain('keys.codeBuddyBillingFinal')
+    expect(wrapper.text()).toContain('CodeBuddy')
+    expect(wrapper.text()).toContain('1.2x')
+    expect(wrapper.text()).toContain('groups.dynamicRateIncrease:{} +0.2x')
+
+    await wrapper.setProps({ userRateMultiplier: 0 })
+    expect(wrapper.get('.line-through').text()).toBe('1.2x')
+    expect(wrapper.get('.font-bold').text()).toBe('0x')
+    expect(wrapper.text()).not.toContain('groups.dynamicRateIncrease')
+
+    await wrapper.setProps({ showRate: false })
+    expect(wrapper.text()).toBe('CodeBuddy')
+    wrapper.unmount()
   })
 })

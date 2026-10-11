@@ -64,10 +64,18 @@ func (s *GroupRepoSuite) TestCreate() {
 	err := s.repo.Create(s.ctx, group)
 	s.Require().NoError(err, "Create")
 	s.Require().NotZero(group.ID, "expected ID to be set")
+	s.Require().Equal(service.GroupRateModeFixed, group.RateMode)
+	s.Require().Equal(service.DynamicRateStatusIdle, group.DynamicRateStatus)
+	s.Require().Equal(service.DynamicRateDirectionNone, group.DynamicRateLastDirection)
 
 	got, err := s.repo.GetByID(s.ctx, group.ID)
 	s.Require().NoError(err, "GetByID")
 	s.Require().Equal("test-create", got.Name)
+	s.Require().Equal(group.RateMode, got.RateMode)
+	s.Require().Equal(group.DynamicRateStatus, got.DynamicRateStatus)
+	s.Require().Equal(group.DynamicRateLastDirection, got.DynamicRateLastDirection)
+	group.Description = "updated after defaulted create"
+	s.Require().NoError(s.repo.Update(s.ctx, group))
 }
 
 func (s *GroupRepoSuite) TestCreateFromSourcePreservesPriorityAndFiltersIneligibleAccounts() {

@@ -99,10 +99,7 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		SetDescription(groupIn.Description).
 		SetPlatform(groupIn.Platform).
 		SetRateMultiplier(groupIn.RateMultiplier).
-		SetRateMode(groupIn.RateMode).
 		SetDynamicRateMarkupPercent(groupIn.DynamicRateMarkupPercent).
-		SetDynamicRateStatus(groupIn.DynamicRateStatus).
-		SetDynamicRateLastDirection(groupIn.DynamicRateLastDirection).
 		SetSortOrder(groupIn.SortOrder).
 		SetIsExclusive(groupIn.IsExclusive).
 		SetStatus(groupIn.Status).
@@ -159,6 +156,15 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		SetProfitControlEnabled(groupIn.ProfitControlEnabled).
 		SetProfitMinMargin(groupIn.ProfitMinMargin).
 		SetProfitSafetyBuffer(groupIn.ProfitSafetyBuffer)
+	if groupIn.RateMode != "" {
+		builder.SetRateMode(groupIn.RateMode)
+	}
+	if groupIn.DynamicRateStatus != "" {
+		builder.SetDynamicRateStatus(groupIn.DynamicRateStatus)
+	}
+	if groupIn.DynamicRateLastDirection != "" {
+		builder.SetDynamicRateLastDirection(groupIn.DynamicRateLastDirection)
+	}
 	if groupIn.DynamicRateSourceMultiplier != nil {
 		builder = builder.SetDynamicRateSourceMultiplier(*groupIn.DynamicRateSourceMultiplier)
 	}
@@ -188,6 +194,9 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		return translatePersistenceError(err, nil, service.ErrGroupExists)
 	}
 	groupIn.ID = created.ID
+	groupIn.RateMode = created.RateMode
+	groupIn.DynamicRateStatus = created.DynamicRateStatus
+	groupIn.DynamicRateLastDirection = created.DynamicRateLastDirection
 	groupIn.CreatedAt = created.CreatedAt
 	groupIn.UpdatedAt = created.UpdatedAt
 	return nil

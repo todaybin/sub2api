@@ -49,8 +49,6 @@ func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) erro
 		SetName(key.Name).
 		SetStatus(key.Status).
 		SetNillableGroupID(key.GroupID).
-		SetRoutingMode(key.RoutingMode).
-		SetRoutingStrategy(key.RoutingStrategy).
 		SetSmartGroupIds(key.SmartGroupIDs).
 		SetNillableLastUsedAt(key.LastUsedAt).
 		SetQuota(key.Quota).
@@ -59,6 +57,12 @@ func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) erro
 		SetRateLimit5h(key.RateLimit5h).
 		SetRateLimit1d(key.RateLimit1d).
 		SetRateLimit7d(key.RateLimit7d)
+	if key.RoutingMode != "" {
+		builder.SetRoutingMode(key.RoutingMode)
+	}
+	if key.RoutingStrategy != "" {
+		builder.SetRoutingStrategy(key.RoutingStrategy)
+	}
 
 	if len(key.IPWhitelist) > 0 {
 		builder.SetIPWhitelist(key.IPWhitelist)
@@ -70,6 +74,8 @@ func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) erro
 	created, err := builder.Save(ctx)
 	if err == nil {
 		key.ID = created.ID
+		key.RoutingMode = created.RoutingMode
+		key.RoutingStrategy = created.RoutingStrategy
 		key.LastUsedAt = created.LastUsedAt
 		key.CreatedAt = created.CreatedAt
 		key.UpdatedAt = created.UpdatedAt

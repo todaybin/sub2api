@@ -48,10 +48,14 @@ func (s *APIKeyRepoSuite) TestCreate() {
 	err := s.repo.Create(s.ctx, key)
 	s.Require().NoError(err, "Create")
 	s.Require().NotZero(key.ID, "expected ID to be set")
+	s.Require().Equal("single", key.RoutingMode)
+	s.Require().Equal("auto", key.RoutingStrategy)
 
 	got, err := s.repo.GetByID(s.ctx, key.ID)
 	s.Require().NoError(err, "GetByID")
 	s.Require().Equal("sk-create-test", got.Key)
+	s.Require().Equal(key.RoutingMode, got.RoutingMode)
+	s.Require().Equal(key.RoutingStrategy, got.RoutingStrategy)
 }
 
 func (s *APIKeyRepoSuite) TestGetByID_NotFound() {
