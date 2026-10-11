@@ -124,13 +124,14 @@
                     : 'badge-primary'
               ]"
             >
-              {{ t('admin.redeem.types.' + value) }}
+              {{ value === 'points' ? t('common.points.label') : t('admin.redeem.types.' + value) }}
             </span>
           </template>
 
           <template #cell-value="{ value, row }">
             <span class="text-sm font-medium text-gray-900 dark:text-white">
               <template v-if="row.type === 'balance'">${{ value.toFixed(2) }}</template>
+              <template v-else-if="row.type === 'points'">{{ value }} {{ t('common.points.label') }}</template>
               <template v-else-if="row.type === 'subscription'">
                 {{ row.validity_days || 30 }} {{ t('admin.redeem.days') }}
                 <span v-if="row.group" class="ml-1 text-xs text-gray-500 dark:text-gray-400"
@@ -291,7 +292,7 @@
             <div v-if="generateForm.type !== 'subscription' && generateForm.type !== 'invitation'">
               <label class="input-label">
                 {{
-                  generateForm.type === 'balance'
+                  generateForm.type === 'points' ? t('common.points.label') : generateForm.type === 'balance'
                     ? t('admin.redeem.amount')
                     : t('admin.redeem.columns.value')
                 }}
@@ -299,8 +300,8 @@
               <input
                 v-model.number="generateForm.value"
                 type="number"
-                :step="generateForm.type === 'balance' ? '0.01' : '1'"
-                :min="generateForm.type === 'balance' ? '0.01' : '1'"
+                :step="generateForm.type === 'points' ? '0.00000001' : generateForm.type === 'balance' ? '0.01' : '1'"
+                :min="generateForm.type === 'points' ? '0.00000001' : generateForm.type === 'balance' ? '0.01' : '1'"
                 required
                 class="input"
               />
@@ -740,6 +741,7 @@ const columns = computed<Column[]>(() => [
 ])
 
 const typeOptions = computed(() => [
+  { value: 'points', label: t('common.points.label') },
   { value: 'balance', label: t('admin.redeem.balance') },
   { value: 'concurrency', label: t('admin.redeem.concurrency') },
   { value: 'subscription', label: t('admin.redeem.subscription') },
@@ -748,6 +750,7 @@ const typeOptions = computed(() => [
 
 const filterTypeOptions = computed(() => [
   { value: '', label: t('admin.redeem.allTypes') },
+  { value: 'points', label: t('common.points.label') },
   { value: 'balance', label: t('admin.redeem.balance') },
   { value: 'concurrency', label: t('admin.redeem.concurrency') },
   { value: 'subscription', label: t('admin.redeem.subscription') },

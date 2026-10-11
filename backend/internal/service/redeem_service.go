@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -199,6 +200,9 @@ func (s *RedeemService) GenerateRandomCode() (string, error) {
 
 // GenerateCodes 批量生成兑换码
 func (s *RedeemService) GenerateCodes(ctx context.Context, req GenerateCodesRequest) ([]RedeemCode, error) {
+	if req.Type == RedeemTypePoints && (req.Value < 0.00000001 || req.Value > 999999999999 || math.IsNaN(req.Value) || math.IsInf(req.Value, 0)) {
+		return nil, errors.New("points value must be positive and within the supported range")
+	}
 	if req.Count <= 0 {
 		return nil, errors.New("count must be greater than 0")
 	}
@@ -252,6 +256,9 @@ func (s *RedeemService) GenerateCodes(ctx context.Context, req GenerateCodesRequ
 func (s *RedeemService) CreateCode(ctx context.Context, code *RedeemCode) error {
 	if code == nil {
 		return errors.New("redeem code is required")
+	}
+	if code.Type == RedeemTypePoints && (code.Value < 0.00000001 || code.Value > 999999999999 || math.IsNaN(code.Value) || math.IsInf(code.Value, 0)) {
+		return errors.New("points value must be positive and within the supported range")
 	}
 	code.Code = strings.TrimSpace(code.Code)
 	if code.Code == "" {
@@ -452,7 +459,7 @@ func (s *RedeemService) redeem(ctx context.Context, userID int64, code string, r
 
 	// 验证兑换码类型的前置条件。邀请码属于注册流程，不能通过普通兑换接口使用。
 	switch redeemCode.Type {
-	case RedeemTypeBalance, RedeemTypeConcurrency:
+	case RedeemTypeBalance, RedeemTypeConcurrency, RedeemTypePoints:
 	case RedeemTypeSubscription:
 		if redeemCode.GroupID == nil {
 			return nil, infraerrors.BadRequest("REDEEM_CODE_INVALID", "invalid subscription redeem code: missing group_id")
@@ -488,6 +495,14 @@ func (s *RedeemService) redeem(ctx context.Context, userID int64, code string, r
 
 	// 执行兑换逻辑（兑换码已被锁定，此时可安全操作）
 	switch redeemCode.Type {
+	case RedeemTypePoints:
+		repo, ok := s.userRepo.(PointsRepository)
+		if !ok {
+			return nil, ErrBillingServiceUnavailable
+		}
+		if _, err := repo.AdjustPoints(txCtx, userID, redeemCode.Value, "add", fmt.Sprintf("redeem:%d", redeemCode.ID), "积分兑换"); err != nil {
+			return nil, err
+		}
 	case RedeemTypeBalance:
 		amount := redeemCode.Value
 		if amount < 0 {
@@ -566,7 +581,7 @@ func (s *RedeemService) redeem(ctx context.Context, userID int64, code string, r
 // invalidateRedeemCaches 失效兑换相关的缓存
 func (s *RedeemService) invalidateRedeemCaches(ctx context.Context, userID int64, redeemCode *RedeemCode) {
 	switch redeemCode.Type {
-	case RedeemTypeBalance:
+	case RedeemTypeBalance, RedeemTypePoints:
 		if s.authCacheInvalidator != nil {
 			s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
 		}

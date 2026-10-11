@@ -3944,6 +3944,11 @@
               </div>
 
               <div class="border-t border-gray-100 pt-4 dark:border-dark-700">
+                <label class="input-label">{{ t('common.points.rateLabel') }}</label>
+                <input v-model.number="form.points_per_usd" type="number" min="0" step="0.00000001" class="input" />
+                <p class="input-hint">{{ t('common.points.rateHint') }}</p>
+              </div>
+              <div class="border-t border-gray-100 pt-4 dark:border-dark-700">
                 <div class="mb-3 flex items-center justify-between">
                   <div>
                     <label class="font-medium text-gray-900 dark:text-white">
@@ -9903,6 +9908,7 @@ const form = reactive<SettingsForm>({
   login_agreement_mode: "modal",
   login_agreement_updated_at: "2026-03-31",
   login_agreement_documents: defaultLoginAgreementDocuments(),
+  points_per_usd: 0,
   default_balance: 0,
   default_platform_quotas: normalizePlatformQuotasMap() as DefaultPlatformQuotasMap,
   account_scheduling_thresholds: normalizeAccountSchedulingThresholdsMap(),
@@ -11612,6 +11618,7 @@ async function saveSettings() {
       login_agreement_mode: form.login_agreement_mode,
       login_agreement_updated_at: form.login_agreement_updated_at,
       login_agreement_documents: form.login_agreement_documents,
+      points_per_usd: form.points_per_usd,
       default_balance: form.default_balance,
       affiliate_rebate_rate: Math.min(
         100,

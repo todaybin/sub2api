@@ -29,6 +29,10 @@ const (
 	FieldRole = "role"
 	// FieldBalance holds the string denoting the balance field in the database.
 	FieldBalance = "balance"
+	// FieldPointsBalance holds the string denoting the points_balance field in the database.
+	FieldPointsBalance = "points_balance"
+	// FieldPointsReserved holds the string denoting the points_reserved field in the database.
+	FieldPointsReserved = "points_reserved"
 	// FieldFrozenBalance holds the string denoting the frozen_balance field in the database.
 	FieldFrozenBalance = "frozen_balance"
 	// FieldConcurrency holds the string denoting the concurrency field in the database.
@@ -39,6 +43,8 @@ const (
 	FieldUsername = "username"
 	// FieldNotes holds the string denoting the notes field in the database.
 	FieldNotes = "notes"
+	// FieldExternalID holds the string denoting the external_id field in the database.
+	FieldExternalID = "external_id"
 	// FieldTotpSecretEncrypted holds the string denoting the totp_secret_encrypted field in the database.
 	FieldTotpSecretEncrypted = "totp_secret_encrypted"
 	// FieldTotpEnabled holds the string denoting the totp_enabled field in the database.
@@ -203,11 +209,14 @@ var Columns = []string{
 	FieldPasswordHash,
 	FieldRole,
 	FieldBalance,
+	FieldPointsBalance,
+	FieldPointsReserved,
 	FieldFrozenBalance,
 	FieldConcurrency,
 	FieldStatus,
 	FieldUsername,
 	FieldNotes,
+	FieldExternalID,
 	FieldTotpSecretEncrypted,
 	FieldTotpEnabled,
 	FieldTotpEnabledAt,
@@ -263,6 +272,10 @@ var (
 	RoleValidator func(string) error
 	// DefaultBalance holds the default value on creation for the "balance" field.
 	DefaultBalance float64
+	// DefaultPointsBalance holds the default value on creation for the "points_balance" field.
+	DefaultPointsBalance float64
+	// DefaultPointsReserved holds the default value on creation for the "points_reserved" field.
+	DefaultPointsReserved float64
 	// DefaultFrozenBalance holds the default value on creation for the "frozen_balance" field.
 	DefaultFrozenBalance float64
 	// DefaultConcurrency holds the default value on creation for the "concurrency" field.
@@ -277,6 +290,8 @@ var (
 	UsernameValidator func(string) error
 	// DefaultNotes holds the default value on creation for the "notes" field.
 	DefaultNotes string
+	// DefaultExternalID holds the default value on creation for the "external_id" field.
+	DefaultExternalID string
 	// DefaultTotpEnabled holds the default value on creation for the "totp_enabled" field.
 	DefaultTotpEnabled bool
 	// DefaultSignupSource holds the default value on creation for the "signup_source" field.
@@ -340,6 +355,16 @@ func ByBalance(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldBalance, opts...).ToFunc()
 }
 
+// ByPointsBalance orders the results by the points_balance field.
+func ByPointsBalance(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPointsBalance, opts...).ToFunc()
+}
+
+// ByPointsReserved orders the results by the points_reserved field.
+func ByPointsReserved(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPointsReserved, opts...).ToFunc()
+}
+
 // ByFrozenBalance orders the results by the frozen_balance field.
 func ByFrozenBalance(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldFrozenBalance, opts...).ToFunc()
@@ -363,6 +388,11 @@ func ByUsername(opts ...sql.OrderTermOption) OrderOption {
 // ByNotes orders the results by the notes field.
 func ByNotes(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldNotes, opts...).ToFunc()
+}
+
+// ByExternalID orders the results by the external_id field.
+func ByExternalID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldExternalID, opts...).ToFunc()
 }
 
 // ByTotpSecretEncrypted orders the results by the totp_secret_encrypted field.

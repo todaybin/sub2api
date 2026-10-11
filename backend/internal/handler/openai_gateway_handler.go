@@ -247,6 +247,10 @@ func usageRecordContext(parent context.Context, base context.Context) context.Co
 	if base == nil {
 		base = context.Background()
 	}
+	base = service.CopyPointsPayment(parent, base)
+	if base == nil {
+		base = context.Background()
+	}
 	if parent == nil {
 		return base
 	}
@@ -268,7 +272,9 @@ func wrapUsageRecordTaskContext(parent context.Context, task service.UsageRecord
 	}
 	done := func() {}
 	if parent != nil {
-		done = service.InflightReservationFromContext(parent).Acquire()
+		moneyDone := service.InflightReservationFromContext(parent).Acquire()
+		pointsDone := service.PointsPaymentFromContext(parent).Acquire()
+		done = func() { moneyDone(); pointsDone() }
 	}
 	return func(ctx context.Context) {
 		defer done()
@@ -2687,8 +2693,30 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "billing check failed")
 		return
 	}
-	defer inflightDone()
-	ctx = inflightCtx
+	perTurnPayments := apiKey.Group != nil && apiKey.Group.AllowPointsBilling && h.billingCacheService.BillingEnabled()
+	var turnPayments openAIWSTurnPayments
+	if perTurnPayments {
+		_ = turnPayments.begin(1, func() (context.Context, func(), error) { return inflightCtx, inflightDone, nil })
+		defer turnPayments.close()
+	} else {
+		defer inflightDone()
+		ctx = inflightCtx
+	}
+	ensureTurnPayment := func(turn int, model string, payload []byte) error {
+		if !perTurnPayments {
+			return nil
+		}
+		return turnPayments.begin(turn, func() (context.Context, func(), error) {
+			if err := h.billingCacheService.CheckBillingEligibility(ctx, apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(ctx, apiKey)); err != nil {
+				return ctx, nil, service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "billing check failed", err)
+			}
+			paymentCtx, done, err := reserveInflightBalanceCtx(ctx, h.billingCacheService, h.gatewayService, apiKey, subscription, tokenInflightEstimate(model, payload))
+			if err != nil {
+				return ctx, nil, service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "billing check failed", err)
+			}
+			return paymentCtx, done, nil
+		})
+	}
 
 	// A WebSocket may outlive a key's remaining spending window. Recheck
 	// after acquiring turn slots, including the first account-selection wait.
@@ -2988,7 +3016,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, cyberSessionBlockedClientMsg, nil)
 				}
 				if turn == 1 {
-					return nil
+					return ensureTurnPayment(turn, reqModel, payload)
 				}
 				if !gjson.ValidBytes(payload) {
 					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", errors.New("invalid json"))
@@ -3015,7 +3043,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					writeSecurityAuditWSError(ctx, wsConn, decision)
 					return service.NewOpenAIWSClientCloseError(securityAuditWSCloseStatus(decision), securityAuditWSCloseReason(decision), nil)
 				}
-				return nil
+				return ensureTurnPayment(turn, model, payload)
 			},
 			MapRequestModel: func(turn int, originalModel string) (string, error) {
 				model := strings.TrimSpace(originalModel)
@@ -3092,6 +3120,12 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				return checkSimpleModeTurnBilling()
 			},
 			AfterTurn: func(turn int, result *service.OpenAIForwardResult, turnErr error) {
+				turnPaymentCtx := turnPayments.context(turn, ctx)
+				if perTurnPayments {
+					defer turnPayments.release(turn)
+					// Cyber usage tasks also copy the immutable payment for this turn.
+					c.Request = c.Request.WithContext(turnPaymentCtx)
+				}
 				turnStart := getTurnStart(turn)
 				cyberBlockBody := takeCyberTurnBody(turn)
 				// 每次 attempt 都清 cyber mark；failover 链结束前保留 recorded guard，
@@ -3170,7 +3204,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				turnRecordPricingAt := turnPricing.currentOr(turnStart)
 				turnBillingAPIKey := turnBillingAPIKeys.forTurn(turn, apiKey)
 				cyberBlocked := service.GetOpsCyberPolicy(c) != nil
-				h.submitOpenAIUsageRecordTask(ctx, result, func(taskCtx context.Context) {
+				h.submitOpenAIUsageRecordTask(turnPaymentCtx, result, func(taskCtx context.Context) {
 					if err := h.gatewayService.RecordUsage(taskCtx, &service.OpenAIRecordUsageInput{
 						Result:             result,
 						APIKey:             turnBillingAPIKey,
@@ -3441,6 +3475,10 @@ func getContextInt64(c *gin.Context, key string) (int64, bool) {
 }
 
 func (h *OpenAIGatewayHandler) submitUsageRecordTask(parent context.Context, task service.UsageRecordTask) {
+	if service.PointsPaymentFromContext(parent) != nil {
+		h.submitMandatoryUsageRecordTask(parent, task)
+		return
+	}
 	if task == nil {
 		return
 	}

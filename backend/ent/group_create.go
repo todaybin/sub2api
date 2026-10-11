@@ -330,6 +330,20 @@ func (_c *GroupCreate) SetNillablePlatform(v *string) *GroupCreate {
 	return _c
 }
 
+// SetAllowPointsBilling sets the "allow_points_billing" field.
+func (_c *GroupCreate) SetAllowPointsBilling(v bool) *GroupCreate {
+	_c.mutation.SetAllowPointsBilling(v)
+	return _c
+}
+
+// SetNillableAllowPointsBilling sets the "allow_points_billing" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableAllowPointsBilling(v *bool) *GroupCreate {
+	if v != nil {
+		_c.SetAllowPointsBilling(*v)
+	}
+	return _c
+}
+
 // SetSubscriptionType sets the "subscription_type" field.
 func (_c *GroupCreate) SetSubscriptionType(v string) *GroupCreate {
 	_c.mutation.SetSubscriptionType(v)
@@ -1207,6 +1221,10 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultPlatform
 		_c.mutation.SetPlatform(v)
 	}
+	if _, ok := _c.mutation.AllowPointsBilling(); !ok {
+		v := group.DefaultAllowPointsBilling
+		_c.mutation.SetAllowPointsBilling(v)
+	}
 	if _, ok := _c.mutation.SubscriptionType(); !ok {
 		v := group.DefaultSubscriptionType
 		_c.mutation.SetSubscriptionType(v)
@@ -1433,6 +1451,9 @@ func (_c *GroupCreate) check() error {
 		if err := group.PlatformValidator(v); err != nil {
 			return &ValidationError{Name: "platform", err: fmt.Errorf(`ent: validator failed for field "Group.platform": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.AllowPointsBilling(); !ok {
+		return &ValidationError{Name: "allow_points_billing", err: errors.New(`ent: missing required field "Group.allow_points_billing"`)}
 	}
 	if _, ok := _c.mutation.SubscriptionType(); !ok {
 		return &ValidationError{Name: "subscription_type", err: errors.New(`ent: missing required field "Group.subscription_type"`)}
@@ -1687,6 +1708,10 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Platform(); ok {
 		_spec.SetField(group.FieldPlatform, field.TypeString, value)
 		_node.Platform = value
+	}
+	if value, ok := _c.mutation.AllowPointsBilling(); ok {
+		_spec.SetField(group.FieldAllowPointsBilling, field.TypeBool, value)
+		_node.AllowPointsBilling = value
 	}
 	if value, ok := _c.mutation.SubscriptionType(); ok {
 		_spec.SetField(group.FieldSubscriptionType, field.TypeString, value)
@@ -2355,6 +2380,18 @@ func (u *GroupUpsert) SetPlatform(v string) *GroupUpsert {
 // UpdatePlatform sets the "platform" field to the value that was provided on create.
 func (u *GroupUpsert) UpdatePlatform() *GroupUpsert {
 	u.SetExcluded(group.FieldPlatform)
+	return u
+}
+
+// SetAllowPointsBilling sets the "allow_points_billing" field.
+func (u *GroupUpsert) SetAllowPointsBilling(v bool) *GroupUpsert {
+	u.Set(group.FieldAllowPointsBilling, v)
+	return u
+}
+
+// UpdateAllowPointsBilling sets the "allow_points_billing" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateAllowPointsBilling() *GroupUpsert {
+	u.SetExcluded(group.FieldAllowPointsBilling)
 	return u
 }
 
@@ -3648,6 +3685,20 @@ func (u *GroupUpsertOne) SetPlatform(v string) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdatePlatform() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdatePlatform()
+	})
+}
+
+// SetAllowPointsBilling sets the "allow_points_billing" field.
+func (u *GroupUpsertOne) SetAllowPointsBilling(v bool) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetAllowPointsBilling(v)
+	})
+}
+
+// UpdateAllowPointsBilling sets the "allow_points_billing" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateAllowPointsBilling() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateAllowPointsBilling()
 	})
 }
 
@@ -5255,6 +5306,20 @@ func (u *GroupUpsertBulk) SetPlatform(v string) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdatePlatform() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdatePlatform()
+	})
+}
+
+// SetAllowPointsBilling sets the "allow_points_billing" field.
+func (u *GroupUpsertBulk) SetAllowPointsBilling(v bool) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetAllowPointsBilling(v)
+	})
+}
+
+// UpdateAllowPointsBilling sets the "allow_points_billing" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateAllowPointsBilling() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateAllowPointsBilling()
 	})
 }
 

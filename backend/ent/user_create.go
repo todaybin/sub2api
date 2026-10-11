@@ -116,6 +116,34 @@ func (_c *UserCreate) SetNillableBalance(v *float64) *UserCreate {
 	return _c
 }
 
+// SetPointsBalance sets the "points_balance" field.
+func (_c *UserCreate) SetPointsBalance(v float64) *UserCreate {
+	_c.mutation.SetPointsBalance(v)
+	return _c
+}
+
+// SetNillablePointsBalance sets the "points_balance" field if the given value is not nil.
+func (_c *UserCreate) SetNillablePointsBalance(v *float64) *UserCreate {
+	if v != nil {
+		_c.SetPointsBalance(*v)
+	}
+	return _c
+}
+
+// SetPointsReserved sets the "points_reserved" field.
+func (_c *UserCreate) SetPointsReserved(v float64) *UserCreate {
+	_c.mutation.SetPointsReserved(v)
+	return _c
+}
+
+// SetNillablePointsReserved sets the "points_reserved" field if the given value is not nil.
+func (_c *UserCreate) SetNillablePointsReserved(v *float64) *UserCreate {
+	if v != nil {
+		_c.SetPointsReserved(*v)
+	}
+	return _c
+}
+
 // SetFrozenBalance sets the "frozen_balance" field.
 func (_c *UserCreate) SetFrozenBalance(v float64) *UserCreate {
 	_c.mutation.SetFrozenBalance(v)
@@ -182,6 +210,20 @@ func (_c *UserCreate) SetNotes(v string) *UserCreate {
 func (_c *UserCreate) SetNillableNotes(v *string) *UserCreate {
 	if v != nil {
 		_c.SetNotes(*v)
+	}
+	return _c
+}
+
+// SetExternalID sets the "external_id" field.
+func (_c *UserCreate) SetExternalID(v string) *UserCreate {
+	_c.mutation.SetExternalID(v)
+	return _c
+}
+
+// SetNillableExternalID sets the "external_id" field if the given value is not nil.
+func (_c *UserCreate) SetNillableExternalID(v *string) *UserCreate {
+	if v != nil {
+		_c.SetExternalID(*v)
 	}
 	return _c
 }
@@ -622,6 +664,14 @@ func (_c *UserCreate) defaults() error {
 		v := user.DefaultBalance
 		_c.mutation.SetBalance(v)
 	}
+	if _, ok := _c.mutation.PointsBalance(); !ok {
+		v := user.DefaultPointsBalance
+		_c.mutation.SetPointsBalance(v)
+	}
+	if _, ok := _c.mutation.PointsReserved(); !ok {
+		v := user.DefaultPointsReserved
+		_c.mutation.SetPointsReserved(v)
+	}
 	if _, ok := _c.mutation.FrozenBalance(); !ok {
 		v := user.DefaultFrozenBalance
 		_c.mutation.SetFrozenBalance(v)
@@ -641,6 +691,10 @@ func (_c *UserCreate) defaults() error {
 	if _, ok := _c.mutation.Notes(); !ok {
 		v := user.DefaultNotes
 		_c.mutation.SetNotes(v)
+	}
+	if _, ok := _c.mutation.ExternalID(); !ok {
+		v := user.DefaultExternalID
+		_c.mutation.SetExternalID(v)
 	}
 	if _, ok := _c.mutation.TotpEnabled(); !ok {
 		v := user.DefaultTotpEnabled
@@ -712,6 +766,12 @@ func (_c *UserCreate) check() error {
 	if _, ok := _c.mutation.Balance(); !ok {
 		return &ValidationError{Name: "balance", err: errors.New(`ent: missing required field "User.balance"`)}
 	}
+	if _, ok := _c.mutation.PointsBalance(); !ok {
+		return &ValidationError{Name: "points_balance", err: errors.New(`ent: missing required field "User.points_balance"`)}
+	}
+	if _, ok := _c.mutation.PointsReserved(); !ok {
+		return &ValidationError{Name: "points_reserved", err: errors.New(`ent: missing required field "User.points_reserved"`)}
+	}
 	if _, ok := _c.mutation.FrozenBalance(); !ok {
 		return &ValidationError{Name: "frozen_balance", err: errors.New(`ent: missing required field "User.frozen_balance"`)}
 	}
@@ -736,6 +796,9 @@ func (_c *UserCreate) check() error {
 	}
 	if _, ok := _c.mutation.Notes(); !ok {
 		return &ValidationError{Name: "notes", err: errors.New(`ent: missing required field "User.notes"`)}
+	}
+	if _, ok := _c.mutation.ExternalID(); !ok {
+		return &ValidationError{Name: "external_id", err: errors.New(`ent: missing required field "User.external_id"`)}
 	}
 	if _, ok := _c.mutation.TotpEnabled(); !ok {
 		return &ValidationError{Name: "totp_enabled", err: errors.New(`ent: missing required field "User.totp_enabled"`)}
@@ -821,6 +884,14 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		_spec.SetField(user.FieldBalance, field.TypeFloat64, value)
 		_node.Balance = value
 	}
+	if value, ok := _c.mutation.PointsBalance(); ok {
+		_spec.SetField(user.FieldPointsBalance, field.TypeFloat64, value)
+		_node.PointsBalance = value
+	}
+	if value, ok := _c.mutation.PointsReserved(); ok {
+		_spec.SetField(user.FieldPointsReserved, field.TypeFloat64, value)
+		_node.PointsReserved = value
+	}
 	if value, ok := _c.mutation.FrozenBalance(); ok {
 		_spec.SetField(user.FieldFrozenBalance, field.TypeFloat64, value)
 		_node.FrozenBalance = value
@@ -840,6 +911,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Notes(); ok {
 		_spec.SetField(user.FieldNotes, field.TypeString, value)
 		_node.Notes = value
+	}
+	if value, ok := _c.mutation.ExternalID(); ok {
+		_spec.SetField(user.FieldExternalID, field.TypeString, value)
+		_node.ExternalID = value
 	}
 	if value, ok := _c.mutation.TotpSecretEncrypted(); ok {
 		_spec.SetField(user.FieldTotpSecretEncrypted, field.TypeString, value)
@@ -1241,6 +1316,42 @@ func (u *UserUpsert) AddBalance(v float64) *UserUpsert {
 	return u
 }
 
+// SetPointsBalance sets the "points_balance" field.
+func (u *UserUpsert) SetPointsBalance(v float64) *UserUpsert {
+	u.Set(user.FieldPointsBalance, v)
+	return u
+}
+
+// UpdatePointsBalance sets the "points_balance" field to the value that was provided on create.
+func (u *UserUpsert) UpdatePointsBalance() *UserUpsert {
+	u.SetExcluded(user.FieldPointsBalance)
+	return u
+}
+
+// AddPointsBalance adds v to the "points_balance" field.
+func (u *UserUpsert) AddPointsBalance(v float64) *UserUpsert {
+	u.Add(user.FieldPointsBalance, v)
+	return u
+}
+
+// SetPointsReserved sets the "points_reserved" field.
+func (u *UserUpsert) SetPointsReserved(v float64) *UserUpsert {
+	u.Set(user.FieldPointsReserved, v)
+	return u
+}
+
+// UpdatePointsReserved sets the "points_reserved" field to the value that was provided on create.
+func (u *UserUpsert) UpdatePointsReserved() *UserUpsert {
+	u.SetExcluded(user.FieldPointsReserved)
+	return u
+}
+
+// AddPointsReserved adds v to the "points_reserved" field.
+func (u *UserUpsert) AddPointsReserved(v float64) *UserUpsert {
+	u.Add(user.FieldPointsReserved, v)
+	return u
+}
+
 // SetFrozenBalance sets the "frozen_balance" field.
 func (u *UserUpsert) SetFrozenBalance(v float64) *UserUpsert {
 	u.Set(user.FieldFrozenBalance, v)
@@ -1310,6 +1421,18 @@ func (u *UserUpsert) SetNotes(v string) *UserUpsert {
 // UpdateNotes sets the "notes" field to the value that was provided on create.
 func (u *UserUpsert) UpdateNotes() *UserUpsert {
 	u.SetExcluded(user.FieldNotes)
+	return u
+}
+
+// SetExternalID sets the "external_id" field.
+func (u *UserUpsert) SetExternalID(v string) *UserUpsert {
+	u.Set(user.FieldExternalID, v)
+	return u
+}
+
+// UpdateExternalID sets the "external_id" field to the value that was provided on create.
+func (u *UserUpsert) UpdateExternalID() *UserUpsert {
+	u.SetExcluded(user.FieldExternalID)
 	return u
 }
 
@@ -1660,6 +1783,48 @@ func (u *UserUpsertOne) UpdateBalance() *UserUpsertOne {
 	})
 }
 
+// SetPointsBalance sets the "points_balance" field.
+func (u *UserUpsertOne) SetPointsBalance(v float64) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetPointsBalance(v)
+	})
+}
+
+// AddPointsBalance adds v to the "points_balance" field.
+func (u *UserUpsertOne) AddPointsBalance(v float64) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.AddPointsBalance(v)
+	})
+}
+
+// UpdatePointsBalance sets the "points_balance" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdatePointsBalance() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdatePointsBalance()
+	})
+}
+
+// SetPointsReserved sets the "points_reserved" field.
+func (u *UserUpsertOne) SetPointsReserved(v float64) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetPointsReserved(v)
+	})
+}
+
+// AddPointsReserved adds v to the "points_reserved" field.
+func (u *UserUpsertOne) AddPointsReserved(v float64) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.AddPointsReserved(v)
+	})
+}
+
+// UpdatePointsReserved sets the "points_reserved" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdatePointsReserved() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdatePointsReserved()
+	})
+}
+
 // SetFrozenBalance sets the "frozen_balance" field.
 func (u *UserUpsertOne) SetFrozenBalance(v float64) *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
@@ -1741,6 +1906,20 @@ func (u *UserUpsertOne) SetNotes(v string) *UserUpsertOne {
 func (u *UserUpsertOne) UpdateNotes() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateNotes()
+	})
+}
+
+// SetExternalID sets the "external_id" field.
+func (u *UserUpsertOne) SetExternalID(v string) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetExternalID(v)
+	})
+}
+
+// UpdateExternalID sets the "external_id" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateExternalID() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateExternalID()
 	})
 }
 
@@ -2291,6 +2470,48 @@ func (u *UserUpsertBulk) UpdateBalance() *UserUpsertBulk {
 	})
 }
 
+// SetPointsBalance sets the "points_balance" field.
+func (u *UserUpsertBulk) SetPointsBalance(v float64) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetPointsBalance(v)
+	})
+}
+
+// AddPointsBalance adds v to the "points_balance" field.
+func (u *UserUpsertBulk) AddPointsBalance(v float64) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.AddPointsBalance(v)
+	})
+}
+
+// UpdatePointsBalance sets the "points_balance" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdatePointsBalance() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdatePointsBalance()
+	})
+}
+
+// SetPointsReserved sets the "points_reserved" field.
+func (u *UserUpsertBulk) SetPointsReserved(v float64) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetPointsReserved(v)
+	})
+}
+
+// AddPointsReserved adds v to the "points_reserved" field.
+func (u *UserUpsertBulk) AddPointsReserved(v float64) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.AddPointsReserved(v)
+	})
+}
+
+// UpdatePointsReserved sets the "points_reserved" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdatePointsReserved() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdatePointsReserved()
+	})
+}
+
 // SetFrozenBalance sets the "frozen_balance" field.
 func (u *UserUpsertBulk) SetFrozenBalance(v float64) *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
@@ -2372,6 +2593,20 @@ func (u *UserUpsertBulk) SetNotes(v string) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateNotes() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateNotes()
+	})
+}
+
+// SetExternalID sets the "external_id" field.
+func (u *UserUpsertBulk) SetExternalID(v string) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetExternalID(v)
+	})
+}
+
+// UpdateExternalID sets the "external_id" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateExternalID() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateExternalID()
 	})
 }
 

@@ -182,6 +182,7 @@ func sanitizeUpdateGroupRequestForSimpleMode(req *UpdateGroupRequest) {
 
 // CreateGroupRequest represents create group request
 type CreateGroupRequest struct {
+	AllowPointsBilling        bool                          `json:"allow_points_billing"`
 	Name                      string                        `json:"name" binding:"required"`
 	Description               string                        `json:"description"`
 	Platform                  string                        `json:"platform" binding:"omitempty,group_platform"`
@@ -258,6 +259,7 @@ type CreateGroupRequest struct {
 
 // UpdateGroupRequest represents update group request
 type UpdateGroupRequest struct {
+	AllowPointsBilling        *bool                          `json:"allow_points_billing"`
 	Name                      string                         `json:"name"`
 	Description               *string                        `json:"description"`
 	Platform                  string                         `json:"platform" binding:"omitempty,group_platform"`
@@ -372,6 +374,11 @@ func (h *GroupHandler) List(c *gin.Context) {
 	if !h.isSimpleMode() && isExclusiveStr != "" {
 		val := isExclusiveStr == "true"
 		isExclusive = &val
+	}
+
+	if isIntegrationRequest(c) {
+		exclusive := true
+		isExclusive = &exclusive
 	}
 
 	groups, total, err := h.adminService.ListGroups(c.Request.Context(), page, pageSize, platform, status, search, isExclusive, sortBy, sortOrder)
@@ -567,6 +574,16 @@ func (h *GroupHandler) GetAll(c *gin.Context) {
 		return
 	}
 
+	if isIntegrationRequest(c) {
+		filtered := make([]service.Group, 0, len(groups))
+		for _, group := range groups {
+			if group.IsExclusive {
+				filtered = append(filtered, group)
+			}
+		}
+		groups = filtered
+	}
+
 	if h.isSimpleMode() {
 		simpleGroups := make([]simpleModeGroupResponse, 0, len(groups))
 		for i := range groups {
@@ -673,6 +690,7 @@ func (h *GroupHandler) Create(c *gin.Context) {
 		RateMode:                        req.RateMode,
 		DynamicRateMarkupPercent:        req.DynamicRateMarkupPercent,
 		IsExclusive:                     req.IsExclusive,
+		AllowPointsBilling:              req.AllowPointsBilling,
 		SubscriptionType:                req.SubscriptionType,
 		DailyLimitUSD:                   req.DailyLimitUSD.ToServiceInput(),
 		WeeklyLimitUSD:                  req.WeeklyLimitUSD.ToServiceInput(),
@@ -821,6 +839,7 @@ func (h *GroupHandler) Update(c *gin.Context) {
 		DynamicRateMarkupPercent:        req.DynamicRateMarkupPercent,
 		IsExclusive:                     req.IsExclusive,
 		Status:                          req.Status,
+		AllowPointsBilling:              req.AllowPointsBilling,
 		SubscriptionType:                req.SubscriptionType,
 		DailyLimitUSD:                   req.DailyLimitUSD.ToServiceInput(),
 		WeeklyLimitUSD:                  req.WeeklyLimitUSD.ToServiceInput(),

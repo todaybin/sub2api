@@ -49,6 +49,10 @@ func (User) Fields() []ent.Field {
 		field.Float("balance").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}).
 			Default(0),
+		field.Float("points_balance").
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}).Default(0),
+		field.Float("points_reserved").
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}).Default(0),
 		field.Float("frozen_balance").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}).
 			Default(0),
@@ -66,6 +70,9 @@ func (User) Fields() []ent.Field {
 		field.String("notes").
 			SchemaType(map[string]string{dialect.Postgres: "text"}).
 			Default(""),
+
+		// Caller-owned metadata: deliberately has no uniqueness constraint.
+		field.String("external_id").SchemaType(map[string]string{dialect.Postgres: "text"}).Default(""),
 
 		// TOTP 双因素认证字段
 		field.String("totp_secret_encrypted").

@@ -22306,6 +22306,7 @@ type GroupMutation struct {
 	status                                  *string
 	duplicate_operation_id                  *string
 	platform                                *string
+	allow_points_billing                    *bool
 	subscription_type                       *string
 	daily_limit_usd                         *float64
 	adddaily_limit_usd                      *float64
@@ -23491,6 +23492,42 @@ func (m *GroupMutation) OldPlatform(ctx context.Context) (v string, err error) {
 // ResetPlatform resets all changes to the "platform" field.
 func (m *GroupMutation) ResetPlatform() {
 	m.platform = nil
+}
+
+// SetAllowPointsBilling sets the "allow_points_billing" field.
+func (m *GroupMutation) SetAllowPointsBilling(b bool) {
+	m.allow_points_billing = &b
+}
+
+// AllowPointsBilling returns the value of the "allow_points_billing" field in the mutation.
+func (m *GroupMutation) AllowPointsBilling() (r bool, exists bool) {
+	v := m.allow_points_billing
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAllowPointsBilling returns the old "allow_points_billing" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldAllowPointsBilling(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAllowPointsBilling is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAllowPointsBilling requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAllowPointsBilling: %w", err)
+	}
+	return oldValue.AllowPointsBilling, nil
+}
+
+// ResetAllowPointsBilling resets all changes to the "allow_points_billing" field.
+func (m *GroupMutation) ResetAllowPointsBilling() {
+	m.allow_points_billing = nil
 }
 
 // SetSubscriptionType sets the "subscription_type" field.
@@ -26532,7 +26569,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 74)
+	fields := make([]string, 0, 75)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -26598,6 +26635,9 @@ func (m *GroupMutation) Fields() []string {
 	}
 	if m.platform != nil {
 		fields = append(fields, group.FieldPlatform)
+	}
+	if m.allow_points_billing != nil {
+		fields = append(fields, group.FieldAllowPointsBilling)
 	}
 	if m.subscription_type != nil {
 		fields = append(fields, group.FieldSubscriptionType)
@@ -26807,6 +26847,8 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.DuplicateOperationID()
 	case group.FieldPlatform:
 		return m.Platform()
+	case group.FieldAllowPointsBilling:
+		return m.AllowPointsBilling()
 	case group.FieldSubscriptionType:
 		return m.SubscriptionType()
 	case group.FieldDailyLimitUsd:
@@ -26964,6 +27006,8 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldDuplicateOperationID(ctx)
 	case group.FieldPlatform:
 		return m.OldPlatform(ctx)
+	case group.FieldAllowPointsBilling:
+		return m.OldAllowPointsBilling(ctx)
 	case group.FieldSubscriptionType:
 		return m.OldSubscriptionType(ctx)
 	case group.FieldDailyLimitUsd:
@@ -27230,6 +27274,13 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPlatform(v)
+		return nil
+	case group.FieldAllowPointsBilling:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAllowPointsBilling(v)
 		return nil
 	case group.FieldSubscriptionType:
 		v, ok := value.(string)
@@ -28231,6 +28282,9 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldPlatform:
 		m.ResetPlatform()
+		return nil
+	case group.FieldAllowPointsBilling:
+		m.ResetAllowPointsBilling()
 		return nil
 	case group.FieldSubscriptionType:
 		m.ResetSubscriptionType()
@@ -49602,6 +49656,10 @@ type UserMutation struct {
 	role                          *string
 	balance                       *float64
 	addbalance                    *float64
+	points_balance                *float64
+	addpoints_balance             *float64
+	points_reserved               *float64
+	addpoints_reserved            *float64
 	frozen_balance                *float64
 	addfrozen_balance             *float64
 	concurrency                   *int
@@ -49609,6 +49667,7 @@ type UserMutation struct {
 	status                        *string
 	username                      *string
 	notes                         *string
+	external_id                   *string
 	totp_secret_encrypted         *string
 	totp_enabled                  *bool
 	totp_enabled_at               *time.Time
@@ -50053,6 +50112,118 @@ func (m *UserMutation) ResetBalance() {
 	m.addbalance = nil
 }
 
+// SetPointsBalance sets the "points_balance" field.
+func (m *UserMutation) SetPointsBalance(f float64) {
+	m.points_balance = &f
+	m.addpoints_balance = nil
+}
+
+// PointsBalance returns the value of the "points_balance" field in the mutation.
+func (m *UserMutation) PointsBalance() (r float64, exists bool) {
+	v := m.points_balance
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPointsBalance returns the old "points_balance" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldPointsBalance(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPointsBalance is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPointsBalance requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPointsBalance: %w", err)
+	}
+	return oldValue.PointsBalance, nil
+}
+
+// AddPointsBalance adds f to the "points_balance" field.
+func (m *UserMutation) AddPointsBalance(f float64) {
+	if m.addpoints_balance != nil {
+		*m.addpoints_balance += f
+	} else {
+		m.addpoints_balance = &f
+	}
+}
+
+// AddedPointsBalance returns the value that was added to the "points_balance" field in this mutation.
+func (m *UserMutation) AddedPointsBalance() (r float64, exists bool) {
+	v := m.addpoints_balance
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPointsBalance resets all changes to the "points_balance" field.
+func (m *UserMutation) ResetPointsBalance() {
+	m.points_balance = nil
+	m.addpoints_balance = nil
+}
+
+// SetPointsReserved sets the "points_reserved" field.
+func (m *UserMutation) SetPointsReserved(f float64) {
+	m.points_reserved = &f
+	m.addpoints_reserved = nil
+}
+
+// PointsReserved returns the value of the "points_reserved" field in the mutation.
+func (m *UserMutation) PointsReserved() (r float64, exists bool) {
+	v := m.points_reserved
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPointsReserved returns the old "points_reserved" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldPointsReserved(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPointsReserved is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPointsReserved requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPointsReserved: %w", err)
+	}
+	return oldValue.PointsReserved, nil
+}
+
+// AddPointsReserved adds f to the "points_reserved" field.
+func (m *UserMutation) AddPointsReserved(f float64) {
+	if m.addpoints_reserved != nil {
+		*m.addpoints_reserved += f
+	} else {
+		m.addpoints_reserved = &f
+	}
+}
+
+// AddedPointsReserved returns the value that was added to the "points_reserved" field in this mutation.
+func (m *UserMutation) AddedPointsReserved() (r float64, exists bool) {
+	v := m.addpoints_reserved
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPointsReserved resets all changes to the "points_reserved" field.
+func (m *UserMutation) ResetPointsReserved() {
+	m.points_reserved = nil
+	m.addpoints_reserved = nil
+}
+
 // SetFrozenBalance sets the "frozen_balance" field.
 func (m *UserMutation) SetFrozenBalance(f float64) {
 	m.frozen_balance = &f
@@ -50271,6 +50442,42 @@ func (m *UserMutation) OldNotes(ctx context.Context) (v string, err error) {
 // ResetNotes resets all changes to the "notes" field.
 func (m *UserMutation) ResetNotes() {
 	m.notes = nil
+}
+
+// SetExternalID sets the "external_id" field.
+func (m *UserMutation) SetExternalID(s string) {
+	m.external_id = &s
+}
+
+// ExternalID returns the value of the "external_id" field in the mutation.
+func (m *UserMutation) ExternalID() (r string, exists bool) {
+	v := m.external_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExternalID returns the old "external_id" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldExternalID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExternalID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExternalID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExternalID: %w", err)
+	}
+	return oldValue.ExternalID, nil
+}
+
+// ResetExternalID resets all changes to the "external_id" field.
+func (m *UserMutation) ResetExternalID() {
+	m.external_id = nil
 }
 
 // SetTotpSecretEncrypted sets the "totp_secret_encrypted" field.
@@ -51603,7 +51810,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 25)
+	fields := make([]string, 0, 28)
 	if m.created_at != nil {
 		fields = append(fields, user.FieldCreatedAt)
 	}
@@ -51625,6 +51832,12 @@ func (m *UserMutation) Fields() []string {
 	if m.balance != nil {
 		fields = append(fields, user.FieldBalance)
 	}
+	if m.points_balance != nil {
+		fields = append(fields, user.FieldPointsBalance)
+	}
+	if m.points_reserved != nil {
+		fields = append(fields, user.FieldPointsReserved)
+	}
 	if m.frozen_balance != nil {
 		fields = append(fields, user.FieldFrozenBalance)
 	}
@@ -51639,6 +51852,9 @@ func (m *UserMutation) Fields() []string {
 	}
 	if m.notes != nil {
 		fields = append(fields, user.FieldNotes)
+	}
+	if m.external_id != nil {
+		fields = append(fields, user.FieldExternalID)
 	}
 	if m.totp_secret_encrypted != nil {
 		fields = append(fields, user.FieldTotpSecretEncrypted)
@@ -51701,6 +51917,10 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.Role()
 	case user.FieldBalance:
 		return m.Balance()
+	case user.FieldPointsBalance:
+		return m.PointsBalance()
+	case user.FieldPointsReserved:
+		return m.PointsReserved()
 	case user.FieldFrozenBalance:
 		return m.FrozenBalance()
 	case user.FieldConcurrency:
@@ -51711,6 +51931,8 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.Username()
 	case user.FieldNotes:
 		return m.Notes()
+	case user.FieldExternalID:
+		return m.ExternalID()
 	case user.FieldTotpSecretEncrypted:
 		return m.TotpSecretEncrypted()
 	case user.FieldTotpEnabled:
@@ -51760,6 +51982,10 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldRole(ctx)
 	case user.FieldBalance:
 		return m.OldBalance(ctx)
+	case user.FieldPointsBalance:
+		return m.OldPointsBalance(ctx)
+	case user.FieldPointsReserved:
+		return m.OldPointsReserved(ctx)
 	case user.FieldFrozenBalance:
 		return m.OldFrozenBalance(ctx)
 	case user.FieldConcurrency:
@@ -51770,6 +51996,8 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldUsername(ctx)
 	case user.FieldNotes:
 		return m.OldNotes(ctx)
+	case user.FieldExternalID:
+		return m.OldExternalID(ctx)
 	case user.FieldTotpSecretEncrypted:
 		return m.OldTotpSecretEncrypted(ctx)
 	case user.FieldTotpEnabled:
@@ -51854,6 +52082,20 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetBalance(v)
 		return nil
+	case user.FieldPointsBalance:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPointsBalance(v)
+		return nil
+	case user.FieldPointsReserved:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPointsReserved(v)
+		return nil
 	case user.FieldFrozenBalance:
 		v, ok := value.(float64)
 		if !ok {
@@ -51888,6 +52130,13 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetNotes(v)
+		return nil
+	case user.FieldExternalID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExternalID(v)
 		return nil
 	case user.FieldTotpSecretEncrypted:
 		v, ok := value.(string)
@@ -51991,6 +52240,12 @@ func (m *UserMutation) AddedFields() []string {
 	if m.addbalance != nil {
 		fields = append(fields, user.FieldBalance)
 	}
+	if m.addpoints_balance != nil {
+		fields = append(fields, user.FieldPointsBalance)
+	}
+	if m.addpoints_reserved != nil {
+		fields = append(fields, user.FieldPointsReserved)
+	}
 	if m.addfrozen_balance != nil {
 		fields = append(fields, user.FieldFrozenBalance)
 	}
@@ -52016,6 +52271,10 @@ func (m *UserMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
 	case user.FieldBalance:
 		return m.AddedBalance()
+	case user.FieldPointsBalance:
+		return m.AddedPointsBalance()
+	case user.FieldPointsReserved:
+		return m.AddedPointsReserved()
 	case user.FieldFrozenBalance:
 		return m.AddedFrozenBalance()
 	case user.FieldConcurrency:
@@ -52041,6 +52300,20 @@ func (m *UserMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddBalance(v)
+		return nil
+	case user.FieldPointsBalance:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPointsBalance(v)
+		return nil
+	case user.FieldPointsReserved:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPointsReserved(v)
 		return nil
 	case user.FieldFrozenBalance:
 		v, ok := value.(float64)
@@ -52164,6 +52437,12 @@ func (m *UserMutation) ResetField(name string) error {
 	case user.FieldBalance:
 		m.ResetBalance()
 		return nil
+	case user.FieldPointsBalance:
+		m.ResetPointsBalance()
+		return nil
+	case user.FieldPointsReserved:
+		m.ResetPointsReserved()
+		return nil
 	case user.FieldFrozenBalance:
 		m.ResetFrozenBalance()
 		return nil
@@ -52178,6 +52457,9 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldNotes:
 		m.ResetNotes()
+		return nil
+	case user.FieldExternalID:
+		m.ResetExternalID()
 		return nil
 	case user.FieldTotpSecretEncrypted:
 		m.ResetTotpSecretEncrypted()

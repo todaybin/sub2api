@@ -25,12 +25,17 @@ func requestMaxOutputTokens(body []byte) int {
 
 // tokenInflightEstimate 文本类请求的估算输入。
 func tokenInflightEstimate(model string, body []byte) service.InflightEstimateRequest {
-	return service.InflightEstimateRequest{
+	req := service.InflightEstimateRequest{
 		Model:     model,
 		BodyBytes: len(body),
 		MaxTokens: requestMaxOutputTokens(body),
 		Kind:      service.InflightEstimateToken,
 	}
+	// Explicit image tools in a text endpoint use monetary billing too.
+	if service.IsExplicitImageGenerationIntent("/v1/responses", model, body) {
+		req.Kind, req.Units = service.InflightEstimateImage, 1
+	}
+	return req
 }
 
 func inflightNoop() {}
@@ -71,13 +76,37 @@ func reserveInflightBalanceCtx(
 	subscription *service.UserSubscription,
 	req service.InflightEstimateRequest,
 ) (context.Context, func(), error) {
-	if billing == nil || estimator == nil || apiKey == nil || apiKey.User == nil || !billing.InflightReservationEnabled() {
+	if !billing.BillingEnabled() || estimator == nil || apiKey == nil || apiKey.User == nil {
 		return ctx, inflightNoop, nil
 	}
 	if apiKey.Group != nil && apiKey.Group.IsSubscriptionType() && subscription != nil {
 		return ctx, inflightNoop, nil
 	}
+	if !billing.InflightReservationEnabled() && (apiKey.Group == nil || !apiKey.Group.AllowPointsBilling) {
+		return ctx, inflightNoop, nil
+	}
 	estimate, priced := estimator.EstimateInflightReservation(ctx, apiKey, req)
+	if apiKey.Group != nil && apiKey.Group.AllowPointsBilling && req.Kind == service.InflightEstimateToken {
+		pointsCtx, done, selected, err := billing.ReservePointsPayment(ctx, apiKey, estimate)
+		if err != nil {
+			return ctx, inflightNoop, err
+		}
+		if selected {
+			return pointsCtx, done, nil
+		}
+		// The positive credit may have been reserved by another concurrent call.
+		if err := billing.CheckMoneyEligibility(ctx, apiKey.User.ID); err != nil {
+			return ctx, inflightNoop, err
+		}
+	}
+	if apiKey.Group != nil && apiKey.Group.AllowPointsBilling && req.Kind != service.InflightEstimateToken {
+		if err := billing.CheckMoneyEligibility(ctx, apiKey.User.ID); err != nil {
+			return ctx, inflightNoop, err
+		}
+	}
+	if !billing.InflightReservationEnabled() {
+		return ctx, inflightNoop, nil
+	}
 	if !priced && billing.InflightReservationFailClosedOnUnpriced() {
 		return ctx, inflightNoop, service.ErrInsufficientBalance
 	}

@@ -385,6 +385,14 @@ func normalizeUpdateGroupInputForSimpleMode(input *UpdateGroupInput) {
 }
 
 func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupInput) (*Group, error) {
+	if input.AllowPointsBilling {
+		if s.settingService == nil {
+			return nil, ErrBillingServiceUnavailable
+		}
+		if _, err := s.settingService.PointsPerUSD(ctx); err != nil {
+			return nil, err
+		}
+	}
 	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple && NormalizeGroupPlatform(input.Platform) == PlatformComposite {
 		return nil, infraerrors.BadRequest("SIMPLE_MODE_GROUP_NOT_BINDABLE", "composite groups are not supported in simple mode")
 	}
@@ -580,6 +588,7 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		DynamicRateLastDirection:        DynamicRateDirectionNone,
 		IsExclusive:                     input.IsExclusive,
 		Status:                          StatusActive,
+		AllowPointsBilling:              input.AllowPointsBilling,
 		SubscriptionType:                subscriptionType,
 		DailyLimitUSD:                   dailyLimit,
 		WeeklyLimitUSD:                  weeklyLimit,
@@ -771,6 +780,14 @@ func (s *adminServiceImpl) validateFallbackGroupOnInvalidRequest(ctx context.Con
 }
 
 func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *UpdateGroupInput) (*Group, error) {
+	if input.AllowPointsBilling != nil && *input.AllowPointsBilling {
+		if s.settingService == nil {
+			return nil, ErrBillingServiceUnavailable
+		}
+		if _, err := s.settingService.PointsPerUSD(ctx); err != nil {
+			return nil, err
+		}
+	}
 	group, err := s.groupRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -827,6 +844,9 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	}
 
 	// 订阅相关字段
+	if input.AllowPointsBilling != nil {
+		group.AllowPointsBilling = *input.AllowPointsBilling
+	}
 	if input.SubscriptionType != "" {
 		group.SubscriptionType = input.SubscriptionType
 	}

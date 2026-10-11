@@ -73,6 +73,7 @@ type usageLogBestEffortWriter interface {
 
 // postUsageBillingParams 统一扣费所需的参数
 type postUsageBillingParams struct {
+	PointsPayment         *PointsPayment
 	Cost                  *CostBreakdown
 	User                  *User
 	APIKey                *APIKey
@@ -332,8 +333,17 @@ func buildUsageBillingCommand(requestID string, usageLog *UsageLog, p *postUsage
 	if p.IsSubscriptionBill && p.Subscription != nil && p.Cost.TotalCost > 0 {
 		cmd.SubscriptionID = &p.Subscription.ID
 		cmd.SubscriptionCost = p.Cost.ActualCost
-	} else if p.Cost.ActualCost > 0 {
+	} else if p.Cost.ActualCost > 0 && p.PointsPayment == nil {
 		cmd.BalanceCost = p.Cost.ActualCost
+	}
+	// Free requests still settle their reservation and produce a zero-value receipt.
+	if p.PointsPayment != nil && !p.IsSubscriptionBill {
+		cmd.PointsReservationID = p.PointsPayment.ID
+		cmd.PointsGroupID = p.PointsPayment.GroupID
+		cmd.PointsPerUSD = p.PointsPayment.Rate
+		cmd.PointsCostUSD = QuantizeUsageBillingAmount(p.Cost.ActualCost)
+		cmd.PointsQuotaPlatform = p.Platform
+		cmd.BillingType = BillingTypePoints
 	}
 
 	if p.shouldDeductAPIKeyQuota() {
@@ -354,9 +364,23 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 	if p == nil || deps == nil {
 		return false, nil
 	}
+	if payment := PointsPaymentFromContext(ctx); payment != nil {
+		if p.IsSubscriptionBill || p.User == nil || p.APIKey == nil || p.APIKey.Group == nil || payment.UserID != p.User.ID || payment.APIKeyID != p.APIKey.ID || payment.GroupID != p.APIKey.Group.ID {
+			return false, ErrUsageBillingRequestConflict
+		}
+		p.PointsPayment = payment
+		if usageLog != nil {
+			usageLog.BillingType = BillingTypePoints
+			usageLog.PointsPerUSD = payment.Rate
+			usageLog.PointsCost = PointsCost(p.Cost.ActualCost, payment.Rate)
+		}
+	}
 
 	cmd := buildUsageBillingCommand(requestID, usageLog, p)
 	if cmd == nil || cmd.RequestID == "" || repo == nil {
+		if p.PointsPayment != nil {
+			return false, ErrBillingServiceUnavailable
+		}
 		if p.SimpleModeKeyRateLimitOnly {
 			return false, ErrSimpleModeKeyRateLimitBillingUnavailable
 		}
@@ -381,6 +405,11 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 
 	if result.APIKeyQuotaExhausted {
 		if invalidator, ok := p.APIKeyService.(apiKeyAuthCacheInvalidator); ok && p.APIKey != nil && p.APIKey.Key != "" {
+			invalidator.InvalidateAuthCacheByKey(billingCtx, p.APIKey.Key)
+		}
+	}
+	if p.PointsPayment != nil {
+		if invalidator, ok := p.APIKeyService.(apiKeyAuthCacheInvalidator); ok && p.APIKey != nil {
 			invalidator.InvalidateAuthCacheByKey(billingCtx, p.APIKey.Key)
 		}
 	}
@@ -412,7 +441,7 @@ func finalizePostUsageBilling(ctx context.Context, p *postUsageBillingParams, de
 		if p.Cost.ActualCost > 0 && p.User != nil && p.APIKey != nil && p.APIKey.GroupID != nil {
 			deps.billingCacheService.QueueUpdateSubscriptionUsage(p.User.ID, *p.APIKey.GroupID, p.Cost.ActualCost)
 		}
-	} else if p.Cost.ActualCost > 0 && p.User != nil {
+	} else if p.Cost.ActualCost > 0 && p.User != nil && p.PointsPayment == nil {
 		syncBalanceCacheAfterDeduction(ctx, p, deps, result)
 	}
 
@@ -499,7 +528,7 @@ func notifyBalanceLow(p *postUsageBillingParams, deps *billingDeps, result *Usag
 			slog.Error("panic in notifyBalanceLow", "recover", r)
 		}
 	}()
-	if p.IsSubscriptionBill || p.Cost.ActualCost <= 0 || p.User == nil || deps.balanceNotifyService == nil {
+	if p.IsSubscriptionBill || p.PointsPayment != nil || p.Cost.ActualCost <= 0 || p.User == nil || deps.balanceNotifyService == nil {
 		slog.Debug("notifyBalanceLow: skipped",
 			"is_subscription", p.IsSubscriptionBill,
 			"actual_cost", p.Cost.ActualCost,

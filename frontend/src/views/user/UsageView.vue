@@ -396,6 +396,7 @@ const compactionOptions = computed<SelectOption[]>(() => [
 const subscriptionFeatureEnabled = computed(() => resolveFeatureFlag(appStore.cachedPublicSettings, FeatureFlags.subscription))
 const billingTypeOptions = computed<SelectOption[]>(() => [
   { value: null, label: t('admin.usage.allBillingTypes') },
+  { value: 2, label: t('common.points.label') },
   { value: 0, label: t('admin.usage.billingTypeBalance') },
   { value: 1, label: t('admin.usage.billingTypeSubscription') },
 ])
@@ -667,6 +668,9 @@ const exportToCSV = async () => {
       'Cache Creation Tokens',
       'Rate Multiplier',
       'Billed Cost',
+      'Payment Type',
+      'Points Cost',
+      'Points per USD',
       'Original Cost',
       'First Token (ms)',
       'Duration (ms)',
@@ -686,6 +690,9 @@ const exportToCSV = async () => {
       log.cache_creation_tokens,
       log.rate_multiplier,
       log.actual_cost.toFixed(8),
+      log.billing_type === 2 ? 'Points' : log.billing_type === 1 ? 'Subscription' : 'Balance',
+      log.billing_type === 2 ? (log.points_cost ?? 0).toFixed(8) : '',
+      log.billing_type === 2 ? log.points_per_usd ?? '' : '',
       log.total_cost.toFixed(8),
       log.first_token_ms ?? '',
       log.duration_ms ?? '',

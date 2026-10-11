@@ -38,6 +38,11 @@ type UsageBillingCommand struct {
 	MediaType           string
 
 	BalanceCost         float64
+	PointsReservationID string
+	PointsGroupID       int64
+	PointsPerUSD        float64
+	PointsCostUSD       float64
+	PointsQuotaPlatform string
 	SubscriptionCost    float64
 	APIKeyQuotaCost     float64
 	APIKeyRateLimitCost float64
@@ -86,6 +91,8 @@ func (c *UsageBillingCommand) quantizeMonetaryFields() {
 	c.APIKeyQuotaCost = QuantizeUsageBillingAmount(c.APIKeyQuotaCost)
 	c.APIKeyRateLimitCost = QuantizeUsageBillingAmount(c.APIKeyRateLimitCost)
 	c.AccountQuotaCost = QuantizeUsageBillingAmount(c.AccountQuotaCost)
+	c.PointsCostUSD = QuantizeUsageBillingAmount(c.PointsCostUSD)
+	c.PointsPerUSD = QuantizeUsageBillingAmount(c.PointsPerUSD)
 }
 
 // QuantizeUsageBillingAmount 把金额舍入到 UsageBillingMonetaryScale 位小数，
@@ -131,6 +138,9 @@ func buildUsageBillingFingerprint(c *UsageBillingCommand) string {
 	)
 	if payloadHash := strings.TrimSpace(c.RequestPayloadHash); payloadHash != "" {
 		raw += "|" + payloadHash
+	}
+	if c.PointsReservationID != "" {
+		raw += fmt.Sprintf("|points:%d:%0.8f:%0.8f", c.PointsGroupID, c.PointsPerUSD, c.PointsCostUSD)
 	}
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])

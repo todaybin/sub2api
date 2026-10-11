@@ -426,6 +426,7 @@ export interface SystemSettings {
   login_agreement_updated_at: string;
   login_agreement_documents: LoginAgreementDocument[];
   // Default settings
+  points_per_usd?: number;
   default_balance: number;
   affiliate_rebate_rate: number;
   affiliate_rebate_freeze_hours: number;
@@ -782,6 +783,7 @@ export interface UpdateSettingsRequest {
   login_agreement_mode?: "modal" | "checkbox" | string;
   login_agreement_updated_at?: string;
   login_agreement_documents?: LoginAgreementDocument[];
+  points_per_usd?: number;
   default_balance?: number;
   affiliate_rebate_rate?: number;
   affiliate_rebate_freeze_hours?: number;

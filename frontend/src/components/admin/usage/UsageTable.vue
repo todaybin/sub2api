@@ -208,7 +208,8 @@
         <template #cell-cost="{ row }">
           <div class="text-sm">
             <div class="flex items-center gap-1.5">
-              <span class="font-medium text-green-600 dark:text-green-400">${{ row.actual_cost?.toFixed(6) || '0.000000' }}</span>
+              <span v-if="row.billing_type === 2" class="font-medium text-green-600 dark:text-green-400" :title="`$${row.actual_cost} × ${row.points_per_usd}`">{{ row.points_cost ?? 0 }} {{ t('common.points.label') }}</span>
+              <span v-else class="font-medium text-green-600 dark:text-green-400">${{ row.actual_cost?.toFixed(6) || '0.000000' }}</span>
               <span
                 v-if="row.long_context_billing_applied"
                 data-testid="long-context-billing-marker"

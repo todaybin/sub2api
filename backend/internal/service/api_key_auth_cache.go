@@ -33,6 +33,7 @@ type APIKeyAuthSnapshot struct {
 
 // APIKeyAuthUserSnapshot 用户快照
 type APIKeyAuthUserSnapshot struct {
+	PointsBalance float64 `json:"points_balance"`
 	ID            int64   `json:"id"`
 	Status        string  `json:"status"`
 	Role          string  `json:"role"`
@@ -60,6 +61,7 @@ type APIKeyAuthUserSnapshot struct {
 
 // APIKeyAuthGroupSnapshot 分组快照
 type APIKeyAuthGroupSnapshot struct {
+	AllowPointsBilling              bool                          `json:"allow_points_billing"`
 	ID                              int64                         `json:"id"`
 	Name                            string                        `json:"name"`
 	Platform                        string                        `json:"platform"`

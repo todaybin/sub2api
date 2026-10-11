@@ -287,6 +287,7 @@ const compactionOptions = ref<SelectOption[]>([
 
 const billingTypeOptions = ref<SelectOption[]>([
   { value: null, label: t('admin.usage.allBillingTypes') },
+  { value: 2, label: t('common.points.label') },
   { value: 0, label: t('admin.usage.billingTypeBalance') },
   { value: 1, label: t('admin.usage.billingTypeSubscription') }
 ])

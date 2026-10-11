@@ -90,6 +90,16 @@ func Balance(v float64) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldBalance, v))
 }
 
+// PointsBalance applies equality check predicate on the "points_balance" field. It's identical to PointsBalanceEQ.
+func PointsBalance(v float64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldPointsBalance, v))
+}
+
+// PointsReserved applies equality check predicate on the "points_reserved" field. It's identical to PointsReservedEQ.
+func PointsReserved(v float64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldPointsReserved, v))
+}
+
 // FrozenBalance applies equality check predicate on the "frozen_balance" field. It's identical to FrozenBalanceEQ.
 func FrozenBalance(v float64) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldFrozenBalance, v))
@@ -113,6 +123,11 @@ func Username(v string) predicate.User {
 // Notes applies equality check predicate on the "notes" field. It's identical to NotesEQ.
 func Notes(v string) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldNotes, v))
+}
+
+// ExternalID applies equality check predicate on the "external_id" field. It's identical to ExternalIDEQ.
+func ExternalID(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldExternalID, v))
 }
 
 // TotpSecretEncrypted applies equality check predicate on the "totp_secret_encrypted" field. It's identical to TotpSecretEncryptedEQ.
@@ -545,6 +560,86 @@ func BalanceLTE(v float64) predicate.User {
 	return predicate.User(sql.FieldLTE(FieldBalance, v))
 }
 
+// PointsBalanceEQ applies the EQ predicate on the "points_balance" field.
+func PointsBalanceEQ(v float64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldPointsBalance, v))
+}
+
+// PointsBalanceNEQ applies the NEQ predicate on the "points_balance" field.
+func PointsBalanceNEQ(v float64) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldPointsBalance, v))
+}
+
+// PointsBalanceIn applies the In predicate on the "points_balance" field.
+func PointsBalanceIn(vs ...float64) predicate.User {
+	return predicate.User(sql.FieldIn(FieldPointsBalance, vs...))
+}
+
+// PointsBalanceNotIn applies the NotIn predicate on the "points_balance" field.
+func PointsBalanceNotIn(vs ...float64) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldPointsBalance, vs...))
+}
+
+// PointsBalanceGT applies the GT predicate on the "points_balance" field.
+func PointsBalanceGT(v float64) predicate.User {
+	return predicate.User(sql.FieldGT(FieldPointsBalance, v))
+}
+
+// PointsBalanceGTE applies the GTE predicate on the "points_balance" field.
+func PointsBalanceGTE(v float64) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldPointsBalance, v))
+}
+
+// PointsBalanceLT applies the LT predicate on the "points_balance" field.
+func PointsBalanceLT(v float64) predicate.User {
+	return predicate.User(sql.FieldLT(FieldPointsBalance, v))
+}
+
+// PointsBalanceLTE applies the LTE predicate on the "points_balance" field.
+func PointsBalanceLTE(v float64) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldPointsBalance, v))
+}
+
+// PointsReservedEQ applies the EQ predicate on the "points_reserved" field.
+func PointsReservedEQ(v float64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldPointsReserved, v))
+}
+
+// PointsReservedNEQ applies the NEQ predicate on the "points_reserved" field.
+func PointsReservedNEQ(v float64) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldPointsReserved, v))
+}
+
+// PointsReservedIn applies the In predicate on the "points_reserved" field.
+func PointsReservedIn(vs ...float64) predicate.User {
+	return predicate.User(sql.FieldIn(FieldPointsReserved, vs...))
+}
+
+// PointsReservedNotIn applies the NotIn predicate on the "points_reserved" field.
+func PointsReservedNotIn(vs ...float64) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldPointsReserved, vs...))
+}
+
+// PointsReservedGT applies the GT predicate on the "points_reserved" field.
+func PointsReservedGT(v float64) predicate.User {
+	return predicate.User(sql.FieldGT(FieldPointsReserved, v))
+}
+
+// PointsReservedGTE applies the GTE predicate on the "points_reserved" field.
+func PointsReservedGTE(v float64) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldPointsReserved, v))
+}
+
+// PointsReservedLT applies the LT predicate on the "points_reserved" field.
+func PointsReservedLT(v float64) predicate.User {
+	return predicate.User(sql.FieldLT(FieldPointsReserved, v))
+}
+
+// PointsReservedLTE applies the LTE predicate on the "points_reserved" field.
+func PointsReservedLTE(v float64) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldPointsReserved, v))
+}
+
 // FrozenBalanceEQ applies the EQ predicate on the "frozen_balance" field.
 func FrozenBalanceEQ(v float64) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldFrozenBalance, v))
@@ -818,6 +913,71 @@ func NotesEqualFold(v string) predicate.User {
 // NotesContainsFold applies the ContainsFold predicate on the "notes" field.
 func NotesContainsFold(v string) predicate.User {
 	return predicate.User(sql.FieldContainsFold(FieldNotes, v))
+}
+
+// ExternalIDEQ applies the EQ predicate on the "external_id" field.
+func ExternalIDEQ(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldExternalID, v))
+}
+
+// ExternalIDNEQ applies the NEQ predicate on the "external_id" field.
+func ExternalIDNEQ(v string) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldExternalID, v))
+}
+
+// ExternalIDIn applies the In predicate on the "external_id" field.
+func ExternalIDIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldIn(FieldExternalID, vs...))
+}
+
+// ExternalIDNotIn applies the NotIn predicate on the "external_id" field.
+func ExternalIDNotIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldExternalID, vs...))
+}
+
+// ExternalIDGT applies the GT predicate on the "external_id" field.
+func ExternalIDGT(v string) predicate.User {
+	return predicate.User(sql.FieldGT(FieldExternalID, v))
+}
+
+// ExternalIDGTE applies the GTE predicate on the "external_id" field.
+func ExternalIDGTE(v string) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldExternalID, v))
+}
+
+// ExternalIDLT applies the LT predicate on the "external_id" field.
+func ExternalIDLT(v string) predicate.User {
+	return predicate.User(sql.FieldLT(FieldExternalID, v))
+}
+
+// ExternalIDLTE applies the LTE predicate on the "external_id" field.
+func ExternalIDLTE(v string) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldExternalID, v))
+}
+
+// ExternalIDContains applies the Contains predicate on the "external_id" field.
+func ExternalIDContains(v string) predicate.User {
+	return predicate.User(sql.FieldContains(FieldExternalID, v))
+}
+
+// ExternalIDHasPrefix applies the HasPrefix predicate on the "external_id" field.
+func ExternalIDHasPrefix(v string) predicate.User {
+	return predicate.User(sql.FieldHasPrefix(FieldExternalID, v))
+}
+
+// ExternalIDHasSuffix applies the HasSuffix predicate on the "external_id" field.
+func ExternalIDHasSuffix(v string) predicate.User {
+	return predicate.User(sql.FieldHasSuffix(FieldExternalID, v))
+}
+
+// ExternalIDEqualFold applies the EqualFold predicate on the "external_id" field.
+func ExternalIDEqualFold(v string) predicate.User {
+	return predicate.User(sql.FieldEqualFold(FieldExternalID, v))
+}
+
+// ExternalIDContainsFold applies the ContainsFold predicate on the "external_id" field.
+func ExternalIDContainsFold(v string) predicate.User {
+	return predicate.User(sql.FieldContainsFold(FieldExternalID, v))
 }
 
 // TotpSecretEncryptedEQ applies the EQ predicate on the "totp_secret_encrypted" field.

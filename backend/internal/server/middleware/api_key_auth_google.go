@@ -188,41 +188,47 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 				apiKey.User.ID,
 				apiKey.Group.ID,
 			)
-			if err != nil {
+			if err != nil && !(apiKey.Group.AllowPointsBilling && (errors.Is(err, service.ErrSubscriptionNotFound) || errors.Is(err, service.ErrSubscriptionExpired) || errors.Is(err, service.ErrSubscriptionSuspended))) {
 				abortWithGoogleError(c, 403, "No active subscription found for this group")
 				return
 			}
 
-			needsMaintenance, err := subscriptionService.ValidateAndCheckLimits(subscription, apiKey.Group)
-			if needsMaintenance {
-				refreshed, maintenanceErr := subscriptionService.EnsureWindowMaintenance(c.Request.Context(), subscription)
-				if maintenanceErr != nil {
-					abortWithGoogleError(c, 500, "Failed to maintain subscription usage windows")
+			if subscription != nil {
+				needsMaintenance, err := subscriptionService.ValidateAndCheckLimits(subscription, apiKey.Group)
+				if needsMaintenance {
+					refreshed, maintenanceErr := subscriptionService.EnsureWindowMaintenance(c.Request.Context(), subscription)
+					if maintenanceErr != nil {
+						abortWithGoogleError(c, 500, "Failed to maintain subscription usage windows")
+						return
+					}
+					subscription = refreshed
+					_, err = subscriptionService.ValidateAndCheckLimits(subscription, apiKey.Group)
+				}
+				if err != nil {
+					status := 403
+					if errors.Is(err, service.ErrDailyLimitExceeded) ||
+						errors.Is(err, service.ErrWeeklyLimitExceeded) ||
+						errors.Is(err, service.ErrMonthlyLimitExceeded) {
+						status = 429
+					}
+					abortWithGoogleError(c, status, err.Error())
 					return
 				}
-				subscription = refreshed
-				_, err = subscriptionService.ValidateAndCheckLimits(subscription, apiKey.Group)
-			}
-			if err != nil {
-				status := 403
-				if errors.Is(err, service.ErrDailyLimitExceeded) ||
-					errors.Is(err, service.ErrWeeklyLimitExceeded) ||
-					errors.Is(err, service.ErrMonthlyLimitExceeded) {
-					status = 429
-				}
-				abortWithGoogleError(c, status, err.Error())
-				return
-			}
 
-			c.Set(string(ContextKeySubscription), subscription)
+				c.Set(string(ContextKeySubscription), subscription)
+			}
 		} else {
-			if apiKey.RoutingMode != "smart" && apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) {
+			if apiKey.RoutingMode != "smart" && !(apiKey.Group != nil && apiKey.Group.AllowPointsBilling) && apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) {
 				abortWithGoogleError(c, 403, "Insufficient account balance")
 				return
 			}
 		}
 
 		c.Set(string(ContextKeyAPIKey), apiKey)
+		if _, hasSub := GetSubscriptionFromContext(c); !hasSub && apiKey.Group != nil && apiKey.Group.AllowPointsBilling && !apiKey.User.CanBindGroup(apiKey.Group.ID, apiKey.Group.IsExclusive) {
+			abortWithGoogleError(c, 403, "Group access is not permitted")
+			return
+		}
 		c.Set(string(ContextKeyUser), AuthSubject{
 			UserID:      apiKey.User.ID,
 			Concurrency: apiKey.User.Concurrency,

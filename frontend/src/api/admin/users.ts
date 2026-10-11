@@ -404,7 +404,13 @@ export async function resetPlatformQuotaWindow(
   return data
 }
 
+export async function updatePoints(id: number, points: number, operation: 'set' | 'add' | 'subtract', notes = '', idempotencyKey: string = crypto.randomUUID()): Promise<AdminUser> {
+  const { data } = await apiClient.post<AdminUser>(`/admin/users/${id}/points`, { points, operation, notes }, { headers: { 'Idempotency-Key': idempotencyKey } })
+  return data
+}
+
 export const usersAPI = {
+  updatePoints,
   list,
   getById,
   create,

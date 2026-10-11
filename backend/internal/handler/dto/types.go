@@ -10,19 +10,21 @@ import (
 )
 
 type User struct {
-	ID            int64      `json:"id"`
-	Email         string     `json:"email"`
-	Username      string     `json:"username"`
-	Role          string     `json:"role"`
-	Balance       float64    `json:"balance"`
-	FrozenBalance float64    `json:"frozen_balance"`
-	Concurrency   int        `json:"concurrency"`
-	Status        string     `json:"status"`
-	AllowedGroups []int64    `json:"allowed_groups"`
-	LastActiveAt  *time.Time `json:"last_active_at,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
-	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
+	PointsBalance  float64    `json:"points_balance"`
+	PointsReserved float64    `json:"points_reserved"`
+	ID             int64      `json:"id"`
+	Email          string     `json:"email"`
+	Username       string     `json:"username"`
+	Role           string     `json:"role"`
+	Balance        float64    `json:"balance"`
+	FrozenBalance  float64    `json:"frozen_balance"`
+	Concurrency    int        `json:"concurrency"`
+	Status         string     `json:"status"`
+	AllowedGroups  []int64    `json:"allowed_groups"`
+	LastActiveAt   *time.Time `json:"last_active_at,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	DeletedAt      *time.Time `json:"deleted_at,omitempty"`
 
 	// 余额不足通知
 	BalanceNotifyEnabled       bool               `json:"balance_notify_enabled"`
@@ -42,6 +44,7 @@ type User struct {
 // 注意：普通用户接口不得返回 notes 等管理员备注信息。
 type AdminUser struct {
 	User
+	ExternalID string `json:"external_id,omitempty"`
 
 	Notes      string     `json:"notes"`
 	LastUsedAt *time.Time `json:"last_used_at"`
@@ -94,6 +97,7 @@ type APIKey struct {
 }
 
 type Group struct {
+	AllowPointsBilling        bool       `json:"allow_points_billing"`
 	ID                        int64      `json:"id"`
 	Name                      string     `json:"name"`
 	Description               string     `json:"description"`
@@ -600,12 +604,14 @@ type BatchUpdateRedeemCodesRequest struct {
 
 // UsageLog 是普通用户接口使用的 usage log DTO（不包含管理员字段）。
 type UsageLog struct {
-	ID        int64  `json:"id"`
-	UserID    int64  `json:"user_id"`
-	APIKeyID  int64  `json:"api_key_id"`
-	AccountID int64  `json:"account_id"`
-	RequestID string `json:"request_id"`
-	Model     string `json:"model"`
+	PointsPerUSD float64 `json:"points_per_usd"`
+	PointsCost   float64 `json:"points_cost"`
+	ID           int64   `json:"id"`
+	UserID       int64   `json:"user_id"`
+	APIKeyID     int64   `json:"api_key_id"`
+	AccountID    int64   `json:"account_id"`
+	RequestID    string  `json:"request_id"`
+	Model        string  `json:"model"`
 	// ServiceTier records the OpenAI service tier used for billing, e.g. "priority" / "flex".
 	ServiceTier *string `json:"service_tier,omitempty"`
 	// ReasoningEffort is the client-requested effort (mapping-hidden, like Model).

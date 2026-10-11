@@ -63,11 +63,26 @@ func NewUserHandler(
 
 // CreateUserRequest represents admin create user request
 type CreateUserRequest struct {
+	ExternalID           string   `json:"external_id"`
 	Email                string   `json:"email" binding:"required,email"`
 	Password             string   `json:"password" binding:"required,min=6"`
 	Username             string   `json:"username"`
 	Notes                string   `json:"notes"`
 	Role                 string   `json:"role" binding:"omitempty,oneof=admin user"`
+	Balance              *float64 `json:"balance"`
+	Concurrency          int      `json:"concurrency"`
+	RPMLimit             int      `json:"rpm_limit"`
+	AllowedGroups        []int64  `json:"allowed_groups"`
+	RestrictPublicGroups bool     `json:"restrict_public_groups"`
+}
+
+type integrationCreateUserRequest struct {
+	ExternalID           string   `json:"external_id"`
+	Email                string   `json:"email"`
+	Password             string   `json:"password"`
+	Username             string   `json:"username"`
+	Notes                string   `json:"notes"`
+	Role                 string   `json:"role"`
 	Balance              *float64 `json:"balance"`
 	Concurrency          int      `json:"concurrency"`
 	RPMLimit             int      `json:"rpm_limit"`
@@ -277,9 +292,19 @@ func (h *UserHandler) BindAuthIdentity(c *gin.Context) {
 // POST /api/v1/admin/users
 func (h *UserHandler) Create(c *gin.Context) {
 	var req CreateUserRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	var bindingTarget any = &req
+	if isIntegrationRequest(c) {
+		// A distinct type avoids the admin-only required credential validation.
+		bindingTarget = &integrationCreateUserRequest{}
+	}
+	if err := c.ShouldBindJSON(bindingTarget); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
+	}
+
+	if integration, ok := bindingTarget.(*integrationCreateUserRequest); ok {
+		req = CreateUserRequest(*integration)
+		req.Role = service.RoleUser
 	}
 
 	// 创建管理员账号属权限敏感操作：需最近完成 step-up 2FA 验证。
@@ -290,7 +315,8 @@ func (h *UserHandler) Create(c *gin.Context) {
 	}
 
 	create := func(ctx context.Context) (any, error) {
-		user, err := h.adminService.CreateUser(ctx, &service.CreateUserInput{
+		input := service.CreateUserInput{
+			ExternalID:           req.ExternalID,
 			Email:                req.Email,
 			Password:             req.Password,
 			Username:             req.Username,
@@ -302,7 +328,14 @@ func (h *UserHandler) Create(c *gin.Context) {
 			AllowedGroups:        req.AllowedGroups,
 			RestrictPublicGroups: req.RestrictPublicGroups,
 			ActorAdminID:         getAdminIDFromContext(c),
-		})
+		}
+		var user *service.User
+		var err error
+		if isIntegrationRequest(c) {
+			user, err = createIntegrationAccount(ctx, h.adminService, input)
+		} else {
+			user, err = h.adminService.CreateUser(ctx, &input)
+		}
 		if err != nil {
 			return nil, err
 		}

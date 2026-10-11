@@ -10,6 +10,7 @@ type User struct {
 	ID             int64
 	Email          string
 	Username       string
+	ExternalID     string
 	Notes          string
 	AvatarURL      string
 	AvatarSource   string
@@ -18,6 +19,8 @@ type User struct {
 	AvatarSHA256   string
 	PasswordHash   string
 	Role           string
+	PointsBalance  float64
+	PointsReserved float64
 	Balance        float64
 	FrozenBalance  float64
 	Concurrency    int

@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 25 // v25: per-key smart group routing fields
+const apiKeyAuthSnapshotVersion = 26 // v26: points balance and group payment permission
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -357,6 +357,7 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			ID:                         apiKey.User.ID,
 			Status:                     apiKey.User.Status,
 			Role:                       apiKey.User.Role,
+			PointsBalance:              apiKey.User.PointsBalance,
 			Balance:                    apiKey.User.Balance,
 			Concurrency:                apiKey.User.Concurrency,
 			AllowedGroups:              apiKey.User.AllowedGroups,
@@ -387,6 +388,7 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			Platform:                        apiKey.Group.Platform,
 			IsExclusive:                     apiKey.Group.IsExclusive,
 			Status:                          apiKey.Group.Status,
+			AllowPointsBilling:              apiKey.Group.AllowPointsBilling,
 			SubscriptionType:                apiKey.Group.SubscriptionType,
 			RateMultiplier:                  apiKey.Group.RateMultiplier,
 			DailyLimitUSD:                   apiKey.Group.DailyLimitUSD,
@@ -469,6 +471,7 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			ID:                         snapshot.User.ID,
 			Status:                     snapshot.User.Status,
 			Role:                       snapshot.User.Role,
+			PointsBalance:              snapshot.User.PointsBalance,
 			Balance:                    snapshot.User.Balance,
 			Concurrency:                snapshot.User.Concurrency,
 			AllowedGroups:              snapshot.User.AllowedGroups,
@@ -492,6 +495,7 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			IsExclusive:                     snapshot.Group.IsExclusive,
 			Status:                          snapshot.Group.Status,
 			Hydrated:                        true,
+			AllowPointsBilling:              snapshot.Group.AllowPointsBilling,
 			SubscriptionType:                snapshot.Group.SubscriptionType,
 			RateMultiplier:                  snapshot.Group.RateMultiplier,
 			DailyLimitUSD:                   snapshot.Group.DailyLimitUSD,

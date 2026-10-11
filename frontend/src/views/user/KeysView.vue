@@ -609,6 +609,10 @@
         </div>
 
         <div v-else class="space-y-3">
+          <div class="flex gap-2">
+            <button v-for="strategy in ['auto', 'sequential', 'price', 'speed', 'random']" :key="strategy" type="button" class="flex-1 rounded-md border px-2 py-2 text-xs" :class="formData.routing_strategy === strategy ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 dark:border-dark-600'" @click="formData.routing_strategy = strategy as 'auto' | 'sequential' | 'price' | 'speed' | 'random'">{{ t(`keys.routingStrategy.${strategy}`) }}</button>
+          </div>
+          <p class="input-hint">{{ t(`keys.routingStrategyHint.${formData.routing_strategy}`) }}</p>
           <template v-if="formData.routing_strategy !== 'auto'">
           <label class="input-label">{{ t('keys.smartGroups') }}</label>
           <div class="grid max-h-56 gap-2 overflow-y-auto rounded-lg border border-gray-200 p-2 dark:border-dark-600">
@@ -628,10 +632,6 @@
           </div>
           <p class="input-hint">{{ t('keys.smartGroupsHint') }}</p>
           </template>
-          <div class="flex gap-2">
-            <button v-for="strategy in ['auto', 'sequential', 'price', 'speed', 'random']" :key="strategy" type="button" class="flex-1 rounded-md border px-2 py-2 text-xs" :class="formData.routing_strategy === strategy ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 dark:border-dark-600'" @click="formData.routing_strategy = strategy as 'auto' | 'sequential' | 'price' | 'speed' | 'random'">{{ t(`keys.routingStrategy.${strategy}`) }}</button>
-          </div>
-          <p class="input-hint">{{ t(`keys.routingStrategyHint.${formData.routing_strategy}`) }}</p>
         </div>
 
         <!-- Custom Key Section (only for create) -->

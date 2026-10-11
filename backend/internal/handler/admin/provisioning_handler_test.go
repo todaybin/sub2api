@@ -86,13 +86,13 @@ func TestNormalizeProvisionAPIKeysRejectsDuplicateGroup(t *testing.T) {
 	}
 }
 
-func TestNormalizeProvisionAPIKeysRejectsUnsafeExternalID(t *testing.T) {
+func TestNormalizeProvisionAPIKeysAcceptsOpaqueExternalID(t *testing.T) {
 	_, err := normalizeProvisionAPIKeys(ProvisionUserRequest{
 		ExternalID: "site-1]\n[integration_external_id:site-2",
 		APIKeys:    []ProvisioningAPIKeyRequest{{Name: "default"}},
 	})
-	if err == nil {
-		t.Fatal("expected unsafe external_id error")
+	if err != nil {
+		t.Fatalf("opaque external_id rejected: %v", err)
 	}
 }
 

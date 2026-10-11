@@ -48,6 +48,14 @@ func (r *usageLogRepository) GetByID(ctx context.Context, id int64) (log *servic
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
+	if err = rows.Close(); err != nil {
+		return nil, err
+	}
+	pointLogs := []service.UsageLog{*log}
+	if err = r.hydratePointsUsage(ctx, pointLogs); err != nil {
+		return nil, err
+	}
+	*log = pointLogs[0]
 	return log, nil
 }
 
@@ -267,6 +275,12 @@ func (r *usageLogRepository) queryUsageLogs(ctx context.Context, query string, a
 		logs = append(logs, *log)
 	}
 	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	if err = rows.Close(); err != nil {
+		return nil, err
+	}
+	if err = r.hydratePointsUsage(ctx, logs); err != nil {
 		return nil, err
 	}
 	return logs, nil

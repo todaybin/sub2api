@@ -77,6 +77,21 @@ type ProvisionUserRequest struct {
 	Subscription  *ProvisioningSubscriptionRequest `json:"subscription"`
 }
 
+type integrationProvisionUserRequest struct {
+	ExternalID    string                           `json:"external_id"`
+	Email         string                           `json:"email"`
+	Password      string                           `json:"password"`
+	Username      string                           `json:"username"`
+	Notes         string                           `json:"notes"`
+	Concurrency   int                              `json:"concurrency" binding:"gte=0"`
+	RPMLimit      int                              `json:"rpm_limit" binding:"gte=0"`
+	AllowedGroups []int64                          `json:"allowed_groups"`
+	Balance       *float64                         `json:"balance" binding:"omitempty,gte=0"`
+	APIKey        *ProvisioningAPIKeyRequest       `json:"api_key"`
+	APIKeys       []ProvisioningAPIKeyRequest      `json:"api_keys"`
+	Subscription  *ProvisioningSubscriptionRequest `json:"subscription"`
+}
+
 type provisioningAPIKeyResponse struct {
 	RoutingMode     string  `json:"routing_mode"`
 	RoutingStrategy string  `json:"routing_strategy"`
@@ -94,8 +109,19 @@ type provisioningAPIKeyResponse struct {
 // Create 创建或认领普通用户，合并分组权限并只创建缺失的分组 Key。
 func (h *ProvisioningHandler) Create(c *gin.Context) {
 	var req ProvisionUserRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	var bindingTarget any = &req
+	if isIntegrationRequest(c) {
+		bindingTarget = &integrationProvisionUserRequest{}
+	}
+	if err := c.ShouldBindJSON(bindingTarget); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if integration, ok := bindingTarget.(*integrationProvisionUserRequest); ok {
+		req = ProvisionUserRequest(*integration)
+	}
+	if !isIntegrationRequest(c) && !validProvisionExternalID(req.ExternalID) {
+		response.BadRequest(c, "Invalid external_id")
 		return
 	}
 	keys, err := normalizeProvisionAPIKeys(req)
@@ -114,7 +140,20 @@ func (h *ProvisioningHandler) Create(c *gin.Context) {
 }
 
 func (h *ProvisioningHandler) ensureProvisioned(ctx context.Context, c *gin.Context, req ProvisionUserRequest, keyRequests []ProvisioningAPIKeyRequest) (any, error) {
-	user, createdUser, previousUser, err := h.ensureUser(ctx, req, keyRequests, getAdminIDFromContext(c))
+	var user, previousUser *service.User
+	var createdUser bool
+	var err error
+	if isIntegrationRequest(c) {
+		user, err = createIntegrationAccount(ctx, h.adminService, service.CreateUserInput{
+			ExternalID: req.ExternalID, Notes: req.Notes, Balance: req.Balance,
+			Concurrency: req.Concurrency, RPMLimit: req.RPMLimit,
+			AllowedGroups: mergedProvisionGroups(req.AllowedGroups, keyRequests),
+			ActorAdminID:  getAdminIDFromContext(c),
+		})
+		createdUser = err == nil
+	} else {
+		user, createdUser, previousUser, err = h.ensureUser(ctx, req, keyRequests, getAdminIDFromContext(c))
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -158,9 +197,13 @@ func (h *ProvisioningHandler) ensureProvisioned(ctx context.Context, c *gin.Cont
 		return nil, err
 	}
 	committed = true
+	externalID := req.ExternalID
+	if !isIntegrationRequest(c) {
+		externalID = strings.TrimSpace(externalID)
+	}
 	result := gin.H{
 		"created":      createdUser,
-		"external_id":  strings.TrimSpace(req.ExternalID),
+		"external_id":  externalID,
 		"user":         dto.UserFromServiceAdmin(user),
 		"api_keys":     keyResponses,
 		"subscription": dto.UserSubscriptionFromServiceAdmin(subscription),
@@ -284,9 +327,6 @@ func (h *ProvisioningHandler) ensureAPIKeys(ctx context.Context, userID int64, r
 }
 
 func normalizeProvisionAPIKeys(req ProvisionUserRequest) ([]ProvisioningAPIKeyRequest, error) {
-	if !validProvisionExternalID(req.ExternalID) {
-		return nil, fmt.Errorf("external_id may only contain letters, numbers, dot, underscore, colon, and hyphen")
-	}
 	items := make([]ProvisioningAPIKeyRequest, 0, len(req.APIKeys)+1)
 	if req.APIKey != nil {
 		items = append(items, *req.APIKey)

@@ -1028,6 +1028,13 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 							_ = h.antigravityGatewayService.WriteMappedClaudeError(c, account, promptTooLongErr.StatusCode, promptTooLongErr.RequestID, promptTooLongErr.Body)
 							return
 						}
+						if payment := service.PointsPaymentFromContext(c.Request.Context()); payment != nil {
+							payment.HandlerDone()
+						}
+						if reservation := service.InflightReservationFromContext(c.Request.Context()); reservation != nil {
+							reservation.HandlerDone()
+						}
+						c.Request = c.Request.WithContext(service.ClearPaymentReservations(c.Request.Context()))
 						fallbackAPIKey := cloneAPIKeyWithGroup(apiKey, fallbackGroup)
 						if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), fallbackAPIKey.User, fallbackAPIKey, fallbackGroup, nil, service.PlatformFromAPIKey(fallbackAPIKey)); err != nil {
 							status, code, message, retryAfter := billingErrorDetails(err)
@@ -1037,6 +1044,13 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 							h.handleStreamingAwareError(c, status, code, message, streamStarted)
 							return
 						}
+						fallbackPaymentDone, paymentErr := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, fallbackAPIKey, nil, tokenInflightEstimate(reqModel, body))
+						if paymentErr != nil {
+							status, code, message, _ := billingErrorDetails(paymentErr)
+							h.handleStreamingAwareError(c, status, code, message, streamStarted)
+							return
+						}
+						defer fallbackPaymentDone()
 						// 兜底重试按"直接请求兜底分组"处理：清除强制平台，允许按分组平台调度
 						ctx := context.WithValue(c.Request.Context(), ctxkey.ForcePlatform, "")
 						c.Request = c.Request.WithContext(ctx)
@@ -2590,6 +2604,10 @@ func (h *GatewayHandler) maybeLogCompatibilityFallbackMetrics(reqLog *zap.Logger
 }
 
 func (h *GatewayHandler) submitUsageRecordTask(parent context.Context, task service.UsageRecordTask) {
+	if service.PointsPaymentFromContext(parent) != nil {
+		h.submitMandatoryUsageRecordTask(parent, task)
+		return
+	}
 	if task == nil {
 		return
 	}

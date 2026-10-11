@@ -159,6 +159,7 @@ func ValidateSimpleModeGroupOperation(cfg *config.Config, operation AdminGroupOp
 
 // CreateUserInput represents input for creating a new user via admin operations.
 type CreateUserInput struct {
+	ExternalID           string
 	Email                string
 	Password             string
 	Username             string
@@ -232,6 +233,7 @@ type AdminBoundAuthIdentityChannel struct {
 }
 
 type CreateGroupInput struct {
+	AllowPointsBilling        bool
 	Name                      string
 	Description               string
 	Platform                  string
@@ -314,6 +316,7 @@ type CreateGroupInput struct {
 }
 
 type UpdateGroupInput struct {
+	AllowPointsBilling        *bool
 	Name                      string
 	Description               *string
 	Platform                  string

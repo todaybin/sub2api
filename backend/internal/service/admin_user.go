@@ -135,6 +135,7 @@ func (s *adminServiceImpl) CreateUser(ctx context.Context, input *CreateUserInpu
 		Email:         input.Email,
 		Username:      input.Username,
 		Notes:         input.Notes,
+		ExternalID:    input.ExternalID,
 		Role:          role,
 		Balance:       balance,
 		Concurrency:   input.Concurrency,

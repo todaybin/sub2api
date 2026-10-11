@@ -144,8 +144,10 @@ func (r *userRepository) create(ctx context.Context, userIn *service.User, guard
 		SetEmail(userIn.Email).
 		SetUsername(userIn.Username).
 		SetNotes(userIn.Notes).
+		SetExternalID(userIn.ExternalID).
 		SetPasswordHash(userIn.PasswordHash).
 		SetRole(userIn.Role).
+		SetPointsBalance(userIn.PointsBalance).
 		SetBalance(userIn.Balance).
 		SetConcurrency(userIn.Concurrency).
 		SetStatus(userIn.Status).

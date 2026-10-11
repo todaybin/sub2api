@@ -291,6 +291,7 @@ type UsageLogFilters struct {
 
 // UsageStats represents usage statistics
 type UsageStats struct {
+	TotalPointsCost          float64        `json:"-"`
 	TotalRequests            int64          `json:"total_requests"`
 	TotalInputTokens         int64          `json:"total_input_tokens"`
 	TotalOutputTokens        int64          `json:"total_output_tokens"`

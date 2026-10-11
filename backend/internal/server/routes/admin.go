@@ -318,6 +318,8 @@ func registerUserManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		users.PUT("/:id", h.Admin.User.Update)
 		users.DELETE("/:id", h.Admin.User.Delete)
 		users.POST("/:id/balance", h.Admin.User.UpdateBalance)
+		users.POST("/:id/points", h.Admin.User.UpdatePoints)
+		users.GET("/:id/points-history", h.Admin.User.PointsHistory)
 		users.GET("/:id/api-keys", h.Admin.User.GetUserAPIKeys)
 		users.POST("/:id/api-keys", h.Admin.User.CreateUserAPIKey)
 		users.POST("/:id/token", h.Admin.User.IssueUserToken)

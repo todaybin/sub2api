@@ -129,7 +129,7 @@ async function callAdmin(method, targetPath, { body, query, idempotencyKey } = {
 const provisioned = await callAdmin('POST', '/api/v1/admin/users/provision', {
   body: {
     external_id: 'partner:alice-1001',
-    email: 'alice@example.com', password: 'change-me-123', username: 'alice',
+    notes: '订单 order-1001',
     balance: 10,
     api_key: { name: 'default-smart' },
     subscription: { group_id: 12, validity_days: 30, notes: 'order-1001' }
@@ -229,19 +229,19 @@ curl -X POST "${BASE}${GATEWAY}" \
 POST /api/v1/integrations/admin/users/provision
 ```
 
-原管理员路径为 `POST /api/v1/admin/users/provision`。用途：幂等确保普通用户存在、合并可用模型分组，并为缺失分组创建独立 API Key。调用方应使用稳定的 `external_id`，并通过 `api_keys` 定义需要创建的 Key。该接口是写操作，必须提供 `Idempotency-Key`。
+原管理员路径为 `POST /api/v1/admin/users/provision`。签名网关用于新建普通用户、授予分组权限并创建 API Key。系统生成邮箱、密码和默认账号名称，邮箱格式为 `随机编号ai@zoomtk.com`；调用方无需传入账号凭据。通过 `api_keys` 定义所需 Key；写操作必须提供 `Idempotency-Key`。
 
-重复调用时先按 `external_id` 查找账号，未找到时才按邮箱精确认领。若命中多个 `external_id`、邮箱已属于管理员账号，或同一请求重复声明分组，返回冲突或参数错误。已存在且有效、路由模式及分组集合相同的 Key 不会重复创建，也不会再次返回密钥明文；新增 Key 的明文只在本次响应返回。
+同一幂等键和相同请求重试时返回首次成功结果，包括账号和 Key。新幂等键表示新创建操作，即使 `external_id` 相同也创建新账号。外部编号原样独立保存，不限制字符格式、不查重，也不用于认领已有账号。`notes` 原样保存，不拼接外部编号。相同请求内重复声明路由与候选分组集合仍返回参数错误。以上为签名网关行为，后台管理员直接调用原路径保留既有规则。
 
 ### 4.1 请求字段
 
 | 字段 | 类型 | 是否必填 | 描述 |
 | --- | --- | --- | --- |
-| `external_id` | string | 建议必填 | 第三方系统稳定账号标识，最长 160 字符，只允许字母、数字、点、下划线、冒号和连字符。 |
-| `email` | string | 是 | 唯一邮箱地址。 |
-| `password` | string | 是 | 登录密码，最少 6 个字符；响应不会返回该字段。 |
-| `username` | string | 否 | 显示名称。 |
-| `notes` | string | 否 | 管理备注。 |
+| `external_id` | string | 否 | 调用方自定义编号，原样独立保存；不查重、不认领账号，允许重复。 |
+| `email` | string | 否 | 系统生成；兼容接收旧字段但忽略其值。 |
+| `password` | string | 否 | 系统生成随机密码；旧字段值被忽略，响应不返回密码或密码哈希。 |
+| `username` | string | 否 | 系统生成默认账号名称；旧字段值被忽略。 |
+| `notes` | string | 否 | 调用方自定义备注，原样独立保存。 |
 | `concurrency` | integer | 否 | 用户并发上限，必须大于等于 0。 |
 | `rpm_limit` | integer | 否 | 用户 RPM 上限，`0` 表示不限。 |
 | `allowed_groups` | integer[] | 否 | 用户可用的专属分组 ID 列表。 |
@@ -269,9 +269,6 @@ POST /api/v1/integrations/admin/users/provision
 ```json
 {
   "external_id": "workmesh:site-1001",
-  "email": "alice@example.com",
-  "password": "change-me-123",
-  "username": "alice",
   "notes": "订单 order-1001",
   "balance": 10,
   "concurrency": 5,
@@ -299,9 +296,9 @@ POST /api/v1/integrations/admin/users/provision
 }
 ```
 
-成功响应的 `data` 包含 `created`、`external_id`、`user`、`api_keys` 和 `subscription`。每个 `api_keys[]` 项包含 `routing_mode`、`routing_strategy`、`smart_group_ids`（智能模式）、`created` 和 `key_fingerprint`，只有 `created=true` 时才包含完整 `key`；同一个幂等请求的重放会恢复原成功响应，包括该密钥。密码不会返回。创建用户后的订阅或 API Key 创建失败时，服务端会删除刚创建的用户；更新已有用户失败时会删除本轮新 Key 并恢复原分组和备注。
+成功响应的 `data` 包含 `created`、`external_id`、`user`、`api_keys` 和 `subscription`。每个 `api_keys[]` 项包含 `routing_mode`、`routing_strategy`、`smart_group_ids`（智能模式）、`created` 和 `key_fingerprint`，只有 `created=true` 时才包含完整 `key`；同一个幂等请求的重放会恢复原成功响应，包括该密钥。密码不会返回。创建用户后的订阅或 API Key 创建失败时，服务端会删除刚创建的用户。网关不修改或认领已有用户。
 
-## 5. 账号、余额、Key、登录 Token 与用量接口
+## 5. 账号、余额、积分、Key、登录 Token 与用量接口
 
 本节网关接口均要求第 3 节的完整联合认证。响应统一为 HTTP 200：
 
@@ -317,15 +314,21 @@ POST /api/v1/integrations/admin/users/provision
 | 获取账号信息 | `GET /api/v1/integrations/admin/users/:id` | 无 |
 | 查询账号列表 | `GET /api/v1/integrations/admin/users` | 无 |
 | 增加余额 | `POST /api/v1/integrations/admin/users/:id/balance` | 必填 |
+| 增加或调整积分 | `POST /api/v1/integrations/admin/users/:id/points` | 必填 |
+| 查询积分流水 | `GET /api/v1/integrations/admin/users/:id/points-history` | 无 |
 | 新增 Key | `POST /api/v1/integrations/admin/users/:id/api-keys` | 必填 |
 | 查询账号 Keys | `GET /api/v1/integrations/admin/users/:id/api-keys` | 无 |
 | 签发用户登录 Token | `POST /api/v1/integrations/admin/users/:id/token` | 必填 |
+| 查询请求日志（含实际扣费积分） | `GET /api/v1/integrations/admin/usage` | 无 |
+| 查询通用用量统计（含积分汇总） | `GET /api/v1/integrations/admin/usage/stats` | 无 |
+| 查询专属分组分页列表 | `GET /api/v1/integrations/admin/groups` | 无 |
+| 查询专属分组完整列表 | `GET /api/v1/integrations/admin/groups/all` | 无 |
 | 查询账号或指定 Key 用量 | `GET /api/v1/integrations/admin/users/:id/usage` | 无 |
 | 查询用户或指定 Key 的模型 | `GET /api/v1/integrations/admin/users/:id/models` | 无 |
 | 查询分组模型并集 | `GET /api/v1/integrations/admin/groups/models` | 无 |
 | 一次性开通账号与 Keys | `POST /api/v1/integrations/admin/users/provision` | 必填，见第 4 节 |
 
-`:id` 为账号创建响应中的 `data.id`，或 provision 响应中的 `data.user.id`，必须使用数字 ID；`external_id` 用于 provision 的认领，不直接替代路径 ID。
+`:id` 为账号创建响应中的 `data.id`，或 provision 响应中的 `data.user.id`，必须使用数字 ID。`external_id` 仅为元数据，不查重、不认领，也不替代路径 ID。
 
 ### 5.1 创建账号
 
@@ -337,9 +340,7 @@ Idempotency-Key: create-user-order-1001
 
 ```json
 {
-  "email":"alice@example.com",
-  "password":"change-me-123",
-  "username":"alice",
+  "external_id":"partner:alice-1001",
   "role":"user",
   "balance":0,
   "concurrency":5,
@@ -352,12 +353,14 @@ Idempotency-Key: create-user-order-1001
 
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
-| `email` | 是 | 唯一邮箱，格式必须有效；重复邮箱返回冲突，不认领已有账号。 |
-| `password` | 是 | 至少 6 字符；响应不返回密码或密码哈希。 |
-| `username`、`notes` | 否 | 显示名称、管理员备注。 |
-| `role` | 否 | 省略默认 `user`。集成开通普通用户使用 `user`；管理员操作存在额外认证要求。 |
+| `email` | 否 | 系统生成唯一邮箱 `随机编号ai@zoomtk.com`；旧字段值被忽略。 |
+| `password` | 否 | 系统生成随机密码；旧字段值被忽略，响应不返回密码或密码哈希。 |
+| `username` | 否 | 系统生成默认账号名称；旧字段值被忽略。 |
+| `external_id` | 否 | 独立保存调用方编号，不限制格式、不查重、不认领。 |
+| `notes` | 否 | 调用方自定义备注，原样保存。 |
+| `role` | 否 | 签名网关创建账号固定为 `user`，其他传入值不会创建管理员。 |
 | `balance` | 否 | 初始余额（USD），建议提供非负数；增量充值使用 5.3 接口。 |
-| `concurrency` | 否 | 并发上限；省略或 0 时采用后端默认值。 |
+| `concurrency` | 否 | 用户并发上限；省略时传入系统的值为 0。 |
 | `rpm_limit` | 否 | 每分钟请求上限，0 表示不限。 |
 | `allowed_groups` | 否 | 授予的分组 ID 列表。单独新增 Key 不自动授予分组权限。 |
 | `restrict_public_groups` | 否 | 默认 false：公开标准分组也可使用；true：公开分组也必须在授权列表中。订阅组仍须有有效订阅。 |
@@ -365,10 +368,10 @@ Idempotency-Key: create-user-order-1001
 响应 `data` 示例：
 
 ```json
-{"id":123,"email":"alice@example.com","username":"alice","role":"user","balance":0,"concurrency":5,"rpm_limit":120,"status":"active","allowed_groups":[12,18],"restrict_public_groups":true}
+{"id":123,"email":"6c5c7a424b5247a89007bd78b41a293aai@zoomtk.com","username":"6c5c7a424b5247a89007bd78b41a293aai","external_id":"partner:alice-1001","notes":"订单 order-1001","role":"user","balance":0,"concurrency":5,"rpm_limit":120,"status":"active","allowed_groups":[12,18],"restrict_public_groups":true}
 ```
 
-该接口只创建账号。需要同时确保账号和 Key 时使用 provision；provision 认领已有账号后不会覆盖已有密码、余额、名称或并发设置，充值仍须单独调用余额接口。
+该接口只创建账号，需要同时创建账号和 Key 时使用 provision。保存响应中的数字 ID 和生成邮箱，后续操作使用 ID；登录使用 5.5 的 Token 签发接口，无需获取密码。业务端自行维护外部编号与系统 ID 的对应关系，后续金额充值调用 5.3，积分充值调用 5.3.1；创建账号和 provision 不接收初始积分字段。
 
 ### 5.2 获取账号信息与 Keys
 
@@ -378,7 +381,7 @@ GET /api/v1/integrations/admin/users/123/api-keys?page=1&page_size=20
 GET /api/v1/integrations/admin/users?search=alice%40example.com&page=1&page_size=20
 ```
 
-账号详情返回上述账号对象，还包含 `frozen_balance`、`created_at`、`updated_at` 等字段。不存在的账号返回 404。用户列表的 `search` 是模糊匹配，不能直接把第一条结果当作邮箱精确匹配。
+账号详情返回上述账号对象，还包含 `points_balance`（积分余额）、`points_reserved`（在途占用积分）、`frozen_balance`、`created_at`、`updated_at` 等字段。可用积分为 `points_balance - points_reserved`。不存在的账号返回 404。用户列表的 `search` 是模糊匹配，不能直接把第一条结果当作邮箱精确匹配。
 
 Keys 和用户列表使用分页结构：
 
@@ -402,6 +405,50 @@ Idempotency-Key: recharge-order-1002
 `balance` 是本次操作金额（USD），必须大于 0；`operation=add` 增加余额，`subtract` 扣减，`set` 设置为指定余额。响应 `data` 是修改后的完整账号对象。假设原余额为 3，上例响应 `balance=13`；相同幂等键重试不会再次增加 10。
 
 订单系统应保存充值订单号与幂等键的对应关系。每个新订单使用新幂等键；发生超时后复用同一幂等键和原 body，并生成新的时间戳、Nonce 和签名。更多支付接口见 [支付集成文档](ADMIN_PAYMENT_INTEGRATION_API.md)。
+
+### 5.3.1 增加积分与查询积分流水
+
+管理后台已有对应入口：「用户管理 → 点击用户积分余额」，支持增加、扣除、设置积分和查看流水。第三方系统使用下面的签名网关接口，必须同时提供第 3 节的完整认证请求头。
+
+```http
+POST /api/v1/integrations/admin/users/123/points
+Content-Type: application/json
+Idempotency-Key: points-order-1003
+```
+
+```json
+{"points":1000,"operation":"add","notes":"积分充值订单 order-1003"}
+```
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `points` | number | 本次积分数量，范围 0–999999999999，按 8 位小数入账；充值使用正数。 |
+| `operation` | string | 必填。`add` 增加积分，`subtract` 扣除积分，`set` 设置积分余额。 |
+| `notes` | string | 可选，订单备注，保存到积分流水。 |
+
+`points` 直接表示积分，不是 USD，不乘兑换比例，也不改变金额余额。模型消费扣积分时才按既有最终费用乘 `points_per_usd`。原积分余额为 20 时，上例响应中的 `points_balance=1020`；余额为 -70 时，充值 100 积分后为 30，先抵扣积分欠款。用户已有在途积分占用时仍可 `add`；`set` 或 `subtract` 返回 `POINTS_RESERVED`，需等待请求完成。扣减后余额不能为负。
+
+成功响应 `data` 为修改后的账号对象，关键字段如下：
+
+```json
+{"id":123,"points_balance":1020,"points_reserved":0,"balance":10}
+```
+
+路径必须使用系统生成的正整数用户 ID，不能使用 `external_id`。同一 AppID、同一用户、同一订单复用固定 `Idempotency-Key` 和原请求体，成功重试不会重复增加积分；幂等协调记录过期后，积分流水仍阻止同一操作再次入账。不同 AppID 的订单键独立，新订单使用新键。修改积分数量、操作或备注时必须使用新键，保留的幂等记录发现内容变更返回 409。
+
+查询积分流水：
+
+```http
+GET /api/v1/integrations/admin/users/123/points-history?page=1&page_size=20
+```
+
+响应 `data` 示例：
+
+```json
+{"items":[{"id":801,"amount":1000,"balance_after":1020,"cost_usd":0,"points_per_usd":0,"kind":"adjustment","notes":"积分充值订单 order-1003","request_id":null,"created_at":"2026-10-11T08:00:00Z"}],"total":1,"page":1,"page_size":20,"pages":1}
+```
+
+`amount` 为本笔积分变动（正数增加，负数扣除），`balance_after` 为变动后的余额；`kind=adjustment` 表示积分调整，消费扣费还会记录对应 `cost_usd`、当次 `points_per_usd` 和 `request_id`。流水不返回上游账号、渠道或上游模型信息。
 
 ### 5.4 新增 Key（默认智能分组）
 
@@ -503,12 +550,39 @@ GET /api/v1/integrations/admin/users/123/usage?api_key_id=456&start_time=2026-10
   "total_tokens":135,
   "total_cost":0.15,
   "total_actual_cost":0.12,
-  "total_account_cost":0.08,
+  "total_points_cost":12,
   "average_duration_ms":800
 }
 ```
 
-`total_tokens` 是输入、输出、缓存创建和缓存读取四项之和；`total_cache_tokens` 为后两项之和。`total_cost` 是标准计费，`total_actual_cost` 是用户实际扣费，`total_account_cost` 是内部上游成本（管理员可见），费用单位均为 USD。未传 Key 时不返回 `api_key_id`。无记录返回真实零统计，不是固定占位数据。统计来自已写入用量日志，刚完成的异步写入可能有短暂延迟。
+`total_tokens` 为输入、输出、缓存创建和缓存读取之和，`total_cache_tokens` 为后两项之和。`total_cost` 是标准费用，`total_actual_cost` 是最终用户计费金额（USD）；积分支付时此金额仍是计费估值，不表示再次扣余额。`total_points_cost` 为查询范围内实际结算扣除的积分，取结算账本，修改兑换比例不会重算历史积分；余额或订阅支付贡献 0 积分。金额和积分不能相加。未传 Key 时不返回 `api_key_id`，无记录返回零统计。异步用量日志写入可能有短暂延迟。
+
+网关不返回 `total_account_cost`、上游端点、上游路径组合或内部账号信息。后台管理员统计继续保留管理所需字段。
+
+### 5.6.1 请求日志与通用统计
+
+```text
+GET /api/v1/integrations/admin/usage?user_id=123&api_key_id=456&page=1&page_size=20&start_date=2026-10-01&end_date=2026-10-02
+GET /api/v1/integrations/admin/usage/stats?user_id=123&api_key_id=456&start_date=2026-10-01&end_date=2026-10-02
+```
+
+这两个接口沿用管理员日志的日期、时区和过滤参数，日期包含结束日；统计响应为上节的安全统计指标，但没有 `user_id/api_key_id/start_time/end_time` 包装字段。需要 RFC3339 时间范围时使用 5.6 的账号统计接口。
+
+日志 `data` 为 `items/total/page/page_size/pages` 分页结构。每条日志保留请求 ID、用户/Key/分组 ID、客户端请求模型、Token、用户费用、计费类型和耗时，例如：
+
+```json
+{
+  "id":789,"user_id":123,"api_key_id":456,"request_id":"request-001",
+  "model":"gpt-5","group_id":12,"subscription_id":null,
+  "input_tokens":100,"output_tokens":25,"cache_creation_tokens":4,"cache_read_tokens":6,
+  "total_cost":0.15,"actual_cost":0.12,"billing_type":2,
+  "points_cost":12,"points_per_usd":100,
+  "request_type":"stream","stream":true,"openai_ws_mode":false,
+  "duration_ms":800,"first_token_ms":100,"created_at":"2026-10-01T01:00:00Z"
+}
+```
+
+`billing_type`：`0` 余额、`1` 订阅、`2` 积分。`points_cost` 为本次实际扣除的积分，`points_per_usd` 为本次结算比例，保留 8 位精度；非积分计费两项均为 0。日志不返回上游账号 ID/对象、渠道、上游模型、上游端点、上游请求标识、模型映射链或上游成本，也不返回含这些字段的嵌套对象。
 
 ### 5.7 当前登录账号的用量
 
@@ -521,18 +595,20 @@ Authorization: Bearer <access_token>
 
 也支持 `api_key_id`、`start_date`、`end_date`、`timezone`、`period=today|week|month`。账号始终取 JWT 身份，传入 `user_id` 不会改变统计对象；指定其他账号的 Key 返回 403。未指定范围和 period 时沿用用户面板默认范围：用户时区最近 7 天起始日零点至明日零点。用户日期参数允许单侧范围；完整日期范围按包含结束自然日处理。省略 timezone 沿用系统默认时区。
 
-响应字段与 5.6 的统计指标相同，但不含管理员内部账号成本、上游路径及额外的 `user_id/start_time/end_time` 字段。需要详细请求记录时调用 `GET /api/v1/usage`，使用相同时间过滤与分页参数。该用户接口接受登录 JWT；模型 API Key 的标准模型列表入口见下节。
+该普通用户接口保持原有统计字段，不增加本次网关专用的 `total_points_cost`，也不含管理员内部账号成本、上游路径及额外的 `user_id/start_time/end_time` 字段。详细请求记录使用 `GET /api/v1/usage`，沿用用户时间过滤和分页参数。该接口接受登录 JWT；模型 API Key 的模型列表入口见下节。
 
 ### 5.8 分组模型列表与同名去重
 
-管理员查询全部有效分组的模型并集，或指定一组分组：
+签名网关只查询有效专属分组（`is_exclusive=true`）的模型并集，可指定专属分组 ID：
 
 ```text
 GET /api/v1/integrations/admin/groups/models
 GET /api/v1/integrations/admin/groups/models?group_ids=12,18
 ```
 
-`group_ids` 是可选的逗号分隔正整数 ID；非法值返回 400，找不到的分组返回 404。空模型集合返回空数组，不补充默认模型。
+`group_ids` 是可选的逗号分隔正整数 ID；非法值返回 400，找不到、非专属或非有效的分组返回 404。空模型集合返回空数组，不补充默认模型。
+
+网关 `GET /api/v1/integrations/admin/groups` 和 `/groups/all` 同样只返回专属分组。分页 `total` 为专属分组数；传 `is_exclusive=false` 也不能取消限制。原平台、状态、搜索和排序参数继续生效；`/groups/all?include_inactive=true` 可返回停用的专属分组。后台管理员原路径列表保留既有规则。
 
 查询某账号有权使用的分组模型，或进一步限定到其指定 Key：
 
@@ -547,7 +623,7 @@ GET /api/v1/integrations/admin/users/123/models?api_key_id=456
 {"object":"list","models":[{"id":"gpt-5","object":"model","group_ids":[12,18]},{"id":"gpt-5-mini","object":"model","group_ids":[18]}]}
 ```
 
-同一个公开模型 ID（完全相同、区分大小写）只返回一次，`group_ids` 合并来源分组并按数值排序，模型按 ID 排序。公开别名不同则保留多条；不会按显示名称模糊合并。按账号查询只包含当前有权限的分组；指定 Key 时进一步取 Key 候选分组与当前权限的交集。分组白名单、模型映射和持久有效账号参与目录计算，临时冷却或并发占满不会改变目录。
+同一个公开模型 ID（完全相同、区分大小写）只返回一次，`group_ids` 合并来源分组并按数值排序，模型按 ID 排序。公开别名不同则保留多条；不会按显示名称模糊合并。按账号查询只包含当前有权限的有效专属分组；指定 Key 时进一步取 Key 候选分组与当前权限的交集。分组白名单、模型映射和持久有效账号参与目录计算，临时冷却或并发占满不会改变目录。
 
 模型客户端直接用 Key 获取 OpenAI 格式列表：
 
@@ -561,8 +637,8 @@ Authorization: Bearer <model-api-key>
 ### 5.9 推荐接入流程与重试
 
 1. 第三方后端保存 Admin API Key、AppID、Secret，并为每个请求生成新 Nonce 与签名。
-2. 用稳定 `external_id` 调用 provision，`api_key={"name":"default-smart"}` 即可默认智能分组；保存 `user.id` 和首次创建返回的 Key。订阅组首次开通先分配订阅，再创建 Key。
-3. 后续充值调用余额 `operation=add`，用订单号生成固定幂等键。
+2. 用业务操作对应的稳定幂等键调用 provision，`api_key={"name":"default-smart"}` 默认智能分组；保存 `user.id`、生成邮箱和返回的 Key。外部编号仅为元数据，业务系统自行维护用户对应关系。首次订阅在创建 Key 前分配。
+3. 后续金额充值调用余额接口，积分充值调用 5.3.1 的积分接口，均使用 `operation=add`，用订单号生成固定幂等键。
 4. 额外创建 Key 使用 5.4；指定分组传 `group_id`，智能模式传 `smart_group_ids` 或省略自动取当前授权集合。
 5. 登录第三方用户面板时调用 5.5 获取 JWT；用 JWT 查询当前账号用量，或由可信后端用 5.6 查询指定账号/Key。
 6. 展示模型使用账号/Key 模型目录；实际模型客户端可直接调用 `/v1/models`。
@@ -572,7 +648,7 @@ Authorization: Bearer <model-api-key>
 ```javascript
 // 与 provision 示例择一创建账号；12、18 替换为系统中的有效分组 ID。
 const createdUser = await callAdmin('POST', '/api/v1/admin/users', {
-  body: { email: 'bob@example.com', password: 'change-me-456', allowed_groups: [12, 18] },
+  body: { external_id: 'partner:bob-1002', notes: '订单 order-1002', allowed_groups: [12, 18] },
   idempotencyKey: 'partner-user-bob-1002'
 })
 const userPath = `/api/v1/admin/users/${createdUser.id}`
@@ -580,6 +656,14 @@ const account = await callAdmin('GET', userPath)
 await callAdmin('POST', `${userPath}/balance`, {
   body: { balance: 10, operation: 'add', notes: 'order-1002' },
   idempotencyKey: 'order-1002'
+})
+// 积分订单直接增加积分；签名使用原管理员路径，callAdmin 自动转换网关 URL。
+const creditedPoints = await callAdmin('POST', `${userPath}/points`, {
+  body: { points: 1000, operation: 'add', notes: '积分订单 order-1003' },
+  idempotencyKey: 'points-order-1003'
+})
+const pointsHistory = await callAdmin('GET', `${userPath}/points-history`, {
+  query: { page: 1, page_size: 20 }
 })
 const createdKey = await callAdmin('POST', `${userPath}/api-keys`, {
   body: { name: 'default-smart' }, idempotencyKey: 'bob-key-001'
@@ -613,12 +697,20 @@ if (!currentResponse.ok || currentUsage.code !== 0) throw new Error('当前账�
 
 集成 Key 创建、provision 与登录会话的幂等响应使用 AES-256-GCM 加密保存，重试可取回首次返回的密钥或 Token。加密密钥从持久 JWT Secret 派生；多实例必须使用一致的 JWT Secret，修改该 Secret 后原幂等响应无法重放（返回 503）。幂等存储不可用时拒绝执行集成写操作。
 
+### 5.10 升级与兼容
+
+部署本次后端前必须应用 `244_integration_external_id.sql`（积分功能还依赖 `243_points_billing.sql`）；迁移会将历史备注中单个有效的 `[integration_external_id:编号]` 标记回填到独立字段，不修改备注、不合并账号，存在多个标记时不自动推断编号。邮箱、密码和名称由系统生成的规则只作用于签名网关开通接口，后台管理员界面保持原有创建规则。
+
+旧调用方需要停止依赖外部编号认领账号和响应中的上游字段；创建成功后保存系统数字 ID。相同操作重试必须沿用原幂等键，新的幂等键会创建新账号，外部编号重复不会阻止创建。常规账号自助注册不受影响。
+
 ## 6. 常见错误
 
 | HTTP 状态码 | 错误码或原因 | 含义 |
 | --- | --- | --- |
 | 400 | 参数错误 | 缺少必填字段、非法分组、无可用智能分组、时间格式或范围错误。 |
 | 400 | `IDEMPOTENCY_KEY_REQUIRED` | 集成写操作缺少 `Idempotency-Key`，包括系统开启观察模式时。 |
+| 400 | `POINTS_RESERVED` | 设置或扣除积分时存在在途积分占用，等待结算后重试；增加积分允许执行。 |
+| 400 | `INVALID_POINTS_AMOUNT` | 积分数量不在允许范围内；请求参数校验也可能直接返回参数错误。 |
 | 403 | 权限不足 | 分组未授权；签发登录 Token 的目标为管理员、停用账号或启用了 TOTP。 |
 | 404 | 账号、Key 或分组不存在 | 包括为某账号查询不属于它的 Key。 |
 | 401 | `ADMIN_API_KEY_GATEWAY_REQUIRED` | 直接使用 API Key 调用原管理员入口，必须改用集成网关并提供 App 签名。 |
@@ -628,6 +720,7 @@ if (!currentResponse.ok || currentUsage.code !== 0) throw new Error('当前账�
 | 403 | `INTEGRATION_ROUTE_FORBIDDEN` | 请求了禁止第三方调用的管理员路径。 |
 | 409 | `INTEGRATION_NONCE_REPLAYED` | Nonce 已使用，判定为重放请求。 |
 | 409 | 幂等冲突 | 相同 `Idempotency-Key` 被用于不同请求内容。 |
+| 409 | `POINTS_OPERATION_CONFLICT` | 积分流水中的同一操作已记录不同的数量或备注，即使协调幂等记录过期也拒绝重复入账。 |
 | 503 | `INTEGRATION_AUTH_UNAVAILABLE` | 认证配置存储不可用，服务端拒绝请求。 |
 | 503 | `INTEGRATION_NONCE_STORE_UNAVAILABLE` | Redis 不可用，服务端拒绝请求以确保重放防护不会失效。 |
 | 503 | `IDEMPOTENCY_STORE_UNAVAILABLE` | 幂等存储不可用，或原加密响应无法解密。保存响应失败时业务可能已执行；恢复存储后复用原幂等键查询，不要改用新键重复创建或充值。 |

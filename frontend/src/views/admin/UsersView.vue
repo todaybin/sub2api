@@ -432,6 +432,9 @@
             </span>
           </template>
 
+          <template #cell-points_balance="{ row }">
+            <button class="font-medium text-primary-600 underline decoration-dashed" @click="pointsUser = row">{{ (row.points_balance ?? 0).toLocaleString(undefined, { maximumFractionDigits: 8 }) }}</button>
+          </template>
           <template #cell-balance="{ value, row }">
             <div class="flex items-center gap-2">
               <div class="group relative">
@@ -784,6 +787,7 @@
     />
     <UserApiKeysModal :show="showApiKeysModal" :user="viewingUser" @close="closeApiKeysModal" />
     <UserAllowedGroupsModal :show="showAllowedGroupsModal" :user="allowedGroupsUser" @close="closeAllowedGroupsModal" @success="loadUsers" />
+    <UserPointsModal :show="!!pointsUser" :user="pointsUser" @close="pointsUser = null" @success="loadUsers" />
     <UserBalanceModal :show="showBalanceModal" :user="balanceUser" :operation="balanceOperation" @close="closeBalanceModal" @success="loadUsers" />
     <UserBalanceHistoryModal :show="showBalanceHistoryModal" :user="balanceHistoryUser" @close="closeBalanceHistoryModal" @deposit="handleDepositFromHistory" @withdraw="handleWithdrawFromHistory" />
     <GroupReplaceModal :show="showGroupReplaceModal" :user="groupReplaceUser" :old-group="groupReplaceOldGroup" :all-groups="allGroups" @close="closeGroupReplaceModal" @success="loadUsers" />
@@ -827,6 +831,7 @@ import BulkEditUserModal from '@/components/admin/user/BulkEditUserModal.vue'
 import UserPlatformQuotaModal from '@/components/admin/user/UserPlatformQuotaModal.vue'
 import UserApiKeysModal from '@/components/admin/user/UserApiKeysModal.vue'
 import UserAllowedGroupsModal from '@/components/admin/user/UserAllowedGroupsModal.vue'
+import UserPointsModal from '@/components/admin/user/UserPointsModal.vue'
 import UserBalanceModal from '@/components/admin/user/UserBalanceModal.vue'
 import UserBalanceHistoryModal from '@/components/admin/user/UserBalanceHistoryModal.vue'
 import GroupReplaceModal from '@/components/admin/user/GroupReplaceModal.vue'
@@ -890,6 +895,7 @@ const allColumns = computed<Column[]>(() => [
   { key: 'role', label: t('admin.users.columns.role'), sortable: true },
   { key: 'groups', label: t('admin.users.columns.groups'), sortable: false },
   { key: 'subscriptions', label: t('admin.users.columns.subscriptions'), sortable: false },
+  { key: 'points_balance', label: t('common.points.label'), sortable: false },
   { key: 'balance', label: t('admin.users.columns.balance'), sortable: true },
   { key: 'balance_platform_quota', label: t('admin.users.columns.balancePlatformQuota'), sortable: false },
   { key: 'usage', label: t('admin.users.columns.usage'), sortable: false },
@@ -1551,6 +1557,7 @@ const groupReplaceUser = ref<AdminUser | null>(null)
 const groupReplaceOldGroup = ref<{ id: number; name: string } | null>(null)
 
 // Balance (Deposit/Withdraw) modal state
+const pointsUser = ref<AdminUser | null>(null)
 const showBalanceModal = ref(false)
 const balanceUser = ref<AdminUser | null>(null)
 const balanceOperation = ref<'add' | 'subtract'>('add')

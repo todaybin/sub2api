@@ -9,6 +9,7 @@ import (
 const (
 	BillingTypeBalance      int8 = 0 // 钱包余额
 	BillingTypeSubscription int8 = 1 // 订阅套餐
+	BillingTypePoints       int8 = 2
 )
 
 type RequestType int16
@@ -102,12 +103,14 @@ func ApplyLegacyRequestFields(requestType RequestType, fallbackStream bool, fall
 }
 
 type UsageLog struct {
-	ID        int64
-	UserID    int64
-	APIKeyID  int64
-	AccountID int64
-	RequestID string
-	Model     string
+	PointsPerUSD float64
+	PointsCost   float64
+	ID           int64
+	UserID       int64
+	APIKeyID     int64
+	AccountID    int64
+	RequestID    string
+	Model        string
 	// RequestedModel is the client-requested model name recorded for stable user/admin display.
 	// Empty should be treated as Model for backward compatibility with historical rows.
 	RequestedModel string

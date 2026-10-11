@@ -520,6 +520,9 @@ func (s *APIKeyService) incrementAPIKeyErrorCount(ctx context.Context, userID in
 // 对于订阅类型分组：检查用户是否有有效订阅
 // 对于标准类型分组：使用原有的 AllowedGroups 和 IsExclusive 逻辑
 func (s *APIKeyService) canUserBindGroup(ctx context.Context, user *User, group *Group) (bool, error) {
+	if group.AllowPointsBilling && user.CanBindGroup(group.ID, group.IsExclusive) {
+		return true, nil
+	}
 	// 订阅类型分组：需要有效订阅
 	if group.IsSubscriptionType() {
 		if s.userSubRepo == nil {
@@ -1310,7 +1313,7 @@ func (s *APIKeyService) PrepareSmartAPIKey(ctx context.Context, apiKey *APIKey) 
 					subscribed[sub.GroupID] = true
 				}
 			}
-			allowed = subscribed[group.ID]
+			allowed = subscribed[group.ID] || (group.AllowPointsBilling && allowed)
 		}
 		if allowed {
 			apiKey.SmartGroups = append(apiKey.SmartGroups, group)
@@ -1323,7 +1326,7 @@ func (s *APIKeyService) PrepareSmartAPIKey(ctx context.Context, apiKey *APIKey) 
 func (s *APIKeyService) canUserBindGroupInternal(user *User, group *Group, subscribedGroupIDs map[int64]bool) bool {
 	// 订阅类型分组：需要有效订阅
 	if group.IsSubscriptionType() {
-		return subscribedGroupIDs[group.ID]
+		return subscribedGroupIDs[group.ID] || (group.AllowPointsBilling && user.CanBindGroup(group.ID, group.IsExclusive))
 	}
 	// 标准类型分组：使用原有逻辑
 	return user.CanBindGroup(group.ID, group.IsExclusive)

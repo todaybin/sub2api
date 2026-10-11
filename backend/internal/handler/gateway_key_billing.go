@@ -15,6 +15,10 @@ import (
 const keyBillingInfoSchemaVersion = 1
 
 type keyBillingInfoResponse struct {
+	AllowPointsBilling      bool                     `json:"allow_points_billing"`
+	PointsBalance           *float64                 `json:"points_balance,omitempty"`
+	PointsReserved          *float64                 `json:"points_reserved,omitempty"`
+	PointsPerUSD            *float64                 `json:"points_per_usd,omitempty"`
 	Object                  string                   `json:"object"`
 	SchemaVersion           int                      `json:"schema_version"`
 	BillingScope            string                   `json:"billing_scope"`
@@ -92,7 +96,18 @@ func (h *GatewayHandler) populateKeyBillingAccountInfo(c *gin.Context, apiKey *s
 	}
 
 	periodStart := now
-	if apiKey.Group.IsSubscriptionType() {
+	if apiKey.Group.AllowPointsBilling && h.billingCacheService != nil {
+		info, err := h.billingCacheService.GetPointsAccount(c.Request.Context(), apiKey.UserID)
+		if err != nil {
+			return err
+		}
+		result.AllowPointsBilling = true
+		result.PointsBalance = &info.Balance
+		result.PointsReserved = &info.Reserved
+		result.PointsPerUSD = &info.Rate
+	}
+	_, hasSubscription := middleware2.GetSubscriptionFromContext(c)
+	if apiKey.Group.IsSubscriptionType() && (!apiKey.Group.AllowPointsBilling || hasSubscription) {
 		result.BillingMode = "subscription"
 		subscription, ok := middleware2.GetSubscriptionFromContext(c)
 		if !ok || subscription == nil {
@@ -102,6 +117,9 @@ func (h *GatewayHandler) populateKeyBillingAccountInfo(c *gin.Context, apiKey *s
 		periodStart = subscription.StartsAt
 	} else {
 		result.BillingMode = "balance"
+		if result.PointsBalance != nil && result.PointsReserved != nil && *result.PointsBalance > *result.PointsReserved {
+			result.BillingMode = "points"
+		}
 		if apiKey.User != nil {
 			balance := apiKey.User.Balance
 			result.Balance = &balance
@@ -191,23 +209,37 @@ func (h *GatewayHandler) smartKeyBillingInfo(c *gin.Context, key *service.APIKey
 			return
 		}
 		info := buildKeyBillingInfo(&local, rate, now)
+		if group.AllowPointsBilling && h.billingCacheService != nil {
+			points, err := h.billingCacheService.GetPointsAccount(c.Request.Context(), key.UserID)
+			if err != nil {
+				h.errorResponse(c, http.StatusInternalServerError, "api_error", "Billing information is unavailable")
+				return
+			}
+			info.AllowPointsBilling = true
+			info.PointsBalance, info.PointsReserved, info.PointsPerUSD = &points.Balance, &points.Reserved, &points.Rate
+		}
 		mode := "balance"
 		available := key.User != nil && !middleware2.APIKeyBalanceBelowAuthThreshold(key.User.Balance, h.cfg)
+		if info.PointsBalance != nil && *info.PointsBalance > *info.PointsReserved && *info.PointsPerUSD > 0 {
+			mode, available = "points", true
+		}
 		var subID *int64
 		if group.IsSubscriptionType() {
-			mode = "subscription"
 			if h.smartSubscriptions == nil {
 				h.errorResponse(c, http.StatusInternalServerError, "api_error", "Subscription information is unavailable")
 				return
 			}
 			sub, err := h.smartSubscriptions.GetActiveSubscription(c.Request.Context(), key.UserID, group.ID)
 			if errors.Is(err, service.ErrSubscriptionNotFound) || errors.Is(err, service.ErrSubscriptionExpired) || errors.Is(err, service.ErrSubscriptionSuspended) {
-				available = false
+				if !group.AllowPointsBilling {
+					mode, available = "subscription", false
+				}
 			} else if err != nil {
 				h.errorResponse(c, http.StatusInternalServerError, "api_error", "Subscription information is unavailable")
 				return
 			}
 			if sub != nil {
+				mode = "subscription"
 				subID = &sub.ID
 				maintenance, limitErr := h.smartSubscriptions.ValidateAndCheckLimits(sub, group)
 				if maintenance {

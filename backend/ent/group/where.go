@@ -165,6 +165,11 @@ func Platform(v string) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldPlatform, v))
 }
 
+// AllowPointsBilling applies equality check predicate on the "allow_points_billing" field. It's identical to AllowPointsBillingEQ.
+func AllowPointsBilling(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldAllowPointsBilling, v))
+}
+
 // SubscriptionType applies equality check predicate on the "subscription_type" field. It's identical to SubscriptionTypeEQ.
 func SubscriptionType(v string) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldSubscriptionType, v))
@@ -1523,6 +1528,16 @@ func PlatformEqualFold(v string) predicate.Group {
 // PlatformContainsFold applies the ContainsFold predicate on the "platform" field.
 func PlatformContainsFold(v string) predicate.Group {
 	return predicate.Group(sql.FieldContainsFold(FieldPlatform, v))
+}
+
+// AllowPointsBillingEQ applies the EQ predicate on the "allow_points_billing" field.
+func AllowPointsBillingEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldAllowPointsBilling, v))
+}
+
+// AllowPointsBillingNEQ applies the NEQ predicate on the "allow_points_billing" field.
+func AllowPointsBillingNEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldAllowPointsBilling, v))
 }
 
 // SubscriptionTypeEQ applies the EQ predicate on the "subscription_type" field.

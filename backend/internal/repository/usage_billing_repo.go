@@ -31,6 +31,11 @@ func (r *usageBillingRepository) Apply(ctx context.Context, cmd *service.UsageBi
 	if cmd.RequestID == "" {
 		return nil, service.ErrUsageBillingRequestIDRequired
 	}
+	if cmd.PointsReservationID != "" {
+		if err := r.preparePointsSettlement(ctx, cmd); err != nil {
+			return nil, err
+		}
+	}
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -47,6 +52,16 @@ func (r *usageBillingRepository) Apply(ctx context.Context, cmd *service.UsageBi
 		return nil, err
 	}
 	if !applied {
+		if cmd.PointsReservationID != "" {
+			_, err := tx.ExecContext(ctx, `WITH released AS (UPDATE points_reservations SET state='released' WHERE id=$1 AND state='pending' RETURNING user_id,amount) UPDATE users u SET points_reserved=u.points_reserved-released.amount FROM released WHERE u.id=released.user_id`, cmd.PointsReservationID)
+			if err != nil {
+				return nil, err
+			}
+			if err = tx.Commit(); err != nil {
+				return nil, err
+			}
+			tx = nil
+		}
 		return &service.UsageBillingApplyResult{Applied: false}, nil
 	}
 
@@ -172,6 +187,11 @@ func (r *usageBillingRepository) applyBatchImageBalanceHold(
 }
 
 func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, tx *sql.Tx, cmd *service.UsageBillingCommand, result *service.UsageBillingApplyResult) error {
+	if cmd.PointsReservationID != "" {
+		if err := settleUsagePoints(ctx, tx, cmd); err != nil {
+			return err
+		}
+	}
 	if cmd.SubscriptionCost > 0 && cmd.SubscriptionID != nil {
 		if err := incrementUsageBillingSubscription(ctx, tx, *cmd.SubscriptionID, cmd.SubscriptionCost); err != nil {
 			return err

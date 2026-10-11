@@ -34,6 +34,8 @@ func TestIntegrationRouteForbidden(t *testing.T) {
 
 	for _, path := range []string{
 		"/users/123/balance",
+		"/users/123/points",
+		"/users/123/points-history",
 		"/users/provision",
 		"/subscriptions/assign",
 		"/groups",

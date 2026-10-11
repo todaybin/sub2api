@@ -213,6 +213,15 @@ func (h *UsageHandler) List(c *gin.Context) {
 		return
 	}
 
+	if isIntegrationRequest(c) {
+		out := make([]dto.IntegrationUsageLog, 0, len(records))
+		for i := range records {
+			out = append(out, *dto.IntegrationUsageLogFromService(&records[i]))
+		}
+		response.Paginated(c, out, result.Total, page, pageSize)
+		return
+	}
+
 	out := make([]dto.AdminUsageLog, 0, len(records))
 	for i := range records {
 		out = append(out, *dto.UsageLogFromServiceAdmin(&records[i]))
@@ -383,6 +392,11 @@ func (h *UsageHandler) Stats(c *gin.Context) {
 		}
 		stats = s
 		c.Header("X-Usage-Stats-Cache", cacheStatusValue(hit))
+	}
+
+	if isIntegrationRequest(c) {
+		response.Success(c, dto.IntegrationUsageStatsFromStats(stats))
+		return
 	}
 
 	response.Success(c, stats)

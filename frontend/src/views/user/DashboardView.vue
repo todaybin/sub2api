@@ -3,6 +3,21 @@
     <div class="space-y-6">
       <div v-if="loading" class="flex items-center justify-center py-12"><LoadingSpinner /></div>
       <template v-else-if="stats">
+        <div v-if="!authStore.isSimpleMode" class="card p-4">
+          <div class="flex items-center justify-between gap-4">
+            <div><p class="text-sm text-gray-500">{{ t('common.points.label') }}</p><p class="text-xl font-semibold">{{ (user?.points_balance ?? 0).toLocaleString(undefined, { maximumFractionDigits: 8 }) }}</p></div>
+            <div class="text-sm text-gray-500">{{ t('common.points.reserved') }}: {{ user?.points_reserved ?? 0 }} · {{ t('common.points.available') }}: {{ Math.max(0, (user?.points_balance ?? 0) - (user?.points_reserved ?? 0)).toLocaleString(undefined, { maximumFractionDigits: 8 }) }}</div>
+            <button class="btn btn-secondary" @click="showPointsHistory = true">{{ t('common.points.history') }}</button>
+          </div>
+          <p v-if="(user?.points_balance ?? 0) < 0" class="mt-2 text-sm text-amber-600">{{ t('common.points.debtHint') }}</p>
+          <p v-if="paymentSummary" class="mt-3 text-sm text-gray-500">
+            {{ t('common.points.spent') }}: {{ paymentSummary.points_spent }}
+            · {{ t('common.points.usd') }}: ${{ paymentSummary.points_cost_usd.toFixed(8) }}
+            · {{ t('common.points.moneySpent') }}: ${{ paymentSummary.money_spent_usd.toFixed(8) }}
+          </p>
+          <p class="mt-2 text-xs text-gray-500">{{ t('common.points.costHint') }}</p>
+        </div>
+        <PointsHistoryDialog :show="showPointsHistory" @close="showPointsHistory = false" />
         <UserDashboardStats :stats="stats" :balance="user?.balance || 0" :is-simple="authStore.isSimpleMode" :platform-quotas="platformQuotas" />
         <UserDashboardCharts v-model:startDate="startDate" v-model:endDate="endDate" v-model:granularity="granularity" :loading="loadingCharts" :trend="trendData" :models="modelStats" @dateRangeChange="loadCharts" @granularityChange="loadCharts" @refresh="refreshAll" />
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -15,18 +30,29 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+import PointsHistoryDialog from '@/components/user/PointsHistoryDialog.vue'
+const { t } = useI18n()
+const showPointsHistory = ref(false)
 import { ref, computed, onMounted } from 'vue'; import { useAuthStore } from '@/stores/auth'; import { usageAPI, type UserDashboardStats as UserStatsType } from '@/api/usage'
 import AppLayout from '@/components/layout/AppLayout.vue'; import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import UserDashboardStats from '@/components/user/dashboard/UserDashboardStats.vue'; import UserDashboardCharts from '@/components/user/dashboard/UserDashboardCharts.vue'
 import UserDashboardRecentUsage from '@/components/user/dashboard/UserDashboardRecentUsage.vue'; import UserDashboardQuickActions from '@/components/user/dashboard/UserDashboardQuickActions.vue'
 import type { UsageLog, TrendDataPoint, ModelStat, PlatformQuotaItem } from '@/types'
 import { getMyPlatformQuotas } from '@/api/user'
+import { apiClient } from '@/api/client'
 import { formatDateLocalInput } from '@/utils/format'
 
 const authStore = useAuthStore(); const user = computed(() => authStore.user)
 const stats = ref<UserStatsType | null>(null); const loading = ref(false); const loadingUsage = ref(false); const loadingCharts = ref(false)
 const trendData = ref<TrendDataPoint[]>([]); const modelStats = ref<ModelStat[]>([]); const recentUsage = ref<UsageLog[]>([])
 const platformQuotas = ref<PlatformQuotaItem[] | null>(null)
+const paymentSummary = ref<{ points_spent: number; points_cost_usd: number; money_spent_usd: number } | null>(null)
+const loadPaymentSummary = async () => {
+  if (authStore.isSimpleMode) return
+  try { paymentSummary.value = (await apiClient.get('/user/points-summary')).data }
+  catch (error) { console.error('Failed to load payment summary:', error) }
+}
 
 const startDate = ref(formatDateLocalInput(new Date(Date.now() - 6 * 86400000))); const endDate = ref(formatDateLocalInput(new Date())); const granularity = ref('day')
 
@@ -34,7 +60,7 @@ const loadStats = async () => { loading.value = true; try { await authStore.refr
 const loadCharts = async () => { loadingCharts.value = true; try { const res = await Promise.all([usageAPI.getDashboardTrend({ start_date: startDate.value, end_date: endDate.value, granularity: granularity.value as any }), usageAPI.getDashboardModels({ start_date: startDate.value, end_date: endDate.value })]); trendData.value = res[0].trend || []; modelStats.value = res[1].models || [] } catch (error) { console.error('Failed to load charts:', error) } finally { loadingCharts.value = false } }
 const loadRecent = async () => { loadingUsage.value = true; try { const res = await usageAPI.getByDateRange(startDate.value, endDate.value); recentUsage.value = res.items.slice(0, 5) } catch (error) { console.error('Failed to load recent usage:', error) } finally { loadingUsage.value = false } }
 const loadPlatformQuotas = async () => { try { const data = await getMyPlatformQuotas(); platformQuotas.value = data.platform_quotas ?? [] } catch (error) { console.warn('Failed to load platform quotas:', error); platformQuotas.value = [] } }
-const refreshAll = () => { loadStats(); loadCharts(); loadRecent(); loadPlatformQuotas() }
+const refreshAll = () => { loadStats(); loadCharts(); loadRecent(); loadPlatformQuotas(); loadPaymentSummary() }
 
 onMounted(() => { refreshAll() })
 </script>

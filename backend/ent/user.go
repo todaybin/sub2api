@@ -31,6 +31,10 @@ type User struct {
 	Role string `json:"role,omitempty"`
 	// Balance holds the value of the "balance" field.
 	Balance float64 `json:"balance,omitempty"`
+	// PointsBalance holds the value of the "points_balance" field.
+	PointsBalance float64 `json:"points_balance,omitempty"`
+	// PointsReserved holds the value of the "points_reserved" field.
+	PointsReserved float64 `json:"points_reserved,omitempty"`
 	// FrozenBalance holds the value of the "frozen_balance" field.
 	FrozenBalance float64 `json:"frozen_balance,omitempty"`
 	// Concurrency holds the value of the "concurrency" field.
@@ -41,6 +45,8 @@ type User struct {
 	Username string `json:"username,omitempty"`
 	// Notes holds the value of the "notes" field.
 	Notes string `json:"notes,omitempty"`
+	// ExternalID holds the value of the "external_id" field.
+	ExternalID string `json:"external_id,omitempty"`
 	// TotpSecretEncrypted holds the value of the "totp_secret_encrypted" field.
 	TotpSecretEncrypted *string `json:"totp_secret_encrypted,omitempty"`
 	// TotpEnabled holds the value of the "totp_enabled" field.
@@ -241,11 +247,11 @@ func (*User) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case user.FieldTotpEnabled, user.FieldRestrictPublicGroups, user.FieldBalanceNotifyEnabled:
 			values[i] = new(sql.NullBool)
-		case user.FieldBalance, user.FieldFrozenBalance, user.FieldBalanceNotifyThreshold, user.FieldTotalRecharged:
+		case user.FieldBalance, user.FieldPointsBalance, user.FieldPointsReserved, user.FieldFrozenBalance, user.FieldBalanceNotifyThreshold, user.FieldTotalRecharged:
 			values[i] = new(sql.NullFloat64)
 		case user.FieldID, user.FieldConcurrency, user.FieldRpmLimit:
 			values[i] = new(sql.NullInt64)
-		case user.FieldEmail, user.FieldPasswordHash, user.FieldRole, user.FieldStatus, user.FieldUsername, user.FieldNotes, user.FieldTotpSecretEncrypted, user.FieldSignupSource, user.FieldBalanceNotifyThresholdType, user.FieldBalanceNotifyExtraEmails:
+		case user.FieldEmail, user.FieldPasswordHash, user.FieldRole, user.FieldStatus, user.FieldUsername, user.FieldNotes, user.FieldExternalID, user.FieldTotpSecretEncrypted, user.FieldSignupSource, user.FieldBalanceNotifyThresholdType, user.FieldBalanceNotifyExtraEmails:
 			values[i] = new(sql.NullString)
 		case user.FieldCreatedAt, user.FieldUpdatedAt, user.FieldDeletedAt, user.FieldTotpEnabledAt, user.FieldLastLoginAt, user.FieldLastActiveAt:
 			values[i] = new(sql.NullTime)
@@ -313,6 +319,18 @@ func (_m *User) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Balance = value.Float64
 			}
+		case user.FieldPointsBalance:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field points_balance", values[i])
+			} else if value.Valid {
+				_m.PointsBalance = value.Float64
+			}
+		case user.FieldPointsReserved:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field points_reserved", values[i])
+			} else if value.Valid {
+				_m.PointsReserved = value.Float64
+			}
 		case user.FieldFrozenBalance:
 			if value, ok := values[i].(*sql.NullFloat64); !ok {
 				return fmt.Errorf("unexpected type %T for field frozen_balance", values[i])
@@ -342,6 +360,12 @@ func (_m *User) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field notes", values[i])
 			} else if value.Valid {
 				_m.Notes = value.String
+			}
+		case user.FieldExternalID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field external_id", values[i])
+			} else if value.Valid {
+				_m.ExternalID = value.String
 			}
 		case user.FieldTotpSecretEncrypted:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -555,6 +579,12 @@ func (_m *User) String() string {
 	builder.WriteString("balance=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Balance))
 	builder.WriteString(", ")
+	builder.WriteString("points_balance=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PointsBalance))
+	builder.WriteString(", ")
+	builder.WriteString("points_reserved=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PointsReserved))
+	builder.WriteString(", ")
 	builder.WriteString("frozen_balance=")
 	builder.WriteString(fmt.Sprintf("%v", _m.FrozenBalance))
 	builder.WriteString(", ")
@@ -569,6 +599,9 @@ func (_m *User) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("notes=")
 	builder.WriteString(_m.Notes)
+	builder.WriteString(", ")
+	builder.WriteString("external_id=")
+	builder.WriteString(_m.ExternalID)
 	builder.WriteString(", ")
 	if v := _m.TotpSecretEncrypted; v != nil {
 		builder.WriteString("totp_secret_encrypted=")

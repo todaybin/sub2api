@@ -267,7 +267,7 @@ func (h *GatewayHandler) admitSmartGroup(c *gin.Context, key *service.APIKey, gr
 		return false, nil, errors.New("key user unavailable")
 	}
 	if !group.IsSubscriptionType() {
-		return !middleware.APIKeyBalanceBelowAuthThreshold(key.User.Balance, h.cfg), nil, nil
+		return group.AllowPointsBilling || !middleware.APIKeyBalanceBelowAuthThreshold(key.User.Balance, h.cfg), nil, nil
 	}
 	if subscriptions == nil {
 		return false, nil, errors.New("subscription service unavailable")
@@ -275,7 +275,7 @@ func (h *GatewayHandler) admitSmartGroup(c *gin.Context, key *service.APIKey, gr
 	ctx := c.Request.Context()
 	sub, err := subscriptions.GetActiveSubscription(ctx, key.UserID, group.ID)
 	if errors.Is(err, service.ErrSubscriptionNotFound) || errors.Is(err, service.ErrSubscriptionExpired) || errors.Is(err, service.ErrSubscriptionSuspended) {
-		return false, nil, nil
+		return group.AllowPointsBilling, nil, nil
 	}
 	if err != nil {
 		return false, nil, err

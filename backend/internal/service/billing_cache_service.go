@@ -119,6 +119,7 @@ type BillingCacheService struct {
 	cacheWriteStopOnce sync.Once
 	cacheWriteMu       sync.RWMutex
 	stopped            atomic.Bool
+	pointsRecoveryStop chan struct{}
 	balanceLoadSF      singleflight.Group
 	quotaLoadSF        singleflight.Group
 	// 丢弃日志节流计数器（减少高负载下日志噪音）
@@ -150,6 +151,8 @@ func NewBillingCacheService(
 		userPlatformQuotaRepo: userPlatformQuotaRepo,
 	}
 	svc.circuitBreaker = newBillingCircuitBreaker(cfg.Billing.CircuitBreaker)
+	svc.pointsRecoveryStop = make(chan struct{})
+	svc.startPointsRecovery()
 	svc.startCacheWriteWorkers()
 	return svc
 }
@@ -158,6 +161,9 @@ func NewBillingCacheService(
 func (s *BillingCacheService) Stop() {
 	s.cacheWriteStopOnce.Do(func() {
 		s.stopped.Store(true)
+		if s.pointsRecoveryStop != nil {
+			close(s.pointsRecoveryStop)
+		}
 
 		s.cacheWriteMu.Lock()
 		ch := s.cacheWriteChan
@@ -754,8 +760,14 @@ func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user 
 			return err
 		}
 	} else {
-		if err := s.checkBalanceEligibility(ctx, user.ID); err != nil {
-			return err
+		hasPoints, err := s.HasPoints(ctx, user.ID, group)
+		if err != nil {
+			return ErrBillingServiceUnavailable
+		}
+		if !hasPoints {
+			if err := s.checkBalanceEligibility(ctx, user.ID); err != nil {
+				return err
+			}
 		}
 	}
 

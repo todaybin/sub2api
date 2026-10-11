@@ -101,6 +101,7 @@
                     <p v-if="redeemResult.type === 'balance'" class="font-medium">
                       {{ t('redeem.added') }}: ${{ redeemResult.value.toFixed(2) }}
                     </p>
+                    <p v-else-if="redeemResult.type === 'points'" class="font-medium">{{ t('redeem.added') }}: {{ redeemResult.value }} {{ t('common.points.label') }}</p>
                     <p v-else-if="redeemResult.type === 'concurrency'" class="font-medium">
                       {{ t('redeem.added') }}: {{ redeemResult.value }}
                       {{ t('redeem.concurrentRequests') }}
@@ -420,6 +421,7 @@ const isAdminAdjustment = (type: string) => {
 }
 
 const getHistoryItemTitle = (item: RedeemHistoryItem) => {
+  if (item.type === 'points') return t('common.points.redeemed')
   if (item.type === 'balance') {
     return t('redeem.balanceAddedRedeem')
   } else if (item.type === 'admin_balance') {
@@ -435,6 +437,7 @@ const getHistoryItemTitle = (item: RedeemHistoryItem) => {
 }
 
 const formatHistoryValue = (item: RedeemHistoryItem) => {
+  if (item.type === 'points') return `+${item.value} ${t('common.points.label')}`
   if (isBalanceType(item.type)) {
     const sign = item.value >= 0 ? '+' : ''
     return `${sign}$${item.value.toFixed(2)}`

@@ -754,6 +754,10 @@
         </div>
 
         <!-- Subscription Configuration -->
+        <div class="flex items-center justify-between border-t pt-4">
+          <div><label class="input-label">{{ t('common.points.allow') }}</label><p class="input-hint">{{ t('common.points.allowHint') }}</p></div>
+          <Toggle v-model="createForm.allow_points_billing" />
+        </div>
         <div class="mt-4 border-t pt-4">
           <div>
             <label class="input-label">{{
@@ -2408,6 +2412,10 @@
         </div>
 
         <!-- Subscription Configuration -->
+        <div class="flex items-center justify-between border-t pt-4">
+          <div><label class="input-label">{{ t('common.points.allow') }}</label><p class="input-hint">{{ t('common.points.allowHint') }}</p></div>
+          <Toggle v-model="editForm.allow_points_billing" />
+        </div>
         <div class="mt-4 border-t pt-4">
           <div>
             <label class="input-label">{{
@@ -5013,6 +5021,7 @@ const createForm = reactive({
   rate_mode: "fixed" as GroupRateMode,
   dynamic_rate_markup_percent: 0,
   is_exclusive: false,
+  allow_points_billing: false,
   subscription_type: "standard" as SubscriptionType,
   daily_limit_usd: null as number | null,
   weekly_limit_usd: null as number | null,
@@ -5380,6 +5389,7 @@ const editForm = reactive({
   dynamic_rate_markup_percent: 0,
   is_exclusive: false,
   status: "active" as "active" | "inactive",
+  allow_points_billing: false,
   subscription_type: "standard" as SubscriptionType,
   daily_limit_usd: null as number | null,
   weekly_limit_usd: null as number | null,
@@ -5844,6 +5854,7 @@ const closeCreateModal = () => {
   createForm.rate_mode = "fixed";
   createForm.dynamic_rate_markup_percent = 0;
   createForm.is_exclusive = false;
+  createForm.allow_points_billing = false;
   createForm.subscription_type = "standard";
   createForm.daily_limit_usd = null;
   createForm.weekly_limit_usd = null;
@@ -6128,6 +6139,7 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.dynamic_rate_markup_percent = group.dynamic_rate_markup_percent ?? 0;
   editForm.is_exclusive = group.is_exclusive;
   editForm.status = group.status;
+  editForm.allow_points_billing = group.allow_points_billing ?? false;
   editForm.subscription_type = group.subscription_type || "standard";
   editForm.daily_limit_usd = group.daily_limit_usd;
   editForm.weekly_limit_usd = group.weekly_limit_usd;

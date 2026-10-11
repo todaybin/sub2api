@@ -285,6 +285,17 @@ func (h *UserHandler) getIntegrationUserUsage(c *gin.Context, id int64) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	if isIntegrationRequest(c) {
+		response.Success(c, struct {
+			*dto.IntegrationUsageStats
+			UserID    int64     `json:"user_id"`
+			APIKeyID  int64     `json:"api_key_id,omitempty"`
+			StartTime time.Time `json:"start_time"`
+			EndTime   time.Time `json:"end_time"`
+		}{dto.IntegrationUsageStatsFromStats(stats), id, filters.APIKeyID, start.UTC(), end.UTC()})
+		return
+	}
+
 	response.Success(c, struct {
 		*usagestats.UsageStats
 		UserID    int64     `json:"user_id"`
@@ -358,6 +369,9 @@ func (h *UserHandler) GetGroupModels(c *gin.Context) {
 	}
 	filtered := []service.Group{}
 	for _, g := range groups {
+		if isIntegrationRequest(c) && (!g.IsExclusive || !g.IsActive()) {
+			continue
+		}
 		if !present || selected[g.ID] {
 			filtered = append(filtered, g)
 			delete(selected, g.ID)
@@ -373,6 +387,9 @@ func (h *UserHandler) GetGroupModels(c *gin.Context) {
 func (h *UserHandler) respondIntegrationModels(c *gin.Context, groups []service.Group) {
 	seen := map[string][]int64{}
 	for _, group := range groups {
+		if isIntegrationRequest(c) && (!group.IsExclusive || !group.IsActive()) {
+			continue
+		}
 		ids, err := h.integrationModels.SmartModelCatalog(c.Request.Context(), &group)
 		if err != nil {
 			response.ErrorFrom(c, err)

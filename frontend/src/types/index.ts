@@ -64,6 +64,8 @@ export interface UserProfileSourceContext {
 }
 
 export interface User {
+  points_balance?: number
+  points_reserved?: number
   id: number
   username: string
   email: string
@@ -102,6 +104,8 @@ export interface User {
 }
 
 export interface AdminUser extends User {
+  // Caller-owned metadata; not an account identity or uniqueness key.
+  external_id?: string
   // 管理员备注（普通用户接口不返回）
   notes: string
   last_used_at?: string | null
@@ -568,6 +572,7 @@ export interface ReasoningEffortMapping {
 }
 
 export interface Group {
+  allow_points_billing?: boolean
   id: number
   name: string
   description: string | null
@@ -811,6 +816,7 @@ export interface UpdateApiKeyRequest {
 }
 
 export interface CreateGroupRequest {
+  allow_points_billing?: boolean
   name: string
   description?: string | null
   platform?: GroupPlatform
@@ -878,6 +884,7 @@ export interface CreateGroupRequest {
 }
 
 export interface UpdateGroupRequest {
+  allow_points_billing?: boolean
   name?: string
   description?: string | null
   platform?: GroupPlatform
@@ -1089,7 +1096,11 @@ export interface UpstreamBillingData {
   object?: 'sub2api.key_billing'
   schema_version?: 1
   billing_scope?: 'token'
-  billing_mode?: 'balance' | 'subscription'
+  billing_mode?: 'balance' | 'subscription' | 'points'
+  allow_points_billing?: boolean
+  points_balance?: number
+  points_reserved?: number
+  points_per_usd?: number
   balance?: number
   currency?: 'USD' | 'CNY'
   balance_source?: 'sub2api_usage' | 'generic' | 'new_api'
@@ -1803,12 +1814,14 @@ export interface CodexSessionImportResult {
 
 // ==================== Usage & Redeem Types ====================
 
-export type RedeemCodeType = 'balance' | 'concurrency' | 'subscription' | 'invitation'
+export type RedeemCodeType = 'points' | 'balance' | 'concurrency' | 'subscription' | 'invitation'
 export type UsageRequestType = 'unknown' | 'sync' | 'stream' | 'ws_v2' | 'cyber' | 'live'
 export type ImageSizeSource = 'output' | 'input' | 'default' | 'legacy'
 export type ImageSizeBreakdown = Record<string, number>
 
 export interface UsageLog {
+  points_cost?: number
+  points_per_usd?: number
   id: number
   user_id: number
   api_key_id: number

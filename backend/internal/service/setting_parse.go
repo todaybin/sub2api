@@ -398,6 +398,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	}
 
 	// 解析浮点数类型
+	result.PointsPerUSD, _ = strconv.ParseFloat(settings[SettingKeyPointsPerUSD], 64)
 	if balance, err := strconv.ParseFloat(settings[SettingKeyDefaultBalance], 64); err == nil {
 		result.DefaultBalance = balance
 	} else {

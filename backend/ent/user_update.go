@@ -129,6 +129,48 @@ func (_u *UserUpdate) AddBalance(v float64) *UserUpdate {
 	return _u
 }
 
+// SetPointsBalance sets the "points_balance" field.
+func (_u *UserUpdate) SetPointsBalance(v float64) *UserUpdate {
+	_u.mutation.ResetPointsBalance()
+	_u.mutation.SetPointsBalance(v)
+	return _u
+}
+
+// SetNillablePointsBalance sets the "points_balance" field if the given value is not nil.
+func (_u *UserUpdate) SetNillablePointsBalance(v *float64) *UserUpdate {
+	if v != nil {
+		_u.SetPointsBalance(*v)
+	}
+	return _u
+}
+
+// AddPointsBalance adds value to the "points_balance" field.
+func (_u *UserUpdate) AddPointsBalance(v float64) *UserUpdate {
+	_u.mutation.AddPointsBalance(v)
+	return _u
+}
+
+// SetPointsReserved sets the "points_reserved" field.
+func (_u *UserUpdate) SetPointsReserved(v float64) *UserUpdate {
+	_u.mutation.ResetPointsReserved()
+	_u.mutation.SetPointsReserved(v)
+	return _u
+}
+
+// SetNillablePointsReserved sets the "points_reserved" field if the given value is not nil.
+func (_u *UserUpdate) SetNillablePointsReserved(v *float64) *UserUpdate {
+	if v != nil {
+		_u.SetPointsReserved(*v)
+	}
+	return _u
+}
+
+// AddPointsReserved adds value to the "points_reserved" field.
+func (_u *UserUpdate) AddPointsReserved(v float64) *UserUpdate {
+	_u.mutation.AddPointsReserved(v)
+	return _u
+}
+
 // SetFrozenBalance sets the "frozen_balance" field.
 func (_u *UserUpdate) SetFrozenBalance(v float64) *UserUpdate {
 	_u.mutation.ResetFrozenBalance()
@@ -209,6 +251,20 @@ func (_u *UserUpdate) SetNotes(v string) *UserUpdate {
 func (_u *UserUpdate) SetNillableNotes(v *string) *UserUpdate {
 	if v != nil {
 		_u.SetNotes(*v)
+	}
+	return _u
+}
+
+// SetExternalID sets the "external_id" field.
+func (_u *UserUpdate) SetExternalID(v string) *UserUpdate {
+	_u.mutation.SetExternalID(v)
+	return _u
+}
+
+// SetNillableExternalID sets the "external_id" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableExternalID(v *string) *UserUpdate {
+	if v != nil {
+		_u.SetExternalID(*v)
 	}
 	return _u
 }
@@ -1032,6 +1088,18 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AddedBalance(); ok {
 		_spec.AddField(user.FieldBalance, field.TypeFloat64, value)
 	}
+	if value, ok := _u.mutation.PointsBalance(); ok {
+		_spec.SetField(user.FieldPointsBalance, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedPointsBalance(); ok {
+		_spec.AddField(user.FieldPointsBalance, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.PointsReserved(); ok {
+		_spec.SetField(user.FieldPointsReserved, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedPointsReserved(); ok {
+		_spec.AddField(user.FieldPointsReserved, field.TypeFloat64, value)
+	}
 	if value, ok := _u.mutation.FrozenBalance(); ok {
 		_spec.SetField(user.FieldFrozenBalance, field.TypeFloat64, value)
 	}
@@ -1052,6 +1120,9 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Notes(); ok {
 		_spec.SetField(user.FieldNotes, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ExternalID(); ok {
+		_spec.SetField(user.FieldExternalID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.TotpSecretEncrypted(); ok {
 		_spec.SetField(user.FieldTotpSecretEncrypted, field.TypeString, value)
@@ -1822,6 +1893,48 @@ func (_u *UserUpdateOne) AddBalance(v float64) *UserUpdateOne {
 	return _u
 }
 
+// SetPointsBalance sets the "points_balance" field.
+func (_u *UserUpdateOne) SetPointsBalance(v float64) *UserUpdateOne {
+	_u.mutation.ResetPointsBalance()
+	_u.mutation.SetPointsBalance(v)
+	return _u
+}
+
+// SetNillablePointsBalance sets the "points_balance" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillablePointsBalance(v *float64) *UserUpdateOne {
+	if v != nil {
+		_u.SetPointsBalance(*v)
+	}
+	return _u
+}
+
+// AddPointsBalance adds value to the "points_balance" field.
+func (_u *UserUpdateOne) AddPointsBalance(v float64) *UserUpdateOne {
+	_u.mutation.AddPointsBalance(v)
+	return _u
+}
+
+// SetPointsReserved sets the "points_reserved" field.
+func (_u *UserUpdateOne) SetPointsReserved(v float64) *UserUpdateOne {
+	_u.mutation.ResetPointsReserved()
+	_u.mutation.SetPointsReserved(v)
+	return _u
+}
+
+// SetNillablePointsReserved sets the "points_reserved" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillablePointsReserved(v *float64) *UserUpdateOne {
+	if v != nil {
+		_u.SetPointsReserved(*v)
+	}
+	return _u
+}
+
+// AddPointsReserved adds value to the "points_reserved" field.
+func (_u *UserUpdateOne) AddPointsReserved(v float64) *UserUpdateOne {
+	_u.mutation.AddPointsReserved(v)
+	return _u
+}
+
 // SetFrozenBalance sets the "frozen_balance" field.
 func (_u *UserUpdateOne) SetFrozenBalance(v float64) *UserUpdateOne {
 	_u.mutation.ResetFrozenBalance()
@@ -1902,6 +2015,20 @@ func (_u *UserUpdateOne) SetNotes(v string) *UserUpdateOne {
 func (_u *UserUpdateOne) SetNillableNotes(v *string) *UserUpdateOne {
 	if v != nil {
 		_u.SetNotes(*v)
+	}
+	return _u
+}
+
+// SetExternalID sets the "external_id" field.
+func (_u *UserUpdateOne) SetExternalID(v string) *UserUpdateOne {
+	_u.mutation.SetExternalID(v)
+	return _u
+}
+
+// SetNillableExternalID sets the "external_id" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableExternalID(v *string) *UserUpdateOne {
+	if v != nil {
+		_u.SetExternalID(*v)
 	}
 	return _u
 }
@@ -2755,6 +2882,18 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	if value, ok := _u.mutation.AddedBalance(); ok {
 		_spec.AddField(user.FieldBalance, field.TypeFloat64, value)
 	}
+	if value, ok := _u.mutation.PointsBalance(); ok {
+		_spec.SetField(user.FieldPointsBalance, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedPointsBalance(); ok {
+		_spec.AddField(user.FieldPointsBalance, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.PointsReserved(); ok {
+		_spec.SetField(user.FieldPointsReserved, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedPointsReserved(); ok {
+		_spec.AddField(user.FieldPointsReserved, field.TypeFloat64, value)
+	}
 	if value, ok := _u.mutation.FrozenBalance(); ok {
 		_spec.SetField(user.FieldFrozenBalance, field.TypeFloat64, value)
 	}
@@ -2775,6 +2914,9 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.Notes(); ok {
 		_spec.SetField(user.FieldNotes, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ExternalID(); ok {
+		_spec.SetField(user.FieldExternalID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.TotpSecretEncrypted(); ok {
 		_spec.SetField(user.FieldTotpSecretEncrypted, field.TypeString, value)
