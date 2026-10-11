@@ -234,6 +234,7 @@ type AdminBoundAuthIdentityChannel struct {
 
 type CreateGroupInput struct {
 	AllowPointsBilling        bool
+	PointsPerUSD              float64
 	Name                      string
 	Description               string
 	Platform                  string
@@ -317,6 +318,7 @@ type CreateGroupInput struct {
 
 type UpdateGroupInput struct {
 	AllowPointsBilling        *bool
+	PointsPerUSD              *float64
 	Name                      string
 	Description               *string
 	Platform                  string

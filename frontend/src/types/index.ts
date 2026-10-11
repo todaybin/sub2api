@@ -573,6 +573,7 @@ export interface ReasoningEffortMapping {
 
 export interface Group {
   allow_points_billing?: boolean
+  points_per_usd?: number
   id: number
   name: string
   description: string | null
@@ -817,6 +818,7 @@ export interface UpdateApiKeyRequest {
 
 export interface CreateGroupRequest {
   allow_points_billing?: boolean
+  points_per_usd?: number
   name: string
   description?: string | null
   platform?: GroupPlatform
@@ -885,6 +887,7 @@ export interface CreateGroupRequest {
 
 export interface UpdateGroupRequest {
   allow_points_billing?: boolean
+  points_per_usd?: number
   name?: string
   description?: string | null
   platform?: GroupPlatform

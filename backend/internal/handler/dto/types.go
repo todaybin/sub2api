@@ -98,6 +98,7 @@ type APIKey struct {
 
 type Group struct {
 	AllowPointsBilling        bool       `json:"allow_points_billing"`
+	PointsPerUSD              float64    `json:"points_per_usd"`
 	ID                        int64      `json:"id"`
 	Name                      string     `json:"name"`
 	Description               string     `json:"description"`

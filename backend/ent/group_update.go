@@ -394,6 +394,27 @@ func (_u *GroupUpdate) SetNillableAllowPointsBilling(v *bool) *GroupUpdate {
 	return _u
 }
 
+// SetPointsPerUsd sets the "points_per_usd" field.
+func (_u *GroupUpdate) SetPointsPerUsd(v float64) *GroupUpdate {
+	_u.mutation.ResetPointsPerUsd()
+	_u.mutation.SetPointsPerUsd(v)
+	return _u
+}
+
+// SetNillablePointsPerUsd sets the "points_per_usd" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillablePointsPerUsd(v *float64) *GroupUpdate {
+	if v != nil {
+		_u.SetPointsPerUsd(*v)
+	}
+	return _u
+}
+
+// AddPointsPerUsd adds value to the "points_per_usd" field.
+func (_u *GroupUpdate) AddPointsPerUsd(v float64) *GroupUpdate {
+	_u.mutation.AddPointsPerUsd(v)
+	return _u
+}
+
 // SetSubscriptionType sets the "subscription_type" field.
 func (_u *GroupUpdate) SetSubscriptionType(v string) *GroupUpdate {
 	_u.mutation.SetSubscriptionType(v)
@@ -1848,6 +1869,12 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AllowPointsBilling(); ok {
 		_spec.SetField(group.FieldAllowPointsBilling, field.TypeBool, value)
 	}
+	if value, ok := _u.mutation.PointsPerUsd(); ok {
+		_spec.SetField(group.FieldPointsPerUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedPointsPerUsd(); ok {
+		_spec.AddField(group.FieldPointsPerUsd, field.TypeFloat64, value)
+	}
 	if value, ok := _u.mutation.SubscriptionType(); ok {
 		_spec.SetField(group.FieldSubscriptionType, field.TypeString, value)
 	}
@@ -2819,6 +2846,27 @@ func (_u *GroupUpdateOne) SetNillableAllowPointsBilling(v *bool) *GroupUpdateOne
 	if v != nil {
 		_u.SetAllowPointsBilling(*v)
 	}
+	return _u
+}
+
+// SetPointsPerUsd sets the "points_per_usd" field.
+func (_u *GroupUpdateOne) SetPointsPerUsd(v float64) *GroupUpdateOne {
+	_u.mutation.ResetPointsPerUsd()
+	_u.mutation.SetPointsPerUsd(v)
+	return _u
+}
+
+// SetNillablePointsPerUsd sets the "points_per_usd" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillablePointsPerUsd(v *float64) *GroupUpdateOne {
+	if v != nil {
+		_u.SetPointsPerUsd(*v)
+	}
+	return _u
+}
+
+// AddPointsPerUsd adds value to the "points_per_usd" field.
+func (_u *GroupUpdateOne) AddPointsPerUsd(v float64) *GroupUpdateOne {
+	_u.mutation.AddPointsPerUsd(v)
 	return _u
 }
 
@@ -4305,6 +4353,12 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if value, ok := _u.mutation.AllowPointsBilling(); ok {
 		_spec.SetField(group.FieldAllowPointsBilling, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.PointsPerUsd(); ok {
+		_spec.SetField(group.FieldPointsPerUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedPointsPerUsd(); ok {
+		_spec.AddField(group.FieldPointsPerUsd, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.SubscriptionType(); ok {
 		_spec.SetField(group.FieldSubscriptionType, field.TypeString, value)

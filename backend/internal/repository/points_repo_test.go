@@ -69,7 +69,7 @@ func TestPointsReserve_AllowsFinalRequestOverdrawAndUsesStoredRate(t *testing.T)
 	repo, mock := newRedeemAdjustmentRepoMock(t)
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT points_balance-points_reserved.*FOR UPDATE").WithArgs(int64(7)).WillReturnRows(sqlmock.NewRows([]string{"available"}).AddRow(30))
-	mock.ExpectQuery("SELECT value FROM settings WHERE key").WithArgs(service.SettingKeyPointsPerUSD).WillReturnRows(sqlmock.NewRows([]string{"value"}).AddRow("100"))
+	mock.ExpectQuery("SELECT allow_points_billing,points_per_usd FROM groups.*FOR SHARE").WithArgs(int64(9)).WillReturnRows(sqlmock.NewRows([]string{"enabled", "rate"}).AddRow(true, 100))
 	mock.ExpectExec("INSERT INTO points_reservations").WithArgs("r", int64(7), int64(8), int64(9), 100.0, 100.0).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("UPDATE users SET points_reserved").WithArgs(100.0, int64(7)).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
@@ -85,8 +85,46 @@ func TestPointsReserve_NoAvailableCreditDoesNotCreateReservation(t *testing.T) {
 	mock.ExpectQuery("SELECT points_balance-points_reserved.*FOR UPDATE").WillReturnRows(sqlmock.NewRows([]string{"available"}).AddRow(-70))
 	mock.ExpectRollback()
 	_, err := repo.ReservePoints(context.Background(), "r", 7, 8, 9, 1)
-	require.ErrorIs(t, err, service.ErrInsufficientBalance)
+	require.ErrorIs(t, err, service.ErrInsufficientPoints)
 	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPointsReserve_GroupConfigurationIsAuthoritative(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		enabled bool
+		rate    float64
+		wantErr error
+	}{
+		{"disabled never reserves", false, 100, service.ErrPointsBillingDisabled},
+		{"missing group rate rejects", true, 0, service.ErrInvalidPointsRate},
+		{"invalid group rate rejects", true, -1, service.ErrInvalidPointsRate},
+		{"group one uses 100", true, 100, nil},
+		{"group two uses 250", true, 250, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo, mock := newRedeemAdjustmentRepoMock(t)
+			mock.ExpectBegin()
+			mock.ExpectQuery("SELECT points_balance-points_reserved.*FOR UPDATE").WithArgs(int64(7)).WillReturnRows(sqlmock.NewRows([]string{"available"}).AddRow(30))
+			mock.ExpectQuery("SELECT allow_points_billing,points_per_usd FROM groups.*FOR SHARE").WithArgs(int64(9)).WillReturnRows(sqlmock.NewRows([]string{"enabled", "rate"}).AddRow(tc.enabled, tc.rate))
+			if tc.wantErr != nil {
+				mock.ExpectRollback()
+			} else {
+				points := service.PointsCost(0.02, tc.rate)
+				mock.ExpectExec("INSERT INTO points_reservations").WithArgs("r", int64(7), int64(8), int64(9), points, tc.rate).WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectExec("UPDATE users SET points_reserved").WithArgs(points, int64(7)).WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectCommit()
+			}
+			rate, err := repo.ReservePoints(context.Background(), "r", 7, 8, 9, 0.02)
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tc.rate, rate)
+			}
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
 }
 
 func TestPointsAdjustment_TopUpRepaysDebtAtomically(t *testing.T) {

@@ -170,6 +170,11 @@ func AllowPointsBilling(v bool) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldAllowPointsBilling, v))
 }
 
+// PointsPerUsd applies equality check predicate on the "points_per_usd" field. It's identical to PointsPerUsdEQ.
+func PointsPerUsd(v float64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldPointsPerUsd, v))
+}
+
 // SubscriptionType applies equality check predicate on the "subscription_type" field. It's identical to SubscriptionTypeEQ.
 func SubscriptionType(v string) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldSubscriptionType, v))
@@ -1538,6 +1543,46 @@ func AllowPointsBillingEQ(v bool) predicate.Group {
 // AllowPointsBillingNEQ applies the NEQ predicate on the "allow_points_billing" field.
 func AllowPointsBillingNEQ(v bool) predicate.Group {
 	return predicate.Group(sql.FieldNEQ(FieldAllowPointsBilling, v))
+}
+
+// PointsPerUsdEQ applies the EQ predicate on the "points_per_usd" field.
+func PointsPerUsdEQ(v float64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldPointsPerUsd, v))
+}
+
+// PointsPerUsdNEQ applies the NEQ predicate on the "points_per_usd" field.
+func PointsPerUsdNEQ(v float64) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldPointsPerUsd, v))
+}
+
+// PointsPerUsdIn applies the In predicate on the "points_per_usd" field.
+func PointsPerUsdIn(vs ...float64) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldPointsPerUsd, vs...))
+}
+
+// PointsPerUsdNotIn applies the NotIn predicate on the "points_per_usd" field.
+func PointsPerUsdNotIn(vs ...float64) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldPointsPerUsd, vs...))
+}
+
+// PointsPerUsdGT applies the GT predicate on the "points_per_usd" field.
+func PointsPerUsdGT(v float64) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldPointsPerUsd, v))
+}
+
+// PointsPerUsdGTE applies the GTE predicate on the "points_per_usd" field.
+func PointsPerUsdGTE(v float64) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldPointsPerUsd, v))
+}
+
+// PointsPerUsdLT applies the LT predicate on the "points_per_usd" field.
+func PointsPerUsdLT(v float64) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldPointsPerUsd, v))
+}
+
+// PointsPerUsdLTE applies the LTE predicate on the "points_per_usd" field.
+func PointsPerUsdLTE(v float64) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldPointsPerUsd, v))
 }
 
 // SubscriptionTypeEQ applies the EQ predicate on the "subscription_type" field.

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"strconv"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -42,7 +41,7 @@ func (r *userRepository) PointsAccount(ctx context.Context, userID int64) (*serv
 	if err != nil {
 		return nil, err
 	}
-	rows, err := exec.QueryContext(ctx, `SELECT points_balance,points_reserved,COALESCE((SELECT value FROM settings WHERE key='points_per_usd'),'0') FROM users WHERE id=$1 AND deleted_at IS NULL`, userID)
+	rows, err := exec.QueryContext(ctx, `SELECT points_balance,points_reserved FROM users WHERE id=$1 AND deleted_at IS NULL`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -51,11 +50,9 @@ func (r *userRepository) PointsAccount(ctx context.Context, userID int64) (*serv
 		return nil, service.ErrUserNotFound
 	}
 	var info service.PointsAccountInfo
-	var rate string
-	if err = rows.Scan(&info.Balance, &info.Reserved, &rate); err != nil {
+	if err = rows.Scan(&info.Balance, &info.Reserved); err != nil {
 		return nil, err
 	}
-	info.Rate, _ = strconv.ParseFloat(rate, 64)
 	return &info, rows.Err()
 }
 
@@ -104,23 +101,30 @@ func (r *userRepository) ReservePoints(ctx context.Context, id string, userID, k
 		return 0, err
 	}
 	if available <= 0 {
-		return 0, service.ErrInsufficientBalance
+		return 0, service.ErrInsufficientPoints
 	}
-	rows, err = exec.QueryContext(ctx, `SELECT value FROM settings WHERE key=$1`, service.SettingKeyPointsPerUSD)
+	// A share lock gives this reservation a stable group configuration while
+	// administrators update the switch or rate. Settlement uses this snapshot.
+	rows, err = exec.QueryContext(ctx, `SELECT allow_points_billing,points_per_usd FROM groups WHERE id=$1 AND deleted_at IS NULL FOR SHARE`, groupID)
 	if err != nil {
 		return 0, err
 	}
-	var raw string
-	if rows.Next() {
-		err = rows.Scan(&raw)
+	var enabled bool
+	var rate float64
+	if !rows.Next() {
+		rows.Close()
+		return 0, service.ErrGroupNotFound
 	}
+	err = rows.Scan(&enabled, &rate)
 	rows.Close()
 	if err != nil {
 		return 0, err
 	}
-	rate, err := strconv.ParseFloat(raw, 64)
-	if err != nil || rate <= 0 || math.IsNaN(rate) || math.IsInf(rate, 0) {
-		return 0, service.ErrBillingServiceUnavailable
+	if !enabled {
+		return 0, service.ErrPointsBillingDisabled
+	}
+	if err := service.ValidateGroupPointsRate(true, rate); err != nil {
+		return 0, err
 	}
 	rate = service.QuantizeUsageBillingAmount(rate)
 	if rate <= 0 {

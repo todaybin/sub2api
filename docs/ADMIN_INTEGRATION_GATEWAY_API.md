@@ -229,7 +229,7 @@ curl -X POST "${BASE}${GATEWAY}" \
 POST /api/v1/integrations/admin/users/provision
 ```
 
-原管理员路径为 `POST /api/v1/admin/users/provision`。签名网关用于新建普通用户、授予分组权限并创建 API Key。系统生成邮箱、密码和默认账号名称，邮箱格式为 `随机编号ai@zoomtk.com`；调用方无需传入账号凭据。通过 `api_keys` 定义所需 Key；写操作必须提供 `Idempotency-Key`。
+原管理员路径为 `POST /api/v1/admin/users/provision`。签名网关用于新建普通用户、授予分组权限并创建 API Key。系统生成邮箱、密码和默认账号名称，邮箱格式为 `YmdHis@zoomtk.com`，例如 `20261011153045@zoomtk.com`（北京时间）；调用方无需传入账号凭据。同秒创建或时钟回退时，系统递增时间值避免本实例重名；其他实例或历史账号重名时，仍由数据库唯一约束检测并最多重试 3 次。已有账号邮箱保持不变。通过 `api_keys` 定义所需 Key；写操作必须提供 `Idempotency-Key`。
 
 同一幂等键和相同请求重试时返回首次成功结果，包括账号和 Key。新幂等键表示新创建操作，即使 `external_id` 相同也创建新账号。外部编号原样独立保存，不限制字符格式、不查重，也不用于认领已有账号。`notes` 原样保存，不拼接外部编号。相同请求内重复声明路由与候选分组集合仍返回参数错误。以上为签名网关行为，后台管理员直接调用原路径保留既有规则。
 
@@ -353,7 +353,7 @@ Idempotency-Key: create-user-order-1001
 
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
-| `email` | 否 | 系统生成唯一邮箱 `随机编号ai@zoomtk.com`；旧字段值被忽略。 |
+| `email` | 否 | 系统生成唯一邮箱 `YmdHis@zoomtk.com`（北京时间，14 位年月日时分秒）；旧字段值被忽略。 |
 | `password` | 否 | 系统生成随机密码；旧字段值被忽略，响应不返回密码或密码哈希。 |
 | `username` | 否 | 系统生成默认账号名称；旧字段值被忽略。 |
 | `external_id` | 否 | 独立保存调用方编号，不限制格式、不查重、不认领。 |
@@ -368,7 +368,7 @@ Idempotency-Key: create-user-order-1001
 响应 `data` 示例：
 
 ```json
-{"id":123,"email":"6c5c7a424b5247a89007bd78b41a293aai@zoomtk.com","username":"6c5c7a424b5247a89007bd78b41a293aai","external_id":"partner:alice-1001","notes":"订单 order-1001","role":"user","balance":0,"concurrency":5,"rpm_limit":120,"status":"active","allowed_groups":[12,18],"restrict_public_groups":true}
+{"id":123,"email":"20261011153045@zoomtk.com","username":"20261011153045","external_id":"partner:alice-1001","notes":"订单 order-1001","role":"user","balance":0,"concurrency":5,"rpm_limit":120,"status":"active","allowed_groups":[12,18],"restrict_public_groups":true}
 ```
 
 该接口只创建账号，需要同时创建账号和 Key 时使用 provision。保存响应中的数字 ID 和生成邮箱，后续操作使用 ID；登录使用 5.5 的 Token 签发接口，无需获取密码。业务端自行维护外部编号与系统 ID 的对应关系，后续金额充值调用 5.3，积分充值调用 5.3.1；创建账号和 provision 不接收初始积分字段。
@@ -597,6 +597,32 @@ Authorization: Bearer <access_token>
 
 该普通用户接口保持原有统计字段，不增加本次网关专用的 `total_points_cost`，也不含管理员内部账号成本、上游路径及额外的 `user_id/start_time/end_time` 字段。详细请求记录使用 `GET /api/v1/usage`，沿用用户时间过滤和分页参数。该接口接受登录 JWT；模型 API Key 的模型列表入口见下节。
 
+### 5.7.1 分组积分计费配置
+
+在管理后台「分组管理」添加或编辑分组时配置，比例属于各分组，不使用系统全局比例。原管理员接口 `POST /api/v1/admin/groups`、`PUT /api/v1/admin/groups/:id` 支持以下字段（签名网关对应 `/api/v1/integrations/admin/groups` 路径）：
+
+| 字段 | 类型 | 规则 |
+| --- | --- | --- |
+| `allow_points_billing` | boolean | 开启积分扣费；新建默认关闭，编辑省略则保留原值。 |
+| `points_per_usd` | number | 本分组 1 USD 对应的积分数，开启时必须大于 0，范围 0.00000001–999999999999，保留 8 位小数；编辑省略则保留原值，关闭时可为 0 或保留合法比例。 |
+
+例如修改分组 16（网关写请求需要完整签名与 `Idempotency-Key`）：
+
+```http
+PUT /api/v1/integrations/admin/groups/16
+Content-Type: application/json
+
+{"allow_points_billing":true,"points_per_usd":100}
+```
+
+分组详情及列表响应包含这两个字段。最终用户费用为 0.02 USD 时，上述分组扣 2 积分；另一分组比例为 250 时扣 5 积分。每轮按原模型价格、倍率及实际用量算出最终 USD 费用，再换算积分，不设置固定每轮积分。请求开始后修改比例不会重算在途结算和历史账单。
+
+有有效订阅时仍优先使用订阅，并保持订阅限额。没有有效订阅时，标准分组关闭积分使用金额余额；开启积分只使用积分，可用积分（余额减在途占用）不大于 0 则拒绝，不回退扣金额。最后一笔仍允许按实际费用透支，欠款阻止下一次积分请求。订阅类型分组关闭积分且没有有效订阅时沿用原拒绝规则。显式图片、视频、音频继续沿用金额计费。
+
+模型调用中的积分错误包括：`403 insufficient_points`（可用积分不足）、`503 invalid_points_rate`（分组比例未配置）、`409 billing_configuration_changed`（准入后分组关闭积分，应重新请求）。保存分组时比例不合法返回 `400 INVALID_POINTS_RATE`。
+
+`GET /v1/sub2api/billing` 中单组 `points_per_usd` 来自该分组，智能 Key 的每个候选分组分别返回自身比例及可用状态；开启积分且没有积分时仍标记积分模式，不表示可以改用金额。
+
 ### 5.8 分组模型列表与同名去重
 
 签名网关只查询有效专属分组（`is_exclusive=true`）的模型并集，可指定专属分组 ID：
@@ -699,7 +725,7 @@ if (!currentResponse.ok || currentUsage.code !== 0) throw new Error('当前账�
 
 ### 5.10 升级与兼容
 
-部署本次后端前必须应用 `244_integration_external_id.sql`（积分功能还依赖 `243_points_billing.sql`）；迁移会将历史备注中单个有效的 `[integration_external_id:编号]` 标记回填到独立字段，不修改备注、不合并账号，存在多个标记时不自动推断编号。邮箱、密码和名称由系统生成的规则只作用于签名网关开通接口，后台管理员界面保持原有创建规则。
+部署本次后端前必须应用 `244_integration_external_id.sql`（积分功能还依赖 `243_points_billing.sql` 和 `245_group_points_rate.sql`）；245 将合法旧全局比例一次性回填到已开启积分的分组，未能回填的分组需手动配置比例。244 迁移会将历史备注中单个有效的 `[integration_external_id:编号]` 标记回填到独立字段，不修改备注、不合并账号，存在多个标记时不自动推断编号。邮箱、密码和名称由系统生成的规则只作用于签名网关开通接口，后台管理员界面保持原有创建规则。
 
 旧调用方需要停止依赖外部编号认领账号和响应中的上游字段；创建成功后保存系统数字 ID。相同操作重试必须沿用原幂等键，新的幂等键会创建新账号，外部编号重复不会阻止创建。常规账号自助注册不受影响。
 

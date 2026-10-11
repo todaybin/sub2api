@@ -738,7 +738,7 @@ func (s *BillingCacheService) IncrementUserPlatformQuotaUsage(userID int64, plat
 // 余额模式：检查缓存余额 > 0
 // 订阅模式：检查缓存用量未超过限额（Group限额从参数传入）
 // platform 为请求的目标平台（如 "anthropic"），传空串 "" 时跳过 user × platform quota 检查。
-func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user *User, apiKey *APIKey, group *Group, subscription *UserSubscription, platform string) error {
+func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user *User, apiKey *APIKey, group *Group, subscription *UserSubscription, platform string, requests ...InflightEstimateRequest) error {
 	// 简易模式默认跳过所有计费检查. An explicit key-window opt-in keeps
 	// balance/subscription/platform checks bypassed while enforcing the three
 	// API-key monetary windows from the database source of truth.
@@ -759,15 +759,17 @@ func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user 
 		if err := s.checkSubscriptionEligibility(ctx, user.ID, group, subscription); err != nil {
 			return err
 		}
-	} else {
+	} else if group != nil && group.AllowPointsBilling && (len(requests) == 0 || requests[0].Kind == InflightEstimateToken) {
 		hasPoints, err := s.HasPoints(ctx, user.ID, group)
 		if err != nil {
-			return ErrBillingServiceUnavailable
+			return err
 		}
 		if !hasPoints {
-			if err := s.checkBalanceEligibility(ctx, user.ID); err != nil {
-				return err
-			}
+			return ErrInsufficientPoints
+		}
+	} else {
+		if err := s.checkBalanceEligibility(ctx, user.ID); err != nil {
+			return err
 		}
 	}
 
@@ -791,6 +793,11 @@ func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user 
 	}
 
 	return nil
+}
+
+// Explicit media is billed from the money wallet even on points-enabled groups.
+func (s *BillingCacheService) CheckMoneyBillingEligibility(ctx context.Context, user *User, apiKey *APIKey, group *Group, subscription *UserSubscription, platform string) error {
+	return s.CheckBillingEligibility(ctx, user, apiKey, group, subscription, platform, InflightEstimateRequest{Kind: InflightEstimateImage})
 }
 
 // checkSimpleModeAPIKeyRateLimits is deliberately DB-authoritative. Redis

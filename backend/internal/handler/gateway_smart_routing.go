@@ -190,7 +190,7 @@ func (h *GatewayHandler) resolveSmartRequest(c *gin.Context, body []byte, ws boo
 	request.Platform, _ = middleware.GetForcePlatformFromContext(c)
 	selectedSubs := map[int64]*service.UserSubscription{}
 	group, selection, err := h.gatewayService.SelectSmartRoute(ctx, &copyKey, request, h.openAIGatewayService, func(group *service.Group) (bool, error) {
-		allowed, sub, err := h.admitSmartGroup(c, key, group, subscriptions)
+		allowed, sub, err := h.admitSmartGroup(c, key, group, subscriptions, tokenInflightEstimate(models[0], body))
 		if sub != nil {
 			selectedSubs[group.ID] = sub
 		}
@@ -259,7 +259,7 @@ func (h *GatewayHandler) resolveSmartOwner(c *gin.Context, key *service.APIKey, 
 
 var errSmartOwnerNotFound = errors.New("session or task is not available for this key")
 
-func (h *GatewayHandler) admitSmartGroup(c *gin.Context, key *service.APIKey, group *service.Group, subscriptions *service.SubscriptionService) (bool, *service.UserSubscription, error) {
+func (h *GatewayHandler) admitSmartGroup(c *gin.Context, key *service.APIKey, group *service.Group, subscriptions *service.SubscriptionService, requests ...service.InflightEstimateRequest) (bool, *service.UserSubscription, error) {
 	if h.cfg != nil && h.cfg.RunMode == config.RunModeSimple {
 		return true, nil, nil
 	}
@@ -267,7 +267,7 @@ func (h *GatewayHandler) admitSmartGroup(c *gin.Context, key *service.APIKey, gr
 		return false, nil, errors.New("key user unavailable")
 	}
 	if !group.IsSubscriptionType() {
-		return group.AllowPointsBilling || !middleware.APIKeyBalanceBelowAuthThreshold(key.User.Balance, h.cfg), nil, nil
+		return h.admitSmartWallet(c, key, group, requests...)
 	}
 	if subscriptions == nil {
 		return false, nil, errors.New("subscription service unavailable")
@@ -275,7 +275,10 @@ func (h *GatewayHandler) admitSmartGroup(c *gin.Context, key *service.APIKey, gr
 	ctx := c.Request.Context()
 	sub, err := subscriptions.GetActiveSubscription(ctx, key.UserID, group.ID)
 	if errors.Is(err, service.ErrSubscriptionNotFound) || errors.Is(err, service.ErrSubscriptionExpired) || errors.Is(err, service.ErrSubscriptionSuspended) {
-		return group.AllowPointsBilling, nil, nil
+		if !group.AllowPointsBilling {
+			return false, nil, nil
+		}
+		return h.admitSmartWallet(c, key, group, requests...)
 	}
 	if err != nil {
 		return false, nil, err
@@ -292,4 +295,20 @@ func (h *GatewayHandler) admitSmartGroup(c *gin.Context, key *service.APIKey, gr
 		return false, nil, nil
 	}
 	return true, sub, nil
+}
+
+func (h *GatewayHandler) admitSmartWallet(c *gin.Context, key *service.APIKey, group *service.Group, requests ...service.InflightEstimateRequest) (bool, *service.UserSubscription, error) {
+	endpoint := smartEndpoint(c)
+	media := endpoint == service.CompositeRouteEndpointImages || endpoint == "video" || endpoint == "audio" || endpoint == "live" || endpoint == "batch_image"
+	if len(requests) > 0 && requests[0].Kind != service.InflightEstimateToken {
+		media = true
+	}
+	if group.AllowPointsBilling && !media {
+		if h.billingCacheService == nil {
+			return false, nil, service.ErrBillingServiceUnavailable
+		}
+		available, err := h.billingCacheService.HasPoints(c.Request.Context(), key.UserID, group)
+		return available, nil, err
+	}
+	return !middleware.APIKeyBalanceBelowAuthThreshold(key.User.Balance, h.cfg), nil, nil
 }

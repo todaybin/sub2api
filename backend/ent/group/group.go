@@ -62,6 +62,8 @@ const (
 	FieldPlatform = "platform"
 	// FieldAllowPointsBilling holds the string denoting the allow_points_billing field in the database.
 	FieldAllowPointsBilling = "allow_points_billing"
+	// FieldPointsPerUsd holds the string denoting the points_per_usd field in the database.
+	FieldPointsPerUsd = "points_per_usd"
 	// FieldSubscriptionType holds the string denoting the subscription_type field in the database.
 	FieldSubscriptionType = "subscription_type"
 	// FieldDailyLimitUsd holds the string denoting the daily_limit_usd field in the database.
@@ -264,6 +266,7 @@ var Columns = []string{
 	FieldDuplicateOperationID,
 	FieldPlatform,
 	FieldAllowPointsBilling,
+	FieldPointsPerUsd,
 	FieldSubscriptionType,
 	FieldDailyLimitUsd,
 	FieldWeeklyLimitUsd,
@@ -395,6 +398,8 @@ var (
 	PlatformValidator func(string) error
 	// DefaultAllowPointsBilling holds the default value on creation for the "allow_points_billing" field.
 	DefaultAllowPointsBilling bool
+	// DefaultPointsPerUsd holds the default value on creation for the "points_per_usd" field.
+	DefaultPointsPerUsd float64
 	// DefaultSubscriptionType holds the default value on creation for the "subscription_type" field.
 	DefaultSubscriptionType string
 	// SubscriptionTypeValidator is a validator for the "subscription_type" field. It is called by the builders before save.
@@ -600,6 +605,11 @@ func ByPlatform(opts ...sql.OrderTermOption) OrderOption {
 // ByAllowPointsBilling orders the results by the allow_points_billing field.
 func ByAllowPointsBilling(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAllowPointsBilling, opts...).ToFunc()
+}
+
+// ByPointsPerUsd orders the results by the points_per_usd field.
+func ByPointsPerUsd(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPointsPerUsd, opts...).ToFunc()
 }
 
 // BySubscriptionType orders the results by the subscription_type field.

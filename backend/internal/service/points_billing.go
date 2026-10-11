@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -40,7 +39,6 @@ type pointsRecoveryWithEffects interface {
 type PointsAccountInfo struct {
 	Balance  float64 `json:"points_balance"`
 	Reserved float64 `json:"points_reserved"`
-	Rate     float64 `json:"points_per_usd"`
 }
 
 type PointsSummary struct {
@@ -139,6 +137,9 @@ func (s *BillingCacheService) HasPoints(ctx context.Context, userID int64, group
 	if !s.BillingEnabled() || group == nil || !group.AllowPointsBilling {
 		return false, nil
 	}
+	if err := ValidateGroupPointsRate(true, group.PointsPerUSD); err != nil {
+		return false, err
+	}
 	repo, ok := s.userRepo.(PointsRepository)
 	if !ok {
 		return false, ErrBillingServiceUnavailable
@@ -161,9 +162,6 @@ func (s *BillingCacheService) ReservePointsPayment(ctx context.Context, key *API
 	}
 	id := uuid.NewString()
 	rate, err := repo.ReservePoints(ctx, id, key.User.ID, key.ID, key.Group.ID, estimate)
-	if errors.Is(err, ErrInsufficientBalance) {
-		return ctx, func() {}, false, nil
-	}
 	if err != nil {
 		return ctx, func() {}, false, err
 	}

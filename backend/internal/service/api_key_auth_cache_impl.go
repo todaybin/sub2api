@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 26 // v26: points balance and group payment permission
+const apiKeyAuthSnapshotVersion = 27 // v27: per-group points exchange rate
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -389,6 +389,7 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			IsExclusive:                     apiKey.Group.IsExclusive,
 			Status:                          apiKey.Group.Status,
 			AllowPointsBilling:              apiKey.Group.AllowPointsBilling,
+			PointsPerUSD:                    apiKey.Group.PointsPerUSD,
 			SubscriptionType:                apiKey.Group.SubscriptionType,
 			RateMultiplier:                  apiKey.Group.RateMultiplier,
 			DailyLimitUSD:                   apiKey.Group.DailyLimitUSD,
@@ -496,6 +497,7 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			Status:                          snapshot.Group.Status,
 			Hydrated:                        true,
 			AllowPointsBilling:              snapshot.Group.AllowPointsBilling,
+			PointsPerUSD:                    snapshot.Group.PointsPerUSD,
 			SubscriptionType:                snapshot.Group.SubscriptionType,
 			RateMultiplier:                  snapshot.Group.RateMultiplier,
 			DailyLimitUSD:                   snapshot.Group.DailyLimitUSD,

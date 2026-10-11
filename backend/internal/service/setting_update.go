@@ -362,10 +362,6 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 
 	// 默认配置
 	updates[SettingKeyDefaultConcurrency] = strconv.Itoa(settings.DefaultConcurrency)
-	if settings.PointsPerUSD < 0 || settings.PointsPerUSD > 999999999999 || (settings.PointsPerUSD > 0 && settings.PointsPerUSD < 0.00000001) || math.IsNaN(settings.PointsPerUSD) || math.IsInf(settings.PointsPerUSD, 0) {
-		return nil, infraerrors.BadRequest("INVALID_POINTS_RATE", "points_per_usd must be zero or between 0.00000001 and 999999999999")
-	}
-	updates[SettingKeyPointsPerUSD] = strconv.FormatFloat(QuantizeUsageBillingAmount(settings.PointsPerUSD), 'f', 8, 64)
 	updates[SettingKeyDefaultBalance] = strconv.FormatFloat(settings.DefaultBalance, 'f', 8, 64)
 	settings.AffiliateRebateRate = clampAffiliateRebateRate(settings.AffiliateRebateRate)
 	updates[SettingKeyAffiliateRebateRate] = strconv.FormatFloat(settings.AffiliateRebateRate, 'f', 8, 64)

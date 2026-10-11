@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AdminGroup } from '@/types'
 import GroupsView from '@/views/admin/GroupsView.vue'
 import { adminAPI } from '@/api/admin'
+import GroupPointsBillingFields from '@/components/admin/group/GroupPointsBillingFields.vue'
 
 const {
   listGroups,
@@ -322,6 +323,54 @@ describe('GroupsView duplicate action', () => {
 
     expect(updateGroup).toHaveBeenCalledTimes(1)
     expect(showError).toHaveBeenCalledWith('group name already exists')
+    wrapper.unmount()
+  })
+
+  it('loads and saves the selected group points rate', async () => {
+    const group = { ...sourceGroup, allow_points_billing: true, points_per_usd: 100 }
+    listGroups.mockResolvedValue({ items: [group], total: 1, page: 1, page_size: 20, pages: 1 })
+    updateGroup.mockResolvedValue(group)
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'common.edit')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.get<HTMLInputElement>('[data-testid="group-points-rate"]').element.value).toBe('100')
+    await wrapper.get('[data-testid="group-points-rate"]').setValue('250')
+    await wrapper.get('#edit-group-form').trigger('submit')
+    await flushPromises()
+    expect(updateGroup).toHaveBeenCalledWith(42, expect.objectContaining({ allow_points_billing: true, points_per_usd: 250 }))
+    wrapper.unmount()
+  })
+
+  it('rejects enabling points with no group rate', async () => {
+    const group = { ...sourceGroup, allow_points_billing: true, points_per_usd: 0 }
+    listGroups.mockResolvedValue({ items: [group], total: 1, page: 1, page_size: 20, pages: 1 })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'common.edit')!.trigger('click')
+    await flushPromises()
+    await wrapper.get('#edit-group-form').trigger('submit')
+    await flushPromises()
+    expect(updateGroup).not.toHaveBeenCalled()
+    expect(showError).toHaveBeenCalledWith('common.points.invalidRate')
+    wrapper.unmount()
+  })
+
+  it('sends the selected group points rate when creating a group', async () => {
+    const create = vi.mocked(adminAPI.groups.create)
+    create.mockReset()
+    create.mockResolvedValue({ ...sourceGroup, id: 43, allow_points_billing: true, points_per_usd: 250 })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'admin.groups.createGroup')!.trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-tour="group-form-name"]').setValue('Points group')
+    wrapper.getComponent(GroupPointsBillingFields).vm.$emit('update:enabled', true)
+    await flushPromises()
+    await wrapper.get('[data-testid="group-points-rate"]').setValue('250')
+    await wrapper.get('#create-group-form').trigger('submit')
+    await flushPromises()
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ allow_points_billing: true, points_per_usd: 250 }))
     wrapper.unmount()
   })
 

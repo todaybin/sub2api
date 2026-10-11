@@ -43,6 +43,7 @@ type Group struct {
 	DuplicateOperationID string
 
 	AllowPointsBilling  bool
+	PointsPerUSD        float64
 	SubscriptionType    string
 	DailyLimitUSD       *float64
 	WeeklyLimitUSD      *float64

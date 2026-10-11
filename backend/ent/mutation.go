@@ -22307,6 +22307,8 @@ type GroupMutation struct {
 	duplicate_operation_id                  *string
 	platform                                *string
 	allow_points_billing                    *bool
+	points_per_usd                          *float64
+	addpoints_per_usd                       *float64
 	subscription_type                       *string
 	daily_limit_usd                         *float64
 	adddaily_limit_usd                      *float64
@@ -23528,6 +23530,62 @@ func (m *GroupMutation) OldAllowPointsBilling(ctx context.Context) (v bool, err 
 // ResetAllowPointsBilling resets all changes to the "allow_points_billing" field.
 func (m *GroupMutation) ResetAllowPointsBilling() {
 	m.allow_points_billing = nil
+}
+
+// SetPointsPerUsd sets the "points_per_usd" field.
+func (m *GroupMutation) SetPointsPerUsd(f float64) {
+	m.points_per_usd = &f
+	m.addpoints_per_usd = nil
+}
+
+// PointsPerUsd returns the value of the "points_per_usd" field in the mutation.
+func (m *GroupMutation) PointsPerUsd() (r float64, exists bool) {
+	v := m.points_per_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPointsPerUsd returns the old "points_per_usd" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldPointsPerUsd(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPointsPerUsd is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPointsPerUsd requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPointsPerUsd: %w", err)
+	}
+	return oldValue.PointsPerUsd, nil
+}
+
+// AddPointsPerUsd adds f to the "points_per_usd" field.
+func (m *GroupMutation) AddPointsPerUsd(f float64) {
+	if m.addpoints_per_usd != nil {
+		*m.addpoints_per_usd += f
+	} else {
+		m.addpoints_per_usd = &f
+	}
+}
+
+// AddedPointsPerUsd returns the value that was added to the "points_per_usd" field in this mutation.
+func (m *GroupMutation) AddedPointsPerUsd() (r float64, exists bool) {
+	v := m.addpoints_per_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPointsPerUsd resets all changes to the "points_per_usd" field.
+func (m *GroupMutation) ResetPointsPerUsd() {
+	m.points_per_usd = nil
+	m.addpoints_per_usd = nil
 }
 
 // SetSubscriptionType sets the "subscription_type" field.
@@ -26569,7 +26627,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 75)
+	fields := make([]string, 0, 76)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -26638,6 +26696,9 @@ func (m *GroupMutation) Fields() []string {
 	}
 	if m.allow_points_billing != nil {
 		fields = append(fields, group.FieldAllowPointsBilling)
+	}
+	if m.points_per_usd != nil {
+		fields = append(fields, group.FieldPointsPerUsd)
 	}
 	if m.subscription_type != nil {
 		fields = append(fields, group.FieldSubscriptionType)
@@ -26849,6 +26910,8 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.Platform()
 	case group.FieldAllowPointsBilling:
 		return m.AllowPointsBilling()
+	case group.FieldPointsPerUsd:
+		return m.PointsPerUsd()
 	case group.FieldSubscriptionType:
 		return m.SubscriptionType()
 	case group.FieldDailyLimitUsd:
@@ -27008,6 +27071,8 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldPlatform(ctx)
 	case group.FieldAllowPointsBilling:
 		return m.OldAllowPointsBilling(ctx)
+	case group.FieldPointsPerUsd:
+		return m.OldPointsPerUsd(ctx)
 	case group.FieldSubscriptionType:
 		return m.OldSubscriptionType(ctx)
 	case group.FieldDailyLimitUsd:
@@ -27281,6 +27346,13 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetAllowPointsBilling(v)
+		return nil
+	case group.FieldPointsPerUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPointsPerUsd(v)
 		return nil
 	case group.FieldSubscriptionType:
 		v, ok := value.(string)
@@ -27669,6 +27741,9 @@ func (m *GroupMutation) AddedFields() []string {
 	if m.addpeak_rate_multiplier != nil {
 		fields = append(fields, group.FieldPeakRateMultiplier)
 	}
+	if m.addpoints_per_usd != nil {
+		fields = append(fields, group.FieldPointsPerUsd)
+	}
 	if m.adddaily_limit_usd != nil {
 		fields = append(fields, group.FieldDailyLimitUsd)
 	}
@@ -27762,6 +27837,8 @@ func (m *GroupMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedDynamicRateLastChange()
 	case group.FieldPeakRateMultiplier:
 		return m.AddedPeakRateMultiplier()
+	case group.FieldPointsPerUsd:
+		return m.AddedPointsPerUsd()
 	case group.FieldDailyLimitUsd:
 		return m.AddedDailyLimitUsd()
 	case group.FieldWeeklyLimitUsd:
@@ -27855,6 +27932,13 @@ func (m *GroupMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddPeakRateMultiplier(v)
+		return nil
+	case group.FieldPointsPerUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPointsPerUsd(v)
 		return nil
 	case group.FieldDailyLimitUsd:
 		v, ok := value.(float64)
@@ -28285,6 +28369,9 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldAllowPointsBilling:
 		m.ResetAllowPointsBilling()
+		return nil
+	case group.FieldPointsPerUsd:
+		m.ResetPointsPerUsd()
 		return nil
 	case group.FieldSubscriptionType:
 		m.ResetSubscriptionType()

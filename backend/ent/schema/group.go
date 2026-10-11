@@ -111,6 +111,7 @@ func (Group) Fields() []ent.Field {
 			MaxLen(50).
 			Default(domain.PlatformAnthropic),
 		field.Bool("allow_points_billing").Default(false),
+		field.Float("points_per_usd").Default(0).SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}),
 		field.String("subscription_type").
 			MaxLen(20).
 			Default(domain.SubscriptionTypeStandard),

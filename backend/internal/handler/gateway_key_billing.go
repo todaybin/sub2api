@@ -104,7 +104,7 @@ func (h *GatewayHandler) populateKeyBillingAccountInfo(c *gin.Context, apiKey *s
 		result.AllowPointsBilling = true
 		result.PointsBalance = &info.Balance
 		result.PointsReserved = &info.Reserved
-		result.PointsPerUSD = &info.Rate
+		result.PointsPerUSD = &apiKey.Group.PointsPerUSD
 	}
 	_, hasSubscription := middleware2.GetSubscriptionFromContext(c)
 	if apiKey.Group.IsSubscriptionType() && (!apiKey.Group.AllowPointsBilling || hasSubscription) {
@@ -117,7 +117,7 @@ func (h *GatewayHandler) populateKeyBillingAccountInfo(c *gin.Context, apiKey *s
 		periodStart = subscription.StartsAt
 	} else {
 		result.BillingMode = "balance"
-		if result.PointsBalance != nil && result.PointsReserved != nil && *result.PointsBalance > *result.PointsReserved {
+		if apiKey.Group.AllowPointsBilling {
 			result.BillingMode = "points"
 		}
 		if apiKey.User != nil {
@@ -216,12 +216,13 @@ func (h *GatewayHandler) smartKeyBillingInfo(c *gin.Context, key *service.APIKey
 				return
 			}
 			info.AllowPointsBilling = true
-			info.PointsBalance, info.PointsReserved, info.PointsPerUSD = &points.Balance, &points.Reserved, &points.Rate
+			info.PointsBalance, info.PointsReserved, info.PointsPerUSD = &points.Balance, &points.Reserved, &group.PointsPerUSD
 		}
 		mode := "balance"
 		available := key.User != nil && !middleware2.APIKeyBalanceBelowAuthThreshold(key.User.Balance, h.cfg)
-		if info.PointsBalance != nil && *info.PointsBalance > *info.PointsReserved && *info.PointsPerUSD > 0 {
-			mode, available = "points", true
+		if group.AllowPointsBilling {
+			mode = "points"
+			available = info.PointsBalance != nil && *info.PointsBalance > *info.PointsReserved && *info.PointsPerUSD > 0
 		}
 		var subID *int64
 		if group.IsSubscriptionType() {

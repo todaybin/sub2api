@@ -62,6 +62,7 @@ type APIKeyAuthUserSnapshot struct {
 // APIKeyAuthGroupSnapshot 分组快照
 type APIKeyAuthGroupSnapshot struct {
 	AllowPointsBilling              bool                          `json:"allow_points_billing"`
+	PointsPerUSD                    float64                       `json:"points_per_usd"`
 	ID                              int64                         `json:"id"`
 	Name                            string                        `json:"name"`
 	Platform                        string                        `json:"platform"`

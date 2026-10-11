@@ -94,10 +94,7 @@ func reserveInflightBalanceCtx(
 		if selected {
 			return pointsCtx, done, nil
 		}
-		// The positive credit may have been reserved by another concurrent call.
-		if err := billing.CheckMoneyEligibility(ctx, apiKey.User.ID); err != nil {
-			return ctx, inflightNoop, err
-		}
+		return ctx, inflightNoop, service.ErrInsufficientPoints
 	}
 	if apiKey.Group != nil && apiKey.Group.AllowPointsBilling && req.Kind != service.InflightEstimateToken {
 		if err := billing.CheckMoneyEligibility(ctx, apiKey.User.ID); err != nil {

@@ -344,6 +344,20 @@ func (_c *GroupCreate) SetNillableAllowPointsBilling(v *bool) *GroupCreate {
 	return _c
 }
 
+// SetPointsPerUsd sets the "points_per_usd" field.
+func (_c *GroupCreate) SetPointsPerUsd(v float64) *GroupCreate {
+	_c.mutation.SetPointsPerUsd(v)
+	return _c
+}
+
+// SetNillablePointsPerUsd sets the "points_per_usd" field if the given value is not nil.
+func (_c *GroupCreate) SetNillablePointsPerUsd(v *float64) *GroupCreate {
+	if v != nil {
+		_c.SetPointsPerUsd(*v)
+	}
+	return _c
+}
+
 // SetSubscriptionType sets the "subscription_type" field.
 func (_c *GroupCreate) SetSubscriptionType(v string) *GroupCreate {
 	_c.mutation.SetSubscriptionType(v)
@@ -1225,6 +1239,10 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultAllowPointsBilling
 		_c.mutation.SetAllowPointsBilling(v)
 	}
+	if _, ok := _c.mutation.PointsPerUsd(); !ok {
+		v := group.DefaultPointsPerUsd
+		_c.mutation.SetPointsPerUsd(v)
+	}
 	if _, ok := _c.mutation.SubscriptionType(); !ok {
 		v := group.DefaultSubscriptionType
 		_c.mutation.SetSubscriptionType(v)
@@ -1454,6 +1472,9 @@ func (_c *GroupCreate) check() error {
 	}
 	if _, ok := _c.mutation.AllowPointsBilling(); !ok {
 		return &ValidationError{Name: "allow_points_billing", err: errors.New(`ent: missing required field "Group.allow_points_billing"`)}
+	}
+	if _, ok := _c.mutation.PointsPerUsd(); !ok {
+		return &ValidationError{Name: "points_per_usd", err: errors.New(`ent: missing required field "Group.points_per_usd"`)}
 	}
 	if _, ok := _c.mutation.SubscriptionType(); !ok {
 		return &ValidationError{Name: "subscription_type", err: errors.New(`ent: missing required field "Group.subscription_type"`)}
@@ -1712,6 +1733,10 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.AllowPointsBilling(); ok {
 		_spec.SetField(group.FieldAllowPointsBilling, field.TypeBool, value)
 		_node.AllowPointsBilling = value
+	}
+	if value, ok := _c.mutation.PointsPerUsd(); ok {
+		_spec.SetField(group.FieldPointsPerUsd, field.TypeFloat64, value)
+		_node.PointsPerUsd = value
 	}
 	if value, ok := _c.mutation.SubscriptionType(); ok {
 		_spec.SetField(group.FieldSubscriptionType, field.TypeString, value)
@@ -2392,6 +2417,24 @@ func (u *GroupUpsert) SetAllowPointsBilling(v bool) *GroupUpsert {
 // UpdateAllowPointsBilling sets the "allow_points_billing" field to the value that was provided on create.
 func (u *GroupUpsert) UpdateAllowPointsBilling() *GroupUpsert {
 	u.SetExcluded(group.FieldAllowPointsBilling)
+	return u
+}
+
+// SetPointsPerUsd sets the "points_per_usd" field.
+func (u *GroupUpsert) SetPointsPerUsd(v float64) *GroupUpsert {
+	u.Set(group.FieldPointsPerUsd, v)
+	return u
+}
+
+// UpdatePointsPerUsd sets the "points_per_usd" field to the value that was provided on create.
+func (u *GroupUpsert) UpdatePointsPerUsd() *GroupUpsert {
+	u.SetExcluded(group.FieldPointsPerUsd)
+	return u
+}
+
+// AddPointsPerUsd adds v to the "points_per_usd" field.
+func (u *GroupUpsert) AddPointsPerUsd(v float64) *GroupUpsert {
+	u.Add(group.FieldPointsPerUsd, v)
 	return u
 }
 
@@ -3699,6 +3742,27 @@ func (u *GroupUpsertOne) SetAllowPointsBilling(v bool) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdateAllowPointsBilling() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateAllowPointsBilling()
+	})
+}
+
+// SetPointsPerUsd sets the "points_per_usd" field.
+func (u *GroupUpsertOne) SetPointsPerUsd(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetPointsPerUsd(v)
+	})
+}
+
+// AddPointsPerUsd adds v to the "points_per_usd" field.
+func (u *GroupUpsertOne) AddPointsPerUsd(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddPointsPerUsd(v)
+	})
+}
+
+// UpdatePointsPerUsd sets the "points_per_usd" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdatePointsPerUsd() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdatePointsPerUsd()
 	})
 }
 
@@ -5320,6 +5384,27 @@ func (u *GroupUpsertBulk) SetAllowPointsBilling(v bool) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdateAllowPointsBilling() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateAllowPointsBilling()
+	})
+}
+
+// SetPointsPerUsd sets the "points_per_usd" field.
+func (u *GroupUpsertBulk) SetPointsPerUsd(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetPointsPerUsd(v)
+	})
+}
+
+// AddPointsPerUsd adds v to the "points_per_usd" field.
+func (u *GroupUpsertBulk) AddPointsPerUsd(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddPointsPerUsd(v)
+	})
+}
+
+// UpdatePointsPerUsd sets the "points_per_usd" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdatePointsPerUsd() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdatePointsPerUsd()
 	})
 }
 

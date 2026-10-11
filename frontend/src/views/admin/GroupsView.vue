@@ -754,10 +754,10 @@
         </div>
 
         <!-- Subscription Configuration -->
-        <div class="flex items-center justify-between border-t pt-4">
-          <div><label class="input-label">{{ t('common.points.allow') }}</label><p class="input-hint">{{ t('common.points.allowHint') }}</p></div>
-          <Toggle v-model="createForm.allow_points_billing" />
-        </div>
+        <GroupPointsBillingFields
+          v-model:enabled="createForm.allow_points_billing"
+          v-model:rate="createForm.points_per_usd"
+        />
         <div class="mt-4 border-t pt-4">
           <div>
             <label class="input-label">{{
@@ -2412,10 +2412,10 @@
         </div>
 
         <!-- Subscription Configuration -->
-        <div class="flex items-center justify-between border-t pt-4">
-          <div><label class="input-label">{{ t('common.points.allow') }}</label><p class="input-hint">{{ t('common.points.allowHint') }}</p></div>
-          <Toggle v-model="editForm.allow_points_billing" />
-        </div>
+        <GroupPointsBillingFields
+          v-model:enabled="editForm.allow_points_billing"
+          v-model:rate="editForm.points_per_usd"
+        />
         <div class="mt-4 border-t pt-4">
           <div>
             <label class="input-label">{{
@@ -4337,6 +4337,8 @@
 </template>
 
 <script setup lang="ts">
+import GroupPointsBillingFields from '@/components/admin/group/GroupPointsBillingFields.vue';
+import { isValidGroupPointsRate } from '@/utils/points';
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useAppStore } from "@/stores/app";
@@ -5022,6 +5024,7 @@ const createForm = reactive({
   dynamic_rate_markup_percent: 0,
   is_exclusive: false,
   allow_points_billing: false,
+  points_per_usd: 0,
   subscription_type: "standard" as SubscriptionType,
   daily_limit_usd: null as number | null,
   weekly_limit_usd: null as number | null,
@@ -5390,6 +5393,7 @@ const editForm = reactive({
   is_exclusive: false,
   status: "active" as "active" | "inactive",
   allow_points_billing: false,
+  points_per_usd: 0,
   subscription_type: "standard" as SubscriptionType,
   daily_limit_usd: null as number | null,
   weekly_limit_usd: null as number | null,
@@ -5855,6 +5859,7 @@ const closeCreateModal = () => {
   createForm.dynamic_rate_markup_percent = 0;
   createForm.is_exclusive = false;
   createForm.allow_points_billing = false;
+  createForm.points_per_usd = 0;
   createForm.subscription_type = "standard";
   createForm.daily_limit_usd = null;
   createForm.weekly_limit_usd = null;
@@ -5972,6 +5977,10 @@ const handleCreateGroup = async () => {
     createReasoningEffortPolicyRef.value &&
     !createReasoningEffortPolicyRef.value.validate()
   ) {
+    return;
+  }
+  if (!isValidGroupPointsRate(createForm.allow_points_billing, createForm.points_per_usd)) {
+    appStore.showError(t('common.points.invalidRate'));
     return;
   }
   if (!validateProfitControlForm(createForm)) {
@@ -6140,6 +6149,7 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.is_exclusive = group.is_exclusive;
   editForm.status = group.status;
   editForm.allow_points_billing = group.allow_points_billing ?? false;
+  editForm.points_per_usd = group.points_per_usd ?? 0;
   editForm.subscription_type = group.subscription_type || "standard";
   editForm.daily_limit_usd = group.daily_limit_usd;
   editForm.weekly_limit_usd = group.weekly_limit_usd;
@@ -6309,6 +6319,10 @@ const handleUpdateGroup = async () => {
     editReasoningEffortPolicyRef.value &&
     !editReasoningEffortPolicyRef.value.validate()
   ) {
+    return;
+  }
+  if (!isValidGroupPointsRate(editForm.allow_points_billing, editForm.points_per_usd)) {
+    appStore.showError(t('common.points.invalidRate'));
     return;
   }
   if (!validateProfitControlForm(editForm)) {
