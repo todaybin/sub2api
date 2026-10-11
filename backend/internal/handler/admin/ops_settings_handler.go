@@ -9,15 +9,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Ops configuration remains accessible to authenticated administrators while monitoring
+// is disabled. The monitoring switch controls collectors and evaluators, not editing.
+
 // GetEmailNotificationConfig returns Ops email notification config (DB-backed).
 // GET /api/v1/admin/ops/email-notification/config
 func (h *OpsHandler) GetEmailNotificationConfig(c *gin.Context) {
 	if h.opsService == nil {
 		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
-		return
-	}
-	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
-		response.ErrorFrom(c, err)
 		return
 	}
 
@@ -34,10 +33,6 @@ func (h *OpsHandler) GetEmailNotificationConfig(c *gin.Context) {
 func (h *OpsHandler) UpdateEmailNotificationConfig(c *gin.Context) {
 	if h.opsService == nil {
 		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
-		return
-	}
-	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
-		response.ErrorFrom(c, err)
 		return
 	}
 
@@ -63,10 +58,6 @@ func (h *OpsHandler) GetAlertRuntimeSettings(c *gin.Context) {
 		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
 		return
 	}
-	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
 
 	cfg, err := h.opsService.GetOpsAlertRuntimeSettings(c.Request.Context())
 	if err != nil {
@@ -81,10 +72,6 @@ func (h *OpsHandler) GetAlertRuntimeSettings(c *gin.Context) {
 func (h *OpsHandler) UpdateAlertRuntimeSettings(c *gin.Context) {
 	if h.opsService == nil {
 		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
-		return
-	}
-	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
-		response.ErrorFrom(c, err)
 		return
 	}
 
@@ -109,10 +96,6 @@ func (h *OpsHandler) GetRuntimeLogConfig(c *gin.Context) {
 		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
 		return
 	}
-	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
 
 	cfg, err := h.opsService.GetRuntimeLogConfig(c.Request.Context())
 	if err != nil {
@@ -127,10 +110,6 @@ func (h *OpsHandler) GetRuntimeLogConfig(c *gin.Context) {
 func (h *OpsHandler) UpdateRuntimeLogConfig(c *gin.Context) {
 	if h.opsService == nil {
 		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
-		return
-	}
-	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
-		response.ErrorFrom(c, err)
 		return
 	}
 
@@ -161,10 +140,6 @@ func (h *OpsHandler) ResetRuntimeLogConfig(c *gin.Context) {
 		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
 		return
 	}
-	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
 
 	subject, ok := middleware.GetAuthSubjectFromContext(c)
 	if !ok || subject.UserID <= 0 {
@@ -187,10 +162,6 @@ func (h *OpsHandler) GetAdvancedSettings(c *gin.Context) {
 		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
 		return
 	}
-	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
 
 	cfg, err := h.opsService.GetOpsAdvancedSettings(c.Request.Context())
 	if err != nil {
@@ -205,10 +176,6 @@ func (h *OpsHandler) GetAdvancedSettings(c *gin.Context) {
 func (h *OpsHandler) UpdateAdvancedSettings(c *gin.Context) {
 	if h.opsService == nil {
 		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
-		return
-	}
-	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
-		response.ErrorFrom(c, err)
 		return
 	}
 
@@ -233,10 +200,6 @@ func (h *OpsHandler) GetMetricThresholds(c *gin.Context) {
 		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
 		return
 	}
-	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
 
 	cfg, err := h.opsService.GetMetricThresholds(c.Request.Context())
 	if err != nil {
@@ -251,10 +214,6 @@ func (h *OpsHandler) GetMetricThresholds(c *gin.Context) {
 func (h *OpsHandler) UpdateMetricThresholds(c *gin.Context) {
 	if h.opsService == nil {
 		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
-		return
-	}
-	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
-		response.ErrorFrom(c, err)
 		return
 	}
 
