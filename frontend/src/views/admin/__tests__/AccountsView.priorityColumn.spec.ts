@@ -125,7 +125,7 @@ describe('admin AccountsView priority column preferences', () => {
 
   it('preserves an existing preference that explicitly hides priority', async () => {
     localStorage.setItem('account-hidden-columns', JSON.stringify(['priority', 'today_stats']))
-    localStorage.setItem('account-hidden-columns-version', 'scheduler-score-hidden-by-default')
+    localStorage.setItem('account-hidden-columns-version', 'upstream-billing-visible-v1')
 
     const wrapper = mountView()
     await flushPromises()

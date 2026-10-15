@@ -493,7 +493,7 @@ func (s *GatewayService) estimateSmartPrice(ctx context.Context, key *APIKey, re
 			tier = ""
 		}
 		models := openAI.filterCNProviderBillingModelCandidates(ctx, a, key, usageBillingModelCandidates(model, mapping.MappedModel, req.Model, a.GetMappedModel(upstream), upstream))
-		cost, err := openAI.calculateOpenAIRecordUsageCost(ctx, result, key, models, text, image, resolveVideoRateMultiplier(key, base), base, UsageTokens{InputTokens: input, OutputTokens: output}, tier, openAILongContextBillingGate(a), at)
+		cost, err := openAI.calculateOpenAIRecordUsageCost(ctx, result, key, models, text, image, resolveVideoRateMultiplier(key, base), base, UsageTokens{InputTokens: input, OutputTokens: output}, tier, openAILongContextBillingGate(a), openAISubscriptionLongContextExempt(a, result), at)
 		if err != nil || cost == nil || math.IsNaN(cost.ActualCost) || cost.ActualCost < 0 {
 			return math.Inf(1)
 		}

@@ -82,14 +82,19 @@ func TestFilterGrokFreeQuotaAccountsOnlyBlocksExplicitFreeOAuth(t *testing.T) {
 	require.Equal(t, []int64{1, 2, 3, 4}, accountIDs(filtered), "miss fails open on hot path")
 
 	require.Eventually(t, func() bool {
-		repo.mu.Lock()
-		defer repo.mu.Unlock()
-		return repo.calls >= 1
+		value, ok := scheduler.grokFreeQuotaGateCache.Load(int64(1))
+		if !ok {
+			return false
+		}
+		entry, ok := value.(grokFreeQuotaGateCacheEntry)
+		return ok && entry.known && entry.tokens == 475_000
 	}, 2*time.Second, 10*time.Millisecond)
 
 	// Second pass: uses refreshed cache and blocks over-gate free OAuth.
 	filtered = scheduler.filterGrokFreeQuotaAccounts(context.Background(), accounts)
 	require.Equal(t, []int64{2, 3, 4}, accountIDs(filtered), "paid and unknown fail-open; API-key free marker is not gated")
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
 	require.Equal(t, []int64{1}, repo.lastIDs, "paid, unknown, and API-key accounts must not enter the local free-tier query")
 	require.WithinDuration(t, time.Now().UTC().Add(-24*time.Hour), repo.start, time.Second)
 }
@@ -106,13 +111,18 @@ func TestFilterGrokFreeQuotaAccountsStatsFailureFailsOpen(t *testing.T) {
 	filtered := scheduler.filterGrokFreeQuotaAccounts(context.Background(), accounts)
 	require.Equal(t, []int64{1}, accountIDs(filtered))
 	require.Eventually(t, func() bool {
-		repo.mu.Lock()
-		defer repo.mu.Unlock()
-		return repo.calls >= 1
+		value, ok := scheduler.grokFreeQuotaGateCache.Load(int64(1))
+		if !ok {
+			return false
+		}
+		entry, ok := value.(grokFreeQuotaGateCacheEntry)
+		return ok && !entry.known
 	}, 2*time.Second, 10*time.Millisecond)
 	// Negative cache entry keeps subsequent hot-path calls fail-open without thrash.
 	filtered = scheduler.filterGrokFreeQuotaAccounts(context.Background(), accounts)
 	require.Equal(t, []int64{1}, accountIDs(filtered))
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
 	require.Equal(t, 1, repo.calls)
 }
 
@@ -163,17 +173,20 @@ func TestFilterGrokFreeQuotaAccountsRecoversAfterRollingUsageFalls(t *testing.T)
 			m.Delete(int64(1))
 		}
 	}
-	callsBeforeExpire := repo.calls
 	scheduler.grokFreeQuotaGateCache.Store(int64(1), grokFreeQuotaGateCacheEntry{
 		tokens: 490_000, checkedAt: time.Now().Add(-2 * time.Minute), known: true, // TTL=60s → stale
 	})
 	// Hot path fail-open while refresh is in flight.
 	require.Equal(t, []int64{1}, accountIDs(scheduler.filterGrokFreeQuotaAccounts(context.Background(), accounts)))
 	require.Eventually(t, func() bool {
-		filtered := scheduler.filterGrokFreeQuotaAccounts(context.Background(), accounts)
-		return len(filtered) == 1 && filtered[0].ID == 1 &&
-			repo.calls > callsBeforeExpire
+		value, ok := scheduler.grokFreeQuotaGateCache.Load(int64(1))
+		if !ok {
+			return false
+		}
+		entry, ok := value.(grokFreeQuotaGateCacheEntry)
+		return ok && entry.known && entry.tokens == 100_000
 	}, 2*time.Second, 10*time.Millisecond)
+	require.Equal(t, []int64{1}, accountIDs(scheduler.filterGrokFreeQuotaAccounts(context.Background(), accounts)))
 }
 
 func TestResolveGrokFreeQuotaGateSettingsDefaultsToNinetyFivePercent(t *testing.T) {
