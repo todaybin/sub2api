@@ -209,6 +209,28 @@ describe('admin UsersView', () => {
     vi.useRealTimers()
   })
 
+  it.each(['asc', 'desc'] as const)('sorts points on the server in %s order and resets pagination', async (order) => {
+    listUsers.mockResolvedValue({ items: [createAdminUser({ points_balance: 12.5 })], total: 40, page: 1, page_size: 20, pages: 2 })
+    const wrapper = mountBulkDeleteView()
+    await flushPromises()
+    const table = wrapper.findComponent(DataTableStub)
+    expect(table.props('columns').find((column: { key: string }) => column.key === 'points_balance')?.sortable).toBe(true)
+    await wrapper.get('[data-test="next-page"]').trigger('click')
+    await flushPromises()
+    table.vm.$emit('sort', 'points_balance', order)
+    await flushPromises()
+    expect(listUsers).toHaveBeenLastCalledWith(1, 20, expect.objectContaining({ sort_by: 'points_balance', sort_order: order }), expect.any(Object))
+    wrapper.unmount()
+  })
+
+  it('restores the saved points sort on page load', async () => {
+    localStorage.setItem('admin-users-table-sort', JSON.stringify({ key: 'points_balance', order: 'asc' }))
+    const wrapper = mountBulkDeleteView()
+    await flushPromises()
+    expect(listUsers).toHaveBeenLastCalledWith(1, 20, expect.objectContaining({ sort_by: 'points_balance', sort_order: 'asc' }), expect.any(Object))
+    wrapper.unmount()
+  })
+
   it('cancels bulk deletion without deleting or clearing selected users', async () => {
     const wrapper = mountBulkDeleteView()
     await flushPromises()
