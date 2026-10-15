@@ -86,6 +86,7 @@ const DataTableStub = {
         <div data-test="select-row"><slot name="cell-select" :row="row" /></div>
         <slot name="cell-created_at" :value="row.created_at" :row="row" />
         <div data-test="account-rate"><slot name="cell-rate_multiplier" :row="row" /></div>
+        <slot name="cell-upstream_billing_rate" :row="row" />
       </div>
     </div>
   `
@@ -409,14 +410,15 @@ describe('admin AccountsView bulk edit scope', () => {
     expect(probeUpstreamBillingBatch).toHaveBeenCalledWith([7, 11])
   })
 
-  it('updates the current page locally after a batch probe', async () => {
+  it.each([true, false])('updates the current page after a batch probe with schedulable=%s', async (schedulable) => {
     const account = (id: number, rateMultiplier: number) => ({
       id,
       name: `account-${id}`,
       platform: 'openai',
       type: 'apikey',
       status: 'active',
-      schedulable: true,
+      schedulable,
+      extra: schedulable ? {} : { scheduling_manual_paused_at: '2026-10-08T00:00:00Z' },
       rate_multiplier: rateMultiplier,
       created_at: '2026-07-13T00:00:00Z',
       updated_at: '2026-07-13T00:00:00Z'
@@ -430,7 +432,7 @@ describe('admin AccountsView bulk edit scope', () => {
         account_id: 11,
         snapshot: {
           status: 'ok',
-          data: { effective_rate_multiplier: 0.065 },
+          data: { effective_rate_multiplier: 0.065, balance: 12.5, billing_mode: 'balance' },
           synced_rate_multiplier: 0.065,
           last_attempt_at: '2026-07-13T00:00:00Z',
           next_probe_at: '2026-07-13T00:30:00Z'
@@ -483,6 +485,9 @@ describe('admin AccountsView bulk edit scope', () => {
     expect(probeUpstreamBillingBatch).toHaveBeenCalledWith([11])
     expect(listAccounts).toHaveBeenCalledTimes(2)
     expect(wrapper.get('[data-test="account-rate"]').text()).toBe('0.065x')
+    const billingCell = wrapper.findComponent({ name: 'UpstreamBillingRateCell' })
+    expect(billingCell.props('account').extra.upstream_billing_probe.data.balance).toBe(12.5)
+    expect(billingCell.props('account').schedulable).toBe(schedulable)
   })
 
   it('does not report a successful batch probe as failed when reconciliation is skipped', async () => {
@@ -557,16 +562,16 @@ describe('admin AccountsView bulk edit scope', () => {
     consoleError.mockRestore()
   })
 
-  it('updates the account row after a successful single-account probe', async () => {
+  it.each([true, false])('updates the account row after a single-account probe with schedulable=%s', async (schedulable) => {
     const account = (rateMultiplier: number) => ({
       id: 7,
       name: 'account-7',
       platform: 'openai',
       type: 'apikey',
       status: 'active',
-      schedulable: true,
+      schedulable,
       rate_multiplier: rateMultiplier,
-      extra: { upstream_billing_probe_enabled: true },
+      extra: { upstream_billing_probe_enabled: true, ...(schedulable ? {} : { scheduling_manual_paused_at: '2026-10-08T00:00:00Z' }) },
       created_at: '2026-07-13T00:00:00Z',
       updated_at: '2026-07-13T00:00:00Z'
     })
@@ -577,10 +582,22 @@ describe('admin AccountsView bulk edit scope', () => {
       account_id: 7,
       snapshot: {
         status: 'ok',
-        data: { effective_rate_multiplier: 0.065 },
+        data: { effective_rate_multiplier: 0.065, balance: 12.5, billing_mode: 'balance' },
         synced_rate_multiplier: 0.065,
         last_attempt_at: '2026-07-13T00:00:00Z',
         next_probe_at: '2026-07-13T00:30:00Z'
+      }
+    })
+    getUpstreamBillingRatesWithEtag.mockResolvedValue({
+      notModified: false,
+      etag: 'older-snapshot',
+      data: {
+        total: 1, page: 1, page_size: 20,
+        items: [{ account_id: 7, snapshot: {
+          status: 'ok', data: { balance: 3, effective_rate_multiplier: 0.25 },
+          synced_rate_multiplier: 0.25,
+          last_attempt_at: '2026-07-12T00:00:00Z', next_probe_at: '2026-07-12T00:30:00Z'
+        } }]
       }
     })
 
@@ -626,5 +643,9 @@ describe('admin AccountsView bulk edit scope', () => {
     expect(probeUpstreamBilling).toHaveBeenCalledWith(7)
     expect(listAccounts).toHaveBeenCalledTimes(1)
     expect(wrapper.get('[data-test="account-rate"]').text()).toBe('0.065x')
+    const billingCell = wrapper.findComponent({ name: 'UpstreamBillingRateCell' })
+    expect(billingCell.props('account').extra.upstream_billing_probe.data.balance).toBe(12.5)
+    expect(billingCell.props('account').schedulable).toBe(schedulable)
+    if (!schedulable) expect(billingCell.props('account').extra.scheduling_manual_paused_at).toBeTruthy()
   })
 })

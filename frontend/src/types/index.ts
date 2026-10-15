@@ -1127,7 +1127,7 @@ export interface UpstreamBillingData {
   points_per_usd?: number
   balance?: number
   currency?: 'USD' | 'CNY'
-  balance_source?: 'sub2api_usage' | 'generic' | 'new_api'
+  balance_source?: 'sub2api_billing' | 'sub2api_usage' | 'generic' | 'new_api'
   subscription_id?: number
   usage?: UpstreamBillingUsage
   group_rate_multiplier?: number

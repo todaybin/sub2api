@@ -10,10 +10,12 @@ import (
 func TestUpstreamBillingAutoRestoreRequiresConfirmedPositiveScheduledBalance(t *testing.T) {
 	for _, tt := range []struct {
 		name, mode      string
+		balanceStatus   string
 		balance         any
 		scheduled, want bool
 	}{
 		{name: "positive", mode: "balance", balance: 12.0, scheduled: true, want: true},
+		{name: "failed verification", mode: "balance", balance: 12.0, scheduled: true, balanceStatus: UpstreamBillingProbeStatusFailed},
 		{name: "positive string", mode: "balance", balance: "0.000001", scheduled: true, want: true},
 		{name: "negative", mode: "balance", balance: -12.0, scheduled: true},
 		{name: "negative string", mode: "balance", balance: "-0.000001", scheduled: true},
@@ -26,7 +28,7 @@ func TestUpstreamBillingAutoRestoreRequiresConfirmedPositiveScheduledBalance(t *
 		{name: "not a number", mode: "balance", balance: math.NaN(), scheduled: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			snapshot := &UpstreamBillingProbeSnapshot{}
+			snapshot := &UpstreamBillingProbeSnapshot{BalanceStatus: tt.balanceStatus}
 			setUpstreamBillingAutoRestore(snapshot, map[string]any{"billing_mode": tt.mode, "balance": tt.balance}, tt.scheduled)
 			require.Equal(t, tt.want, snapshot.AutoRestoreBalance)
 		})

@@ -74,9 +74,12 @@
           </template>
           <p>{{ t('admin.accounts.upstreamBilling.updatedAt', { value: formatDate(snapshot?.received_at) }) }}</p>
         </template>
-        <template v-else-if="stale && lastDetectedRate != null">
-          <p data-testid="upstream-billing-last-rate">
+        <template v-else-if="stale && validTimestamps && (lastDetectedRate != null || observedBalance != null)">
+          <p v-if="lastDetectedRate != null" data-testid="upstream-billing-last-rate">
             {{ t('admin.accounts.upstreamBilling.lastDetectedRate', { value: lastDetectedRate }) }}
+          </p>
+          <p v-if="observedBalance != null" data-testid="upstream-billing-last-balance">
+            {{ t('admin.accounts.upstreamBilling.lastDetectedBalance', { value: formatCurrency(observedBalance, balanceCurrency) }) }}
           </p>
           <p data-testid="upstream-billing-last-time">
             {{ t('admin.accounts.upstreamBilling.lastDetectedAt', { value: formatDate(snapshot?.received_at) }) }}
@@ -86,6 +89,11 @@
           </p>
         </template>
         <p v-else>{{ statusLabel || '-' }}</p>
+        <p v-if="balanceSourceLabel && (validBalance != null || (stale && validTimestamps && observedBalance != null))" data-testid="upstream-billing-balance-source">
+          {{ t('admin.accounts.upstreamBilling.balanceSource', { value: balanceSourceLabel }) }}
+        </p>
+        <p v-if="probeFailure" class="text-red-300" data-testid="upstream-billing-probe-error">{{ probeFailure }}</p>
+        <p v-if="balanceFailure" class="text-amber-300" data-testid="upstream-billing-balance-error">{{ balanceFailure }}</p>
         <p
           v-if="probeEnabled && globalProbeEnabled !== false && nextProbeAt"
           data-testid="upstream-billing-next-probe"
@@ -120,6 +128,9 @@
     </HelpTooltip>
     <span v-if="hasEffectiveRate && statusLabel" :class="statusClass" class="whitespace-nowrap text-[10px] font-medium">
       {{ statusLabel }}
+    </span>
+    <span v-if="balanceFailure && !isCodeBuddy" class="whitespace-nowrap text-[10px] font-medium text-amber-600 dark:text-amber-400" data-testid="upstream-billing-balance-warning">
+      {{ t('admin.accounts.upstreamBilling.balanceQueryFailed') }}
     </span>
     <button
       type="button"
@@ -182,6 +193,34 @@ const codeBuddyBalanceDisplay = computed(() => {
 const recoveryHint = computed(() => accountRecoveryHint(props.account))
 const snapshot = computed<UpstreamBillingProbeSnapshot | undefined>(() => props.account.extra?.upstream_billing_probe)
 const data = computed(() => snapshot.value?.data)
+const failureDetail = (label: string, reason?: string, status?: number) => {
+  const reasons: Record<string, string> = {
+    http_error: 'queryErrorHTTP',
+    unsupported: 'queryErrorUnsupported',
+    balance_query_not_configured: 'queryErrorNotConfigured',
+    request_failed: 'queryErrorRequest',
+    invalid_response: 'queryErrorInvalid',
+    invalid_query_config: 'queryErrorInvalid',
+    invalid_balance_result: 'queryErrorInvalid'
+  }
+  return t('admin.accounts.upstreamBilling.queryFailureDetail', {
+    label: t(`admin.accounts.upstreamBilling.${label}`),
+    reason: t(`admin.accounts.upstreamBilling.${reasons[reason ?? ''] ?? 'queryErrorUnknown'}`),
+    http: typeof status === 'number' && status >= 100 && status <= 599
+      ? t('admin.accounts.upstreamBilling.queryFailureHTTP', { status }) : ''
+  })
+}
+const probeFailure = computed(() => snapshot.value?.status === 'failed' || snapshot.value?.status === 'unsupported'
+  ? failureDetail('probeResultFailed', snapshot.value.last_error, snapshot.value.http_status) : '')
+const balanceFailure = computed(() => snapshot.value?.balance_status === 'failed' || snapshot.value?.balance_status === 'unsupported'
+  ? failureDetail('balanceQueryFailed', snapshot.value.balance_last_error, snapshot.value.balance_http_status) : '')
+const balanceSourceLabel = computed(() => {
+  const source = data.value?.balance_source
+  if (source === 'sub2api_usage') return t('admin.accounts.upstreamBilling.balanceSourceUsage')
+  if (source === 'generic') return t('admin.accounts.upstreamBilling.balanceSourceGeneric')
+  if (source && source !== 'sub2api_billing') return t('admin.accounts.upstreamBilling.balanceSourceConfigured')
+  return t('admin.accounts.upstreamBilling.balanceSourcePrimary')
+})
 const autoDisabledAt = computed(() => {
   const value = props.account.extra?.upstream_billing_balance_auto_disabled_at
   return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : ''
@@ -289,11 +328,11 @@ const statusClass = computed(() => {
 })
 const hasEffectiveRate = computed(() => effectiveRate.value !== '-')
 const billingDataUsable = computed(() => validTimestamps.value && !stale.value && ['ok', 'failed'].includes(snapshot.value?.status ?? ''))
-const validBalance = computed(() => {
-  if (!billingDataUsable.value) return null
+const observedBalance = computed(() => {
   const value = data.value?.balance
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 })
+const validBalance = computed(() => billingDataUsable.value ? observedBalance.value : null)
 const balanceCurrency = computed(() => data.value?.currency === 'CNY' ? 'CNY' : 'USD')
 const formattedBalance = computed(() => validBalance.value == null ? '' : formatCurrency(validBalance.value, balanceCurrency.value))
 const validSubscriptionID = computed(() => {

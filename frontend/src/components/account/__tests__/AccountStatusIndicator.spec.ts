@@ -2,13 +2,18 @@ import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import AccountStatusIndicator from '../AccountStatusIndicator.vue'
 import type { Account } from '@/types'
+import zhAccounts from '@/i18n/locales/zh/admin/accounts'
+
+const locale = vi.hoisted(() => ({ chinese: false }))
 
 vi.mock('vue-i18n', async () => {
   const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
   return {
     ...actual,
     useI18n: () => ({
-      t: (key: string) => key
+      t: (key: string) => locale.chinese
+        ? zhAccounts.accounts.status[key.split('.').at(-1) as keyof typeof zhAccounts.accounts.status] ?? key
+        : key
     })
   }
 })
@@ -51,6 +56,24 @@ function makeAccount(overrides: Partial<Account>): Account {
 }
 
 describe('AccountStatusIndicator', () => {
+  it.each([
+    { extra: { scheduling_manual_paused_at: '2026-10-08T00:00:00Z' }, text: '需手动启用' },
+    { extra: { balance_auto_restore_token: 'token' }, text: '余额恢复后自动启用' },
+    { extra: { upstream_billing_balance_auto_disabled_at: '2026-10-08T00:00:00Z' }, text: '历史暂停需手动确认' }
+  ])('renders the Chinese recovery hint: $text', ({ extra, text }) => {
+    locale.chinese = true
+    try {
+      const wrapper = mount(AccountStatusIndicator, {
+        props: { account: makeAccount({ schedulable: false, extra }) }
+      })
+      expect(wrapper.get('[data-testid="account-recovery-hint"]').text()).toBe(text)
+      expect(wrapper.text()).not.toMatch(/\?{2,}/)
+      wrapper.unmount()
+    } finally {
+      locale.chinese = false
+    }
+  })
+
   it.each([
     { name: 'automatic balance pause', extra: { balance_auto_restore_token: 'new-token' }, hint: 'balanceAutoRecovery' },
     { name: 'manual pause wins', extra: { scheduling_manual_paused_at: '2026-10-08T00:00:00Z', balance_auto_restore_token: 'stale' }, hint: 'manualRecoveryRequired' },

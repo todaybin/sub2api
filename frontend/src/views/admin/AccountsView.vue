@@ -1235,6 +1235,11 @@ const applyUpstreamBillingRateSnapshots = async (
     if (!item) return account
     const nextSnapshot = item.snapshot ?? null
     const previousSnapshot = account.extra?.upstream_billing_probe ?? null
+    // A list request may have observed the row before a manual probe finished.
+    // Keep the newer observation already applied from the probe response.
+    const nextAttempt = Date.parse(nextSnapshot?.last_attempt_at ?? '')
+    const previousAttempt = Date.parse(previousSnapshot?.last_attempt_at ?? '')
+    if (Number.isFinite(nextAttempt) && Number.isFinite(previousAttempt) && nextAttempt < previousAttempt) return account
     if (JSON.stringify(previousSnapshot) === JSON.stringify(nextSnapshot)) return account
 
     const nextExtra = { ...(account.extra ?? {}) }

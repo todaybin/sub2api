@@ -565,7 +565,7 @@ func TestUpstreamBillingProbeAutoVerifiesPrimaryBalance(t *testing.T) {
 		wantBalanceCode string
 	}{
 		{name: "negative usage overrides positive primary", usageStatus: http.StatusOK, usageBody: `{"isValid":false,"remaining":-0.18}`, wantBalance: true, wantBalanceCode: UpstreamBillingProbeStatusOK},
-		{name: "failed verification hides primary", usageStatus: http.StatusInternalServerError, genericStatus: http.StatusInternalServerError, wantBalanceCode: UpstreamBillingProbeStatusFailed},
+		{name: "failed verification retains primary without restoring", usageStatus: http.StatusInternalServerError, genericStatus: http.StatusInternalServerError, wantBalanceCode: UpstreamBillingProbeStatusFailed},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			account := &Account{
@@ -598,12 +598,86 @@ func TestUpstreamBillingProbeAutoVerifiesPrimaryBalance(t *testing.T) {
 				require.Equal(t, "sub2api_usage", snapshot.Data["balance_source"])
 				require.Len(t, upstream.requests, 2)
 			} else {
-				require.NotContains(t, snapshot.Data, "balance")
+				require.Equal(t, float64(10), snapshot.Data["balance"])
+				require.Equal(t, "sub2api_billing", snapshot.Data["balance_source"])
+				require.Equal(t, "http_error", snapshot.BalanceLastError)
 				require.Len(t, upstream.requests, 3)
 			}
 			require.False(t, snapshot.AutoRestoreBalance)
 			require.False(t, account.Schedulable)
 			require.Contains(t, account.Extra, UpstreamBillingBalanceAutoDisabledAtExtraKey)
+		})
+	}
+}
+
+func TestUpstreamBillingProbeFailedVerificationDoesNotChangeScheduling(t *testing.T) {
+	for _, balance := range []float64{12.5, 0, -0.18} {
+		for _, schedulable := range []bool{true, false} {
+			t.Run(fmt.Sprintf("balance=%g/schedulable=%t", balance, schedulable), func(t *testing.T) {
+				account := &Account{
+					ID: 23, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+					Status: StatusActive, Schedulable: schedulable, Concurrency: 1,
+					Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://upstream.example"},
+					Extra:       map[string]any{UpstreamBillingProbeEnabledExtraKey: true, UpstreamBillingBalanceQueryModeExtraKey: "auto"},
+				}
+				primary := fmt.Sprintf(`{"object":"sub2api.key_billing","schema_version":1,"billing_scope":"token","billing_mode":"balance","balance":%g,"group_rate_multiplier":1,"resolved_rate_multiplier":1,"peak_rate_enabled":false,"effective_rate_multiplier":1,"observed_at":"2026-07-13T01:00:00Z"}`, balance)
+				upstream := &httpUpstreamRecorder{responses: []*http.Response{
+					{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(primary))},
+					{StatusCode: http.StatusInternalServerError, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{}`))},
+					{StatusCode: http.StatusInternalServerError, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{}`))},
+				}}
+				repo := &upstreamBillingProbeAccountRepo{accounts: map[int64]*Account{account.ID: account}}
+				settings := &upstreamBillingProbeSettingRepo{values: map[string]string{
+					SettingKeyUpstreamBillingProbeSettings: `{"enabled":true,"interval_minutes":30,"auto_disable_zero_balance":true}`,
+				}}
+				svc := newUpstreamBillingProbeTestService(repo, upstream, settings)
+				snapshot, err := svc.probeScheduledAccount(context.Background(), account.ID, 30, true)
+				require.NoError(t, err)
+				require.Equal(t, balance, snapshot.Data["balance"])
+				require.Equal(t, UpstreamBillingProbeStatusFailed, snapshot.BalanceStatus)
+				require.False(t, snapshot.AutoDisableZeroBalance)
+				require.False(t, snapshot.AutoRestoreBalance)
+				require.Equal(t, schedulable, account.Schedulable)
+			})
+		}
+	}
+}
+
+func TestUpstreamBillingProbeSchedulingDoesNotGateObservation(t *testing.T) {
+	for _, pause := range []string{"enabled", "manual", "automatic"} {
+		t.Run(pause, func(t *testing.T) {
+			extra := map[string]any{UpstreamBillingProbeEnabledExtraKey: true}
+			if pause == "manual" {
+				extra[SchedulingManualPausedAtExtraKey] = "2026-07-13T00:00:00Z"
+			} else if pause == "automatic" {
+				extra[BalanceAutoRestoreTokenExtraKey] = "token"
+			}
+			account := &Account{
+				ID: 23, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+				Status: StatusActive, Schedulable: pause == "enabled", Concurrency: 1,
+				Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://upstream.example"}, Extra: extra,
+			}
+			repo := &upstreamBillingProbeAccountRepo{accounts: map[int64]*Account{account.ID: account}}
+			upstream := &upstreamBillingProbeHTTPStub{}
+			svc := newUpstreamBillingProbeTestService(repo, upstream, &upstreamBillingProbeSettingRepo{values: map[string]string{
+				SettingKeyUpstreamBillingProbeSettings: `{"enabled":true,"interval_minutes":30}`,
+			}})
+			require.NoError(t, svc.RunDue(context.Background()))
+			require.Equal(t, int64(1), upstream.calls.Load())
+			snapshot, err := svc.ProbeAccount(context.Background(), account.ID)
+			require.NoError(t, err)
+			require.Equal(t, float64(12.5), snapshot.Data["balance"])
+			require.Equal(t, float64(0.8), snapshot.Data["effective_rate_multiplier"])
+			require.False(t, snapshot.AutoRestoreBalance, "manual observation must not restore scheduling")
+			results := svc.ProbeAccounts(context.Background(), []int64{account.ID})
+			require.Len(t, results, 1)
+			require.Empty(t, results[0].Error)
+			require.Equal(t, float64(12.5), results[0].Snapshot.Data["balance"])
+			require.Equal(t, int64(3), upstream.calls.Load())
+			if pause == "manual" {
+				require.False(t, account.Schedulable)
+				require.Equal(t, "2026-07-13T00:00:00Z", account.Extra[SchedulingManualPausedAtExtraKey])
+			}
 		})
 	}
 }

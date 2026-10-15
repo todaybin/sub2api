@@ -1106,6 +1106,9 @@ func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, ac
 		HTTPStatus:    resp.StatusCode,
 	}
 	_, hasBalance := resolveAccountExtraNumber(data, "balance")
+	if hasBalance {
+		data["balance_source"] = "sub2api_billing"
+	}
 	balanceQueryMode, _ := account.Extra[UpstreamBillingBalanceQueryModeExtraKey].(string)
 	verifyAutoBalance := balanceRequested && data["billing_mode"] != "subscription" && strings.EqualFold(strings.TrimSpace(balanceQueryMode), "auto")
 	if balanceRequested && data["billing_mode"] != "subscription" && (!hasBalance || verifyAutoBalance) {
@@ -1114,10 +1117,8 @@ func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, ac
 		if balanceResult.reason != "" {
 			snapshot.BalanceStatus = UpstreamBillingProbeStatusFailed
 			snapshot.BalanceLastError = balanceResult.reason
-			if verifyAutoBalance {
-				delete(data, "balance")
-				delete(data, "currency")
-			}
+			// Retain the primary observation for display, but do not use an
+			// unverified balance to change scheduling.
 		} else {
 			snapshot.BalanceStatus = UpstreamBillingProbeStatusOK
 			for key, value := range balanceData {
@@ -1135,7 +1136,7 @@ func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, ac
 			data["currency"] = currency
 		}
 	}
-	if autoDisableZeroBalance && balanceRequested && data["billing_mode"] == "balance" && upstreamBillingBalanceExhausted(data) {
+	if autoDisableZeroBalance && balanceRequested && snapshot.BalanceStatus != UpstreamBillingProbeStatusFailed && data["billing_mode"] == "balance" && upstreamBillingBalanceExhausted(data) {
 		latestSettings, settingsErr := s.getSettings(ctx)
 		if settingsErr == nil && latestSettings.Enabled && latestSettings.AutoDisableZeroBalance {
 			snapshot.AutoDisableZeroBalance = true
@@ -1486,7 +1487,7 @@ func upstreamBillingBalanceExhausted(data map[string]any) bool {
 }
 
 func setUpstreamBillingAutoRestore(snapshot *UpstreamBillingProbeSnapshot, data map[string]any, scheduled bool) {
-	if snapshot == nil || !scheduled || data == nil {
+	if snapshot == nil || !scheduled || data == nil || snapshot.BalanceStatus == UpstreamBillingProbeStatusFailed {
 		return
 	}
 	mode, _ := data["billing_mode"].(string)

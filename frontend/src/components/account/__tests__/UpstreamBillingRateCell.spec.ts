@@ -83,6 +83,75 @@ describe('UpstreamBillingRateCell', () => {
     expect(wrapper.get('[data-testid="upstream-billing-identity"]').text()).toContain('-')
   })
 
+  it.each([
+    { schedulable: true, extra: {} },
+    { schedulable: false, extra: { scheduling_manual_paused_at: '2026-07-13T00:00:00Z' } },
+    { schedulable: false, extra: { balance_auto_restore_token: 'token' } }
+  ])('keeps balances and probing available regardless of scheduling: $extra', async ({ schedulable, extra }) => {
+    for (const balance of [12.5, 0, -0.18]) {
+      const wrapper = mount(UpstreamBillingRateCell, {
+        props: { account: makeAccount({ schedulable, extra: {
+          ...extra,
+          upstream_billing_probe: {
+            status: 'ok', data: { ...billingData, billing_mode: 'balance', balance },
+            received_at: '2026-07-13T00:00:00Z', fresh_until: '2026-07-13T01:00:00Z',
+            last_attempt_at: '2026-07-13T00:00:00Z', next_probe_at: '2026-07-13T00:30:00Z'
+          }
+        } }), now: Date.now() },
+        global: { stubs: { Teleport: true } }
+      })
+      expect(wrapper.get('[data-testid="upstream-billing-rate"]').text()).toBe('0.60x')
+      expect(wrapper.get('[data-testid="upstream-billing-identity"]').text()).toContain(Math.abs(balance).toFixed(2))
+      await wrapper.get('[data-testid="upstream-billing-details"]').trigger('mouseenter')
+      expect(wrapper.get('[role="tooltip"]').isVisible()).toBe(true)
+      await wrapper.get('[data-testid="upstream-billing-probe"]').trigger('click')
+      expect(wrapper.emitted('probe')).toHaveLength(1)
+      expect(wrapper.props('account').schedulable).toBe(schedulable)
+      wrapper.unmount()
+    }
+  })
+
+  it('displays the primary balance and a separate balance lookup failure', () => {
+    const wrapper = mount(UpstreamBillingRateCell, {
+      props: { account: makeAccount({ schedulable: false, extra: {
+        scheduling_manual_paused_at: '2026-07-13T00:00:00Z',
+        upstream_billing_probe: {
+          status: 'ok', data: { ...billingData, billing_mode: 'balance', balance: 12.5, balance_source: 'sub2api_billing' },
+          balance_status: 'failed', balance_last_error: 'http_error', balance_http_status: 500,
+          received_at: '2026-07-13T00:00:00Z', fresh_until: '2026-07-13T01:00:00Z',
+          last_attempt_at: '2026-07-13T00:00:00Z', next_probe_at: '2026-07-13T00:30:00Z'
+        }
+      } }), now: Date.now() },
+      global: { stubs: { Teleport: true } }
+    })
+    expect(wrapper.get('[data-testid="upstream-billing-rate"]').text()).toBe('0.60x')
+    expect(wrapper.get('[data-testid="upstream-billing-identity"]').text()).toContain('12.50')
+    expect(wrapper.get('[data-testid="upstream-billing-balance-warning"]').text()).toContain('balanceQueryFailed')
+    expect(wrapper.get('[data-testid="upstream-billing-balance-error"]').text()).toContain('queryErrorHTTP')
+    expect(wrapper.get('[data-testid="upstream-billing-balance-error"]').text()).toContain('500')
+    expect(wrapper.get('[data-testid="upstream-billing-balance-source"]').text()).toContain('balanceSourcePrimary')
+    wrapper.unmount()
+  })
+
+  it('retains an expired balance-only observation in the tooltip as historical data', () => {
+    const wrapper = mount(UpstreamBillingRateCell, {
+      props: { account: makeAccount({ schedulable: false, extra: {
+        upstream_billing_probe: {
+          status: 'ok', data: { billing_mode: 'balance', balance: -0.18, currency: 'CNY' },
+          received_at: '2026-07-12T22:00:00Z', fresh_until: '2026-07-12T23:00:00Z',
+          last_attempt_at: '2026-07-12T22:00:00Z', next_probe_at: '2026-07-12T22:30:00Z'
+        }
+      } }), now: Date.now() },
+      global: { stubs: { Teleport: true } }
+    })
+    expect(wrapper.get('[data-testid="upstream-billing-rate"]').text()).toContain('stale')
+    expect(wrapper.find('[data-testid="upstream-billing-identity"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="upstream-billing-last-balance"]').text()).toContain('lastDetectedBalance:')
+    expect(wrapper.get('[data-testid="upstream-billing-last-balance"]').text()).toContain('0.18')
+    expect(wrapper.get('[data-testid="upstream-billing-last-time"]').text()).toContain('lastDetectedAt:')
+    wrapper.unmount()
+  })
+
   it('recomputes the current effective rate and keeps the icon-only probe action', async () => {
     const wrapper = mount(UpstreamBillingRateCell, {
       props: {
@@ -448,6 +517,22 @@ describe('UpstreamBillingRateCell', () => {
     expect(wrapper.get('[data-testid="upstream-billing-rate"]').text()).toBe('admin.accounts.upstreamBilling.failed')
     expect(wrapper.text()).toContain('admin.accounts.upstreamBilling.failed')
     expect(wrapper.text()).not.toContain('admin.accounts.upstreamBilling.stale')
+  })
+
+  it('shows failed probe details without inventing a balance', () => {
+    const wrapper = mount(UpstreamBillingRateCell, {
+      props: { account: makeAccount({ extra: {
+        upstream_billing_probe: {
+          status: 'failed', last_error: 'request_failed',
+          last_attempt_at: '2026-07-13T00:00:00Z', next_probe_at: '2026-07-13T00:30:00Z'
+        }
+      } }), now: Date.now() },
+      global: { stubs: { Teleport: true } }
+    })
+    expect(wrapper.get('[data-testid="upstream-billing-rate"]').text()).toContain('failed')
+    expect(wrapper.get('[data-testid="upstream-billing-probe-error"]').text()).toContain('queryErrorRequest')
+    expect(wrapper.find('[data-testid="upstream-billing-identity"]').exists()).toBe(false)
+    wrapper.unmount()
   })
 
   it('uses unsupported as the primary tooltip trigger without a dash', () => {
