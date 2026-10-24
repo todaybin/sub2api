@@ -23,12 +23,15 @@ func (s *UserRepoAPIKeyGroupFilterSuite) SetupTest() {
 	s.ctx = context.Background()
 	s.client = testEntClient(s.T())
 	s.repo = newUserRepositoryWithSQL(s.client, integrationDB)
-	// api_keys 必须先于 users 清理（外键）；groups 也清理避免跨用例串扰。
-	_, _ = integrationDB.ExecContext(s.ctx, "DELETE FROM api_keys")
-	_, _ = integrationDB.ExecContext(s.ctx, "DELETE FROM user_allowed_groups")
-	_, _ = integrationDB.ExecContext(s.ctx, "DELETE FROM user_subscriptions")
-	_, _ = integrationDB.ExecContext(s.ctx, "DELETE FROM users")
-	_, _ = integrationDB.ExecContext(s.ctx, "DELETE FROM groups")
+	// 此连接仅指向 TestMain 创建的隔离容器库；级联清理包含新迁移的外键表。
+	// 前后都清理并检查错误，防止积分、审计等关联记录导致用例串扰。
+	assertions := s.Require()
+	reset := func() {
+		_, err := integrationDB.ExecContext(s.ctx, "TRUNCATE TABLE users, groups CASCADE")
+		assertions.NoError(err, "清理隔离测试数据")
+	}
+	reset()
+	s.T().Cleanup(reset)
 }
 
 func TestUserRepoAPIKeyGroupFilterSuite(t *testing.T) {

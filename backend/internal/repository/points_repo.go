@@ -25,7 +25,7 @@ func (r *userRepository) PointsSummary(ctx context.Context, userID int64) (*serv
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var result service.PointsSummary
 	if rows.Next() {
 		err = rows.Scan(&result.PointsSpent, &result.PointsCostUSD, &result.MoneySpentUSD)
@@ -45,7 +45,7 @@ func (r *userRepository) PointsAccount(ctx context.Context, userID int64) (*serv
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	if !rows.Next() {
 		return nil, service.ErrUserNotFound
 	}
@@ -65,7 +65,7 @@ func (r *userRepository) PointsAvailable(ctx context.Context, userID int64) (flo
 	if err != nil {
 		return 0, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	if !rows.Next() {
 		return 0, service.ErrUserNotFound
 	}
@@ -81,7 +81,7 @@ func (r *userRepository) ReservePoints(ctx context.Context, id string, userID, k
 	if err != nil {
 		return 0, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	exec := sqlExecutorFromEntClient(tx.Client())
 	if exec == nil {
 		return 0, errors.New("points transaction executor unavailable")
@@ -92,11 +92,11 @@ func (r *userRepository) ReservePoints(ctx context.Context, id string, userID, k
 	}
 	var available float64
 	if !rows.Next() {
-		rows.Close()
+		_ = rows.Close()
 		return 0, service.ErrUserNotFound
 	}
 	err = rows.Scan(&available)
-	rows.Close()
+	_ = rows.Close()
 	if err != nil {
 		return 0, err
 	}
@@ -112,11 +112,11 @@ func (r *userRepository) ReservePoints(ctx context.Context, id string, userID, k
 	var enabled bool
 	var rate float64
 	if !rows.Next() {
-		rows.Close()
+		_ = rows.Close()
 		return 0, service.ErrGroupNotFound
 	}
 	err = rows.Scan(&enabled, &rate)
-	rows.Close()
+	_ = rows.Close()
 	if err != nil {
 		return 0, err
 	}
@@ -188,13 +188,13 @@ func (r *userRepository) RecoverPointsWithEffects(ctx context.Context, afterComm
 	for rows.Next() {
 		var e entry
 		if err = rows.Scan(&e.id, &e.state, &e.command); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return err
 		}
 		pending = append(pending, e)
 	}
 	err = rows.Err()
-	rows.Close()
+	_ = rows.Close()
 	if err != nil {
 		return err
 	}
@@ -236,7 +236,7 @@ func (r *userRepository) AdjustPoints(ctx context.Context, userID int64, value f
 		if err != nil {
 			return change, err
 		}
-		defer owned.Rollback()
+		defer func() { _ = owned.Rollback() }()
 		ctx = dbent.NewTxContext(ctx, owned)
 	}
 	exec, err := r.userProfileIdentitySQL(ctx)
@@ -249,11 +249,11 @@ func (r *userRepository) AdjustPoints(ctx context.Context, userID int64, value f
 	}
 	var reserved float64
 	if !rows.Next() {
-		rows.Close()
+		_ = rows.Close()
 		return change, service.ErrUserNotFound
 	}
 	err = rows.Scan(&change.Old, &reserved)
-	rows.Close()
+	_ = rows.Close()
 	if err != nil {
 		return change, err
 	}
@@ -265,7 +265,7 @@ func (r *userRepository) AdjustPoints(ctx context.Context, userID int64, value f
 		var delta float64
 		var originalNotes string
 		err = rows.Scan(&delta, &change.New, &originalNotes)
-		rows.Close()
+		_ = rows.Close()
 		if err != nil {
 			return change, err
 		}
@@ -279,7 +279,7 @@ func (r *userRepository) AdjustPoints(ctx context.Context, userID int64, value f
 		change.Old = change.New - delta
 		return change, err
 	}
-	rows.Close()
+	_ = rows.Close()
 	value = service.QuantizeUsageBillingAmount(value)
 	switch operation {
 	case "set":
@@ -322,7 +322,7 @@ func (r *userRepository) ListPointsLedger(ctx context.Context, userID int64, pag
 	if rows.Next() {
 		err = rows.Scan(&total)
 	}
-	rows.Close()
+	_ = rows.Close()
 	if err != nil {
 		return nil, 0, err
 	}
@@ -330,7 +330,7 @@ func (r *userRepository) ListPointsLedger(ctx context.Context, userID int64, pag
 	if err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	entries := []service.PointsLedgerEntry{}
 	for rows.Next() {
 		var e service.PointsLedgerEntry

@@ -935,8 +935,6 @@ func (s *CodeBuddyOAuthService) fetchModelCatalogDetailed(ctx context.Context, s
 				} else {
 					result.diagnostics = append(result.diagnostics, "/v2/plugin/accounts: models exist but none match region")
 				}
-			} else if codeBuddyValueHasModelContainer(value) {
-				validEmptyCatalog = true
 			}
 			record("/v2/plugin/accounts", status, nil, 0)
 		} else {

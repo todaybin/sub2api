@@ -30,12 +30,15 @@ func (s *UserRepoSuite) SetupTest() {
 	s.client = testEntClient(s.T())
 	s.repo = newUserRepositoryWithSQL(s.client, integrationDB)
 
-	// 清理测试数据，确保每个测试从干净状态开始
-	_, _ = integrationDB.ExecContext(s.ctx, "DELETE FROM auth_identity_channels")
-	_, _ = integrationDB.ExecContext(s.ctx, "DELETE FROM auth_identities")
-	_, _ = integrationDB.ExecContext(s.ctx, "DELETE FROM user_subscriptions")
-	_, _ = integrationDB.ExecContext(s.ctx, "DELETE FROM user_allowed_groups")
-	_, _ = integrationDB.ExecContext(s.ctx, "DELETE FROM users")
+	// 此连接仅指向 TestMain 创建的隔离容器库；级联清理包含新迁移的外键表。
+	// 前后都清理并检查错误，防止积分、审计等关联记录导致用例串扰。
+	assertions := s.Require()
+	reset := func() {
+		_, err := integrationDB.ExecContext(s.ctx, "TRUNCATE TABLE users CASCADE")
+		assertions.NoError(err, "清理隔离测试数据")
+	}
+	reset()
+	s.T().Cleanup(reset)
 }
 
 func TestUserRepoSuite(t *testing.T) {

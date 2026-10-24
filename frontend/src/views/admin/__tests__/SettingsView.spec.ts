@@ -580,6 +580,8 @@ function mountView() {
         ProxySelector: true,
         ImageUpload: ImageUploadStub,
         BackupSettings: true,
+        // 受限密钥组件有独立用例，页面测试不向真实管理 API 发请求。
+        AdminAccessKeysSettings: true,
       },
     },
   });
@@ -1447,6 +1449,8 @@ describe("admin SettingsView payment visible method controls", () => {
           ProxySelector: true,
           ImageUpload: ImageUploadStub,
           BackupSettings: true,
+          // 受限密钥组件有独立用例，页面测试不向真实管理 API 发请求。
+          AdminAccessKeysSettings: true,
         },
       },
     });
@@ -1796,6 +1800,8 @@ describe("admin SettingsView payment visible method controls", () => {
           ProxySelector: true,
           ImageUpload: ImageUploadStub,
           BackupSettings: true,
+          // 受限密钥组件有独立用例，页面测试不向真实管理 API 发请求。
+          AdminAccessKeysSettings: true,
         },
       },
     });

@@ -51,8 +51,9 @@ func testIntegrationAdminGateway(t *testing.T, client *redis.Client, unavailable
 	ctx := context.Background()
 	repo := &integrationFailingSettingRepo{panelRateLimitStubRepo: &panelRateLimitStubRepo{}}
 	settings := service.NewSettingService(repo, &config.Config{})
-	key, err := settings.GenerateAdminAPIKey(ctx)
-	require.NoError(t, err)
+	// 上游已停止新建旧式密钥；网关兼容性测试使用升级前已有密钥。
+	key := "admin-integration-gateway-test-key"
+	require.NoError(t, repo.Set(ctx, service.SettingKeyAdminAPIKey, key))
 	credentials, err := settings.GenerateIntegrationAdminCredentials(ctx)
 	require.NoError(t, err)
 	admin := &service.User{ID: 42, Role: service.RoleAdmin, Status: service.StatusActive, Concurrency: 3}

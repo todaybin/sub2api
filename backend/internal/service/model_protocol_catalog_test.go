@@ -332,9 +332,12 @@ func TestCommandCodeGatewayPassesThroughCatalogProtocols(t *testing.T) {
 		url  string
 		body []byte
 	}
+	sequence := 0
 	forward := func(t *testing.T, ingress routingMatrixIngress, model string, catalog map[string][]string) observation {
 		t.Helper()
-		base := fmt.Sprintf("http://cc-%s-%d.example", strings.ReplaceAll(t.Name(), "/", "-"), time.Now().UnixNano())
+		// Windows 时钟粒度内多次调用可能同纳秒，使用序号隔离缓存场景。
+		sequence++
+		base := fmt.Sprintf("http://cc-%s-%d.example", strings.ReplaceAll(t.Name(), "/", "-"), sequence)
 		account := commandCodeTestAccount(12)
 		account.Credentials["api_base_urls"] = map[string]any{
 			APIProtocolChatCompletions: base + "/provider/v1",
@@ -343,6 +346,11 @@ func TestCommandCodeGatewayPassesThroughCatalogProtocols(t *testing.T) {
 		}
 		url := buildOpenAIModelsURL(base + "/provider/v1")
 		key := modelProtocolCatalogKey(account, url)
+		t.Cleanup(func() {
+			upstreamModelProtocols.mu.Lock()
+			defer upstreamModelProtocols.mu.Unlock()
+			delete(upstreamModelProtocols.entries, key)
+		})
 		if catalog != nil {
 			upstreamModelProtocols.store(key, catalog, nil, time.Now())
 		} else {
@@ -352,6 +360,10 @@ func TestCommandCodeGatewayPassesThroughCatalogProtocols(t *testing.T) {
 		upstream := &httpUpstreamRecorder{err: errors.New("stop after capture")}
 		svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), httpUpstream: upstream}
 		body := routingMatrixCase{ingress: ingress, model: model}.body()
+		require.Equal(t, model, upstreamRoutingModel(account, body, ""))
+		if catalog != nil {
+			require.Equal(t, catalog[model], svc.modelCatalogProtocols(t.Context(), account, model))
+		}
 		_ = ingress.forward(svc, adaptiveProtocolTestContext(ingress.path, body), account, body)
 		require.NotEmpty(t, upstream.requests)
 		return observation{url: upstream.requests[len(upstream.requests)-1].URL.String(), body: upstream.lastBody}

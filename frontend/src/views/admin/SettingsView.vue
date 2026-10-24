@@ -46,8 +46,10 @@
 
         <!-- Tab: Security — Admin API Key -->
         <div v-show="activeTab === 'security'" class="space-y-6">
-          <!-- Admin API Key Settings -->
-          <div class="card">
+          <AdminAccessKeysSettings />
+          <!-- 已有全权密钥只提供轮换和删除入口。 -->
+          <details v-if="adminApiKeyExists" class="card">
+            <summary class="cursor-pointer px-6 py-4 font-medium">{{ t("adminAccessKeys.legacy") }}</summary>
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -84,48 +86,6 @@
                   class="h-4 w-4 animate-spin rounded-full border-b-2 border-primary-600"
                 ></div>
                 {{ t("common.loading") }}
-              </div>
-
-              <!-- No Key Configured -->
-              <div
-                v-else-if="!adminApiKeyExists"
-                class="flex items-center justify-between"
-              >
-                <span class="text-gray-500 dark:text-gray-400">
-                  {{ t("admin.settings.adminApiKey.notConfigured") }}
-                </span>
-                <button
-                  type="button"
-                  @click="createAdminApiKey"
-                  :disabled="adminApiKeyOperating"
-                  class="btn btn-primary btn-sm"
-                >
-                  <svg
-                    v-if="adminApiKeyOperating"
-                    class="mr-1 h-4 w-4 animate-spin"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      class="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      stroke-width="4"
-                    ></circle>
-                    <path
-                      class="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  {{
-                    adminApiKeyOperating
-                      ? t("admin.settings.adminApiKey.creating")
-                      : t("admin.settings.adminApiKey.create")
-                  }}
-                </button>
               </div>
 
               <!-- Key Exists -->
@@ -197,53 +157,54 @@
                 </div>
               </div>
 
-              <div class="border-t border-gray-100 pt-5 dark:border-dark-700">
-                <div class="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
-                      {{ t("admin.settings.integrationAdmin.title") }}
-                    </h3>
-                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                      {{ t("admin.settings.integrationAdmin.description") }}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    @click="createIntegrationAdminCredentials"
-                    :disabled="integrationAdminOperating"
-                    class="btn btn-secondary btn-sm shrink-0"
-                  >
-                    {{ integrationAdminExists ? t("admin.settings.integrationAdmin.regenerate") : t("admin.settings.integrationAdmin.create") }}
-                  </button>
+            </div>
+          </details>
+          <!-- 签名集成凭据独立于旧式管理密钥显示。 -->
+          <div class="card p-6">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                  {{ t("admin.settings.integrationAdmin.title") }}
+                </h3>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.integrationAdmin.description") }}
+                </p>
+              </div>
+              <button
+                type="button"
+                @click="createIntegrationAdminCredentials"
+                :disabled="integrationAdminOperating"
+                class="btn btn-secondary btn-sm shrink-0"
+              >
+                {{ integrationAdminExists ? t("admin.settings.integrationAdmin.regenerate") : t("admin.settings.integrationAdmin.create") }}
+              </button>
+            </div>
+            <div v-if="integrationAdminLoading" class="mt-3 text-sm text-gray-500">
+              {{ t("common.loading") }}
+            </div>
+            <div v-else class="mt-3 space-y-3">
+              <p v-if="integrationAdminExists" class="text-sm text-gray-600 dark:text-gray-300">
+                {{ t("admin.settings.integrationAdmin.currentId") }}:
+                <code class="rounded bg-gray-100 px-1.5 py-0.5 font-mono dark:bg-dark-700">{{ integrationAdminMaskedID }}</code>
+              </p>
+              <p class="rounded border border-sky-200 bg-sky-50 p-3 font-mono text-xs text-sky-900 dark:border-sky-800 dark:bg-sky-900/20 dark:text-sky-100">
+                POST /api/v1/integrations/admin/users/provision
+              </p>
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                {{ t("admin.settings.integrationAdmin.signatureHint") }}
+              </p>
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ t("admin.settings.integrationAdmin.migrationHint") }}</p>
+              <div v-if="newIntegrationAdminCredentials" class="rounded border border-green-200 bg-green-50 p-3 text-sm dark:border-green-800 dark:bg-green-900/20">
+                <p class="font-medium text-green-700 dark:text-green-300">{{ t("admin.settings.integrationAdmin.secretWarning") }}</p>
+                <div class="mt-2 flex flex-wrap items-center gap-2">
+                  <span>AppID:</span>
+                  <code data-testid="integration-appid" class="select-all break-all font-mono text-xs">{{ newIntegrationAdminCredentials.appid }}</code>
+                  <button type="button" data-testid="copy-integration-appid" class="btn btn-secondary btn-sm" @click="copyToClipboard(newIntegrationAdminCredentials.appid)">{{ t("admin.settings.integrationAdmin.copyAppId") }}</button>
                 </div>
-                <div v-if="integrationAdminLoading" class="mt-3 text-sm text-gray-500">
-                  {{ t("common.loading") }}
-                </div>
-                <div v-else class="mt-3 space-y-3">
-                  <p v-if="integrationAdminExists" class="text-sm text-gray-600 dark:text-gray-300">
-                    {{ t("admin.settings.integrationAdmin.currentId") }}:
-                    <code class="rounded bg-gray-100 px-1.5 py-0.5 font-mono dark:bg-dark-700">{{ integrationAdminMaskedID }}</code>
-                  </p>
-                  <p class="rounded border border-sky-200 bg-sky-50 p-3 font-mono text-xs text-sky-900 dark:border-sky-800 dark:bg-sky-900/20 dark:text-sky-100">
-                    POST /api/v1/integrations/admin/users/provision
-                  </p>
-                  <p class="text-xs text-gray-500 dark:text-gray-400">
-                    {{ t("admin.settings.integrationAdmin.signatureHint") }}
-                  </p>
-                  <p class="text-xs text-gray-500 dark:text-gray-400">{{ t("admin.settings.integrationAdmin.migrationHint") }}</p>
-                  <div v-if="newIntegrationAdminCredentials" class="rounded border border-green-200 bg-green-50 p-3 text-sm dark:border-green-800 dark:bg-green-900/20">
-                    <p class="font-medium text-green-700 dark:text-green-300">{{ t("admin.settings.integrationAdmin.secretWarning") }}</p>
-                    <div class="mt-2 flex flex-wrap items-center gap-2">
-                      <span>AppID:</span>
-                      <code data-testid="integration-appid" class="select-all break-all font-mono text-xs">{{ newIntegrationAdminCredentials.appid }}</code>
-                      <button type="button" data-testid="copy-integration-appid" class="btn btn-secondary btn-sm" @click="copyToClipboard(newIntegrationAdminCredentials.appid)">{{ t("admin.settings.integrationAdmin.copyAppId") }}</button>
-                    </div>
-                    <div class="mt-2 flex flex-wrap items-center gap-2">
-                      <span>Secret:</span>
-                      <code data-testid="integration-secret" class="select-all break-all font-mono text-xs">{{ newIntegrationAdminCredentials.secret }}</code>
-                      <button type="button" data-testid="copy-integration-secret" class="btn btn-secondary btn-sm" @click="copyToClipboard(newIntegrationAdminCredentials.secret)">{{ t("admin.settings.integrationAdmin.copySecret") }}</button>
-                    </div>
-                  </div>
+                <div class="mt-2 flex flex-wrap items-center gap-2">
+                  <span>Secret:</span>
+                  <code data-testid="integration-secret" class="select-all break-all font-mono text-xs">{{ newIntegrationAdminCredentials.secret }}</code>
+                  <button type="button" data-testid="copy-integration-secret" class="btn btn-secondary btn-sm" @click="copyToClipboard(newIntegrationAdminCredentials.secret)">{{ t("admin.settings.integrationAdmin.copySecret") }}</button>
                 </div>
               </div>
             </div>
@@ -9151,6 +9112,7 @@ import {
   isStepUpBlocked,
   stepUpBlockReason,
 } from "@/composables/useStepUp";
+import AdminAccessKeysSettings from "@/components/admin/settings/AdminAccessKeysSettings.vue";
 import TotpStepUpDialog from "@/components/auth/TotpStepUpDialog.vue";
 import { affiliatesAPI, type AffiliateAdminEntry, type SimpleUser as AffiliateSimpleUser } from "@/api/admin/affiliates";
 import { extractApiErrorMessage, extractI18nErrorMessage } from "@/utils/apiError";
@@ -12144,15 +12106,17 @@ async function loadAdminApiKey() {
 }
 
 async function createAdminApiKey() {
+  if (!adminApiKeyExists.value) return;
   adminApiKeyOperating.value = true;
   try {
-    const result = await adminAPI.settings.regenerateAdminApiKey();
+    const result = await settingsStepUp.run(() => adminAPI.settings.regenerateAdminApiKey());
     newAdminApiKey.value = result.key;
     adminApiKeyExists.value = true;
     adminApiKeyMasked.value =
       result.key.substring(0, 10) + "..." + result.key.slice(-4);
     appStore.showSuccess(t("admin.settings.adminApiKey.keyGenerated"));
   } catch (error: unknown) {
+    if (isStepUpCancelled(error)) return;
     appStore.showError(extractApiErrorMessage(error, t("common.error")));
   } finally {
     adminApiKeyOperating.value = false;
@@ -12194,12 +12158,13 @@ async function deleteAdminApiKey() {
   if (!confirm(t("admin.settings.adminApiKey.deleteConfirm"))) return;
   adminApiKeyOperating.value = true;
   try {
-    await adminAPI.settings.deleteAdminApiKey();
+    await settingsStepUp.run(() => adminAPI.settings.deleteAdminApiKey());
     adminApiKeyExists.value = false;
     adminApiKeyMasked.value = "";
     newAdminApiKey.value = "";
     appStore.showSuccess(t("admin.settings.adminApiKey.keyDeleted"));
   } catch (error: unknown) {
+    if (isStepUpCancelled(error)) return;
     appStore.showError(extractApiErrorMessage(error, t("common.error")));
   } finally {
     adminApiKeyOperating.value = false;

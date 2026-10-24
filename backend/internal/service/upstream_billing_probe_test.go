@@ -647,9 +647,10 @@ func TestUpstreamBillingProbeSchedulingDoesNotGateObservation(t *testing.T) {
 	for _, pause := range []string{"enabled", "manual", "automatic"} {
 		t.Run(pause, func(t *testing.T) {
 			extra := map[string]any{UpstreamBillingProbeEnabledExtraKey: true}
-			if pause == "manual" {
+			switch pause {
+			case "manual":
 				extra[SchedulingManualPausedAtExtraKey] = "2026-07-13T00:00:00Z"
-			} else if pause == "automatic" {
+			case "automatic":
 				extra[BalanceAutoRestoreTokenExtraKey] = "token"
 			}
 			account := &Account{

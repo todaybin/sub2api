@@ -18,13 +18,16 @@ func newAliyunCaptchaTestTarget(t *testing.T, handler http.HandlerFunc) (*aliyun
 	t.Helper()
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
+	endpoint := strings.TrimPrefix(server.URL, "http://")
+	// 阿里云 SDK 对 NO_PROXY 精确匹配含端口的 Host，测试端点必须直连。
+	t.Setenv("NO_PROXY", endpoint)
 
 	verifier := &aliyunCaptchaVerifier{protocol: "HTTP", timeoutMillis: 2_000}
 	cred := service.AliyunCaptchaCredentials{
 		AccessKeyID:     "test-ak-id",
 		AccessKeySecret: "test-ak-secret",
 		SceneID:         "scene-1",
-		Endpoint:        strings.TrimPrefix(server.URL, "http://"),
+		Endpoint:        endpoint,
 	}
 	return verifier, cred
 }
@@ -74,20 +77,23 @@ func TestAliyunCaptchaVerifier_APIErrorNormalized(t *testing.T) {
 }
 
 func TestAliyunCaptchaVerifier_TransportError(t *testing.T) {
-	server := httptest.NewServer(http.NotFoundHandler())
-	endpoint := strings.TrimPrefix(server.URL, "http://")
-	server.Close() // 立即关闭，制造连接失败
-
-	verifier := &aliyunCaptchaVerifier{protocol: "HTTP", timeoutMillis: 2_000}
-	cred := service.AliyunCaptchaCredentials{
-		AccessKeyID:     "test-ak-id",
-		AccessKeySecret: "test-ak-secret",
-		SceneID:         "scene-1",
-		Endpoint:        endpoint,
-	}
+	// 保持监听端口占用，只关闭连接，避免端口被并行测试重用后返回业务响应。
+	verifier, cred := newAliyunCaptchaTestTarget(t, func(w http.ResponseWriter, _ *http.Request) {
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			t.Error("验证码测试响应不支持连接接管")
+			return
+		}
+		conn, _, err := hijacker.Hijack()
+		if err != nil {
+			t.Errorf("制造验证码传输失败: %v", err)
+			return
+		}
+		_ = conn.Close()
+	})
 
 	_, err := verifier.VerifyCaptcha(context.Background(), cred, "param")
 	require.Error(t, err)
 	var apiErr *service.AliyunCaptchaAPIError
-	require.False(t, errors.As(err, &apiErr), "transport errors must not be normalized to API errors")
+	require.False(t, errors.As(err, &apiErr), "transport errors must not be normalized to API errors: %T %v", err, err)
 }

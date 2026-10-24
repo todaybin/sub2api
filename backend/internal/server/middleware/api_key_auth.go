@@ -213,7 +213,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 				apiKey.Group.ID,
 			)
 			if subErr != nil {
-				if !skipBilling && !(apiKey.Group.AllowPointsBilling && (errors.Is(subErr, service.ErrSubscriptionNotFound) || errors.Is(subErr, service.ErrSubscriptionExpired) || errors.Is(subErr, service.ErrSubscriptionSuspended))) {
+				if !skipBilling && (!apiKey.Group.AllowPointsBilling || (!errors.Is(subErr, service.ErrSubscriptionNotFound) && !errors.Is(subErr, service.ErrSubscriptionExpired) && !errors.Is(subErr, service.ErrSubscriptionSuspended))) {
 					AbortWithError(c, 403, "SUBSCRIPTION_NOT_FOUND", "No active subscription found for this group")
 					return
 				}
@@ -276,7 +276,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 					AbortWithError(c, 403, "GROUP_NOT_ALLOWED", "Group access is not permitted")
 					return
 				}
-				if apiKey.RoutingMode != "smart" && !(apiKey.Group != nil && apiKey.Group.AllowPointsBilling) && apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) {
+				if apiKey.RoutingMode != "smart" && (apiKey.Group == nil || !apiKey.Group.AllowPointsBilling) && apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) {
 					AbortWithError(c, 403, "INSUFFICIENT_BALANCE", "Insufficient account balance")
 					return
 				}
