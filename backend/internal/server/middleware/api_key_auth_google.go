@@ -218,7 +218,7 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 				c.Set(string(ContextKeySubscription), subscription)
 			}
 		} else {
-			if apiKey.RoutingMode != "smart" && !(apiKey.Group != nil && apiKey.Group.AllowPointsBilling) && apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) {
+			if apiKey.RoutingMode != "smart" && (apiKey.Group == nil || !apiKey.Group.AllowPointsBilling) && apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) {
 				abortWithGoogleError(c, 403, "Insufficient account balance")
 				return
 			}

@@ -30,7 +30,7 @@ func (r *usageLogRepository) hydratePointsUsage(ctx context.Context, logs []serv
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var id string
 		var key int64
