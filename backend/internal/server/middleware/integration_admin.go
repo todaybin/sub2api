@@ -50,6 +50,10 @@ func NewIntegrationAdminGateway(engine *gin.Engine, settings *service.SettingSer
 			AbortWithError(c, http.StatusForbidden, "INTEGRATION_ROUTE_FORBIDDEN", "This admin route is not available to integrations")
 			return
 		}
+		// 新订阅协议正文有界，保留原管理接口的既有行为。
+		if strings.HasPrefix(path, "/subscriptions/control-v1/") {
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
+		}
 		appid, ok := verifyIntegrationRequest(c, targetPath, settings, redisClient)
 		if !ok {
 			return

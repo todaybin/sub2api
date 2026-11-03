@@ -8,6 +8,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+	control "github.com/Wei-Shaw/sub2api/internal/pkg/subscriptioncontrol"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
@@ -29,14 +30,13 @@ func toResponsePagination(p *pagination.PaginationResult) *response.PaginationRe
 
 // SubscriptionHandler handles admin subscription management
 type SubscriptionHandler struct {
+	controlStore        *control.Store
 	subscriptionService *service.SubscriptionService
 }
 
 // NewSubscriptionHandler creates a new admin subscription handler
 func NewSubscriptionHandler(subscriptionService *service.SubscriptionService) *SubscriptionHandler {
-	return &SubscriptionHandler{
-		subscriptionService: subscriptionService,
-	}
+	return NewSubscriptionControlHandler(subscriptionService, subscriptionService.SubscriptionControlStore())
 }
 
 // AssignSubscriptionRequest represents assign subscription request

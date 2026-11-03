@@ -44,6 +44,7 @@ var (
 
 // SubscriptionService 订阅服务
 type SubscriptionService struct {
+	controlRuntime      *subscriptionControlRuntime
 	groupRepo           GroupRepository
 	userSubRepo         UserSubscriptionRepository
 	billingCacheService *BillingCacheService
@@ -93,6 +94,7 @@ func (s *SubscriptionService) Stop() {
 	if s.maintenanceQueue != nil {
 		s.maintenanceQueue.Stop()
 	}
+	s.stopSubscriptionControlRuntime()
 }
 
 // initSubCache 初始化订阅 L1 缓存

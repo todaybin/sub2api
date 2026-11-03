@@ -717,6 +717,9 @@ func registerSystemRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 func registerSubscriptionRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	subscriptions := admin.Group("/subscriptions")
 	{
+		subscriptions.GET("/control-v1/state", h.Admin.Subscription.SubscriptionControlState)
+		subscriptions.PUT("/control-v1/commands/:commandId", h.Admin.Subscription.SubscriptionControlApply)
+		subscriptions.GET("/control-v1/commands/:commandId", h.Admin.Subscription.SubscriptionControlResult)
 		subscriptions.GET("", h.Admin.Subscription.List)
 		subscriptions.GET("/:id", h.Admin.Subscription.GetByID)
 		subscriptions.GET("/:id/progress", h.Admin.Subscription.GetProgress)
