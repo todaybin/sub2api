@@ -77,6 +77,7 @@ func openCodeGoMergeMockColumns() []string {
 		"ollama_session", "ollama_auto", "ollama_snapshot",
 		"opencode_group_unchanged", "opencode_auto", "opencode_snapshot",
 		"current_extra", "schedulable",
+		"grok_observed_models", "upstream_model_metadata",
 	}
 }
 
@@ -189,7 +190,7 @@ func TestLockAndMergeAccountProbeExtraPreservesOpenCodeGoManagedState(t *testing
 			mock.ExpectQuery(`(?s)`+regexp.QuoteMeta("SELECT")+`.*`+regexp.QuoteMeta("FOR NO KEY UPDATE")).
 				WithArgs(tt.account.ID, tt.account.Platform, tt.account.Type, string(credentials), nil).
 				WillReturnRows(sqlmock.NewRows(openCodeGoMergeMockColumns()).
-					AddRow(false, false, tt.proxyUnchanged, nil, nil, nil, nil, nil, nil, tt.groupUnchanged, tt.databaseAuto, tt.databaseSnapshot, nil, false))
+					AddRow(false, false, tt.proxyUnchanged, nil, nil, nil, nil, nil, nil, tt.groupUnchanged, tt.databaseAuto, tt.databaseSnapshot, nil, false, nil, nil))
 
 			got, err := lockAndMergeAccountProbeExtra(context.Background(), client, tt.account, nil, nil)
 			require.NoError(t, err)
