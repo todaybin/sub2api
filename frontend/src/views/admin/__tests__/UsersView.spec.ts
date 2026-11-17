@@ -107,6 +107,7 @@ const DataTableStub = {
         <slot :name="'header-' + col.key" :column="col" />
       </template>
       <div v-for="row in data" :key="row.id">
+        <div :data-test="'points-' + row.id"><slot name="cell-points_balance" :row="row" /></div>
         <slot name="cell-last_used_at" :value="row.last_used_at" :row="row" />
         <div :data-test="'actions-' + row.id"><slot name="cell-actions" :row="row" /></div>
       </div>
@@ -207,6 +208,22 @@ describe('admin UsersView', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it.each([
+    [12, '12'],
+    [12.5, '12.5'],
+    [0.12345678, '0.12345678'],
+    [-0.00000001, '-0.00000001'],
+  ])('displays points %s without forcing two decimal places', async (points, expected) => {
+    listUsers.mockResolvedValue({ items: [createAdminUser({ points_balance: points })], total: 1, page: 1, page_size: 20, pages: 1 })
+    const wrapper = mountBulkDeleteView()
+    try {
+      await flushPromises()
+      expect(wrapper.get('[data-test="points-42"]').text()).toBe(expected)
+    } finally {
+      wrapper.unmount()
+    }
   })
 
   it.each(['asc', 'desc'] as const)('sorts points on the server in %s order and resets pagination', async (order) => {
