@@ -386,6 +386,7 @@ func (h *UserHandler) GetGroupModels(c *gin.Context) {
 
 func (h *UserHandler) respondIntegrationModels(c *gin.Context, groups []service.Group) {
 	seen := map[string][]int64{}
+	capabilityGroups := map[string][]service.ModelCapabilities{}
 	for _, group := range groups {
 		if isIntegrationRequest(c) && (!group.IsExclusive || !group.IsActive()) {
 			continue
@@ -394,6 +395,18 @@ func (h *UserHandler) respondIntegrationModels(c *gin.Context, groups []service.
 		if err != nil {
 			response.ErrorFrom(c, err)
 			return
+		}
+		if provider, ok := h.integrationModels.(interface {
+			SmartModelCapabilities(context.Context, *service.Group, []string) (map[string]service.ModelCapabilities, error)
+		}); ok {
+			capabilities, err := provider.SmartModelCapabilities(c.Request.Context(), &group, ids)
+			if err != nil {
+				response.ErrorFrom(c, err)
+				return
+			}
+			for _, id := range ids {
+				capabilityGroups[id] = append(capabilityGroups[id], capabilities[id])
+			}
 		}
 		for _, id := range ids {
 			if id = strings.TrimSpace(id); id != "" {
@@ -408,7 +421,11 @@ func (h *UserHandler) respondIntegrationModels(c *gin.Context, groups []service.
 	sort.Strings(names)
 	models := make([]gin.H, 0, len(names))
 	for _, name := range names {
-		models = append(models, gin.H{"id": name, "object": "model", "group_ids": seen[name]})
+		item := gin.H{"id": name, "object": "model", "group_ids": seen[name]}
+		if capabilities := capabilityGroups[name]; len(capabilities) > 0 {
+			item["capabilities"] = service.MergeModelCapabilities(capabilities)
+		}
+		models = append(models, item)
 	}
 	response.Success(c, gin.H{"object": "list", "models": models})
 }

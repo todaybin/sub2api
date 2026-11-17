@@ -95,7 +95,7 @@ go generate .\cmd\server
 - 运行需要 PostgreSQL 15+ 和 Redis 7+。
 - 首次启动没有 `config.yaml` 时会进入 Web 设置向导；已有配置时跳过向导。
 - `config.yaml`、密钥、数据库数据和日志属于运行环境，不提交到 Git。
-- 后端和前端开发目录统一使用 `E:\dev_code_project\sub2api`，不要继续在其他副本目录开发或手工同步。
+- 后端和前端在当前仓库目录开发；位于 WorkMesh 主项目时统一使用 `apps/sub2api`，不切换到仓库外的副本或 worktree。
 
 ## 变更边界
 

@@ -660,6 +660,25 @@ Authorization: Bearer <model-api-key>
 
 这里使用标准响应 `{"object":"list","data":[...]}`，不是管理员 `code/message/data` 包装。智能 Key 同样按公开模型 ID 去重；返回列表不预先选择计费分组，发送模型请求时才按策略选择。管理员 `/groups/:id/model-allowlist-candidates` 是白名单编辑候选值，不等同于实际可用模型目录。
 
+### 5.8.1 模型参数能力
+
+上述分组和账号模型查询在每项模型中增量返回 `capabilities`；旧字段 `id`、`object` 和 `group_ids` 保持原义。该对象描述当前可达路由的上游快照，不包含供应商账号、路由配置或凭据，也不发起逐模型的上游探测。
+
+| 字段 | 含义 |
+| --- | --- |
+| `version`、`source` | 契约版本 `1`，来源 `upstream-snapshot`。 |
+| `observedAt` | 可用快照的最早观测时间；存在未知或非法时间时省略。 |
+| `endpoints` | `chat_completions`、`responses`、`messages` 分别报告能力，不能将一个端点的能力直接用于另一端点。 |
+| `supported` | `true` 表示支持，`false` 表示不支持，省略表示未知。 |
+| `contextWindow`、`maxContextWindow`、`maxOutputTokens` | 已知正整数限制；取所有可能路由的共同下限，未知值省略。 |
+| `inputModalities` | 所有可能路由共同支持的输入模态。 |
+| `tools`、`parallelToolCalls`、`structuredOutput` | 对应参数能力；未知时省略，不能将缺省解释为支持。 |
+| `temperature`、`topP` | 数值参数的 `supported` 及可选 `min`、`max` 范围。 |
+| `reasoning` | `supported`、`mode`、`efforts`、`defaultEffort` 和可选 `budgetTokens`；档位保留上游原始大小写与标识，例如 `persistent`、`Custom.Level`。 |
+
+同名模型在不同可用分组中合并时，各端点分别取共同能力；顶层参数取所有可达端点的共同能力。显式不支持与未知状态保持区分，缺失快照不能用于提升支持声明。指定 `api_key_id` 仍按前节限定候选分组；新增能力字段不会扩大 Key 权限。
+
+
 ### 5.9 推荐接入流程与重试
 
 1. 第三方后端保存 Admin API Key、AppID、Secret，并为每个请求生成新 Nonce 与签名。

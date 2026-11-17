@@ -4,6 +4,7 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -313,5 +314,51 @@ func TestIntegrationWritesRequireCoordinatorAndKey(t *testing.T) {
 			}
 		}
 		require.Zero(t, executed)
+	}
+}
+
+type integrationCapabilitiesStub struct{ integrationModelsStub }
+
+func (s *integrationCapabilitiesStub) SmartModelCapabilities(_ context.Context, g *service.Group, models []string) (map[string]service.ModelCapabilities, error) {
+	out := map[string]service.ModelCapabilities{}
+	for _, model := range models {
+		efforts := []string{"high", "persistent"}
+		if g.ID == 2 {
+			efforts = []string{"high", "ultra"}
+		}
+		yes := true
+		out[model] = service.ModelCapabilities{Version: 1, Source: "upstream-snapshot", Endpoints: map[string]service.ModelParameterCapabilities{"responses": {Supported: &yes, Reasoning: &service.ModelReasoningCapabilities{Supported: &yes, Mode: "effort", Efforts: efforts}}}}
+	}
+	return out, nil
+}
+func TestIntegrationModelsCapabilitiesRespectKeyGroups(t *testing.T) {
+	admin := newStubAdminService()
+	admin.groups = []service.Group{{ID: 1, Status: service.StatusActive}, {ID: 2, Status: service.StatusActive}}
+	models := &integrationCapabilitiesStub{}
+	keys := &integrationKeyStub{provisioningAPIKeyServiceStub: provisioningAPIKeyServiceStub{groups: admin.groups}, key: &service.APIKey{ID: 9, UserID: 1, RoutingMode: "smart", SmartGroupIDs: []int64{2}}}
+	r := integrationRouter(&UserHandler{adminService: admin, integrationKeys: keys, integrationModels: models})
+	for _, check := range []struct {
+		path    string
+		efforts []string
+	}{{"/groups/models", []string{"high"}}, {"/users/1/models?api_key_id=9", []string{"high", "ultra"}}} {
+		rec := integrationRequest(r, "GET", check.path, "")
+		require.Equal(t, 200, rec.Code)
+		var data struct {
+			Data struct {
+				Models []struct {
+					ID           string
+					Capabilities service.ModelCapabilities
+				}
+			}
+		}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &data))
+		found := false
+		for _, model := range data.Data.Models {
+			if model.ID == "shared" {
+				found = true
+				require.Equal(t, check.efforts, model.Capabilities.Endpoints["responses"].Reasoning.Efforts)
+			}
+		}
+		require.True(t, found)
 	}
 }

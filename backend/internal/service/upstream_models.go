@@ -119,6 +119,11 @@ func (a *Account) HasFreshUpstreamSupportedModels(now time.Time, ttl time.Durati
 }
 
 type UpstreamModelMetadata struct {
+	Tools                    *bool                      `json:"tools,omitempty"`
+	ParallelToolCalls        *bool                      `json:"parallel_tool_calls,omitempty"`
+	StructuredOutput         *bool                      `json:"structured_output,omitempty"`
+	Temperature              *ModelNumericParameter     `json:"temperature,omitempty"`
+	TopP                     *ModelNumericParameter     `json:"top_p,omitempty"`
 	ID                       string                     `json:"id"`
 	DisplayName              string                     `json:"display_name,omitempty"`
 	Description              string                     `json:"description,omitempty"`
@@ -167,6 +172,9 @@ type modelsDevProvider struct {
 }
 
 type modelsDevModel struct {
+	Tools            *bool                      `json:"tool_call"`
+	StructuredOutput *bool                      `json:"structured_output"`
+	Temperature      *bool                      `json:"temperature"`
 	ID               string                     `json:"id"`
 	Name             string                     `json:"name"`
 	Description      string                     `json:"description"`
@@ -602,9 +610,35 @@ func completeUpstreamModelMetadataSubset(
 	return complete
 }
 
+func numericSupport(value *bool) *ModelNumericParameter {
+	if value == nil {
+		return nil
+	}
+	return &ModelNumericParameter{Supported: *value}
+}
 func mergeUpstreamModelMetadata(primary, fallback UpstreamModelMetadata) (UpstreamModelMetadata, bool) {
 	merged := primary
 	changed := false
+	if merged.Tools == nil && fallback.Tools != nil {
+		merged.Tools = fallback.Tools
+		changed = true
+	}
+	if merged.ParallelToolCalls == nil && fallback.ParallelToolCalls != nil {
+		merged.ParallelToolCalls = fallback.ParallelToolCalls
+		changed = true
+	}
+	if merged.StructuredOutput == nil && fallback.StructuredOutput != nil {
+		merged.StructuredOutput = fallback.StructuredOutput
+		changed = true
+	}
+	if merged.Temperature == nil && fallback.Temperature != nil {
+		merged.Temperature = fallback.Temperature
+		changed = true
+	}
+	if merged.TopP == nil && fallback.TopP != nil {
+		merged.TopP = fallback.TopP
+		changed = true
+	}
 	if strings.TrimSpace(merged.ID) == "" && strings.TrimSpace(fallback.ID) != "" {
 		merged.ID = strings.TrimSpace(fallback.ID)
 		changed = true
@@ -753,6 +787,7 @@ func upstreamMetadataFromModelsDevModel(modelID string, model modelsDevModel) Up
 		ContextWindow:            model.Limit.Context,
 		MaxContextWindow:         model.Limit.Context,
 		MaxOutputTokens:          model.Limit.Output,
+		Tools:                    model.Tools, StructuredOutput: model.StructuredOutput, Temperature: numericSupport(model.Temperature),
 	}
 	if len(levels) > 0 {
 		metadata.DefaultReasoningLevel = levels[0]
@@ -1593,6 +1628,9 @@ type upstreamModelEntryMetadata struct {
 }
 
 type upstreamModelCapabilityEntry struct {
+	Tools             *bool `json:"tool_call"`
+	ParallelToolCalls *bool `json:"supports_parallel_tool_calls"`
+	StructuredOutput  *bool `json:"structured_output"`
 	upstreamModelEntry
 	DisplayName              string                     `json:"display_name"`
 	Description              string                     `json:"description"`
@@ -1708,7 +1746,7 @@ func upstreamMetadataFromCapabilityEntry(modelID string, entry upstreamModelCapa
 	if len(levels) == 0 && entry.SupportsThinking != nil && *entry.SupportsThinking {
 		level := "high"
 		fixedLevel := normalizeReasoningLevel(modelID[strings.LastIndex(modelID, "-")+1:])
-		if fixedLevel != "" && fixedLevel != "none" {
+		if stringSliceContains([]string{"minimal", "low", "medium", "high", "xhigh", "max", "ultra", "persistent"}, fixedLevel) {
 			level = fixedLevel
 		} else if entry.ThinkingBudget != nil {
 			switch budget := *entry.ThinkingBudget; {
@@ -1719,7 +1757,7 @@ func upstreamMetadataFromCapabilityEntry(modelID string, entry upstreamModelCapa
 				level = "medium"
 			}
 		}
-		if fixedLevel == "" || fixedLevel == "none" {
+		if !stringSliceContains([]string{"minimal", "low", "medium", "high", "xhigh", "max", "ultra", "persistent"}, fixedLevel) {
 			// Bare and tiered AGY models accept configurable budgets. The fetched
 			// thinkingBudget is their default, not the only supported budget.
 			levels = []string{"low", "medium", "high"}
@@ -1784,6 +1822,7 @@ func upstreamMetadataFromCapabilityEntry(modelID string, entry upstreamModelCapa
 		ContextWindow:            contextWindow,
 		MaxContextWindow:         entry.MaxContextWindow,
 		MaxOutputTokens:          maxOutputTokens,
+		Tools:                    entry.Tools, ParallelToolCalls: entry.ParallelToolCalls, StructuredOutput: entry.StructuredOutput,
 	}
 }
 
@@ -1823,17 +1862,10 @@ func normalizeReasoningLevels(levels []string) []string {
 }
 
 func normalizeReasoningLevel(level string) string {
-	level = strings.ToLower(strings.TrimSpace(level))
-	switch level {
-	case "off", "disabled":
-		return "none"
-	case "extra-high", "extra_high":
-		return "xhigh"
-	case "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra":
+	if integrationEffortPattern.MatchString(level) {
 		return level
-	default:
-		return ""
 	}
+	return ""
 }
 
 func normalizeCodexInputModalities(modalities []string) []string {
