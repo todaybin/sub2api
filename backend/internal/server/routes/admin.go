@@ -36,6 +36,13 @@ func RegisterAdminRoutes(
 		// 部署与运营合规确认
 		registerAdminComplianceRoutes(admin, h)
 
+		if h.OpenAIGateway != nil {
+			admin.GET("/speech/models", h.OpenAIGateway.SpeechAdminModels)
+			admin.PUT("/speech/models", h.OpenAIGateway.SpeechAdminModels)
+			admin.GET("/speech/reconciliation", h.OpenAIGateway.SpeechAdminReconciliation)
+			admin.POST("/speech/meters/:id/reconcile", h.OpenAIGateway.SpeechAdminReconciliation)
+		}
+
 		// 仪表盘
 		registerDashboardRoutes(admin, h)
 

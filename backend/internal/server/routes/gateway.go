@@ -29,6 +29,11 @@ func RegisterGatewayRoutes(
 	compositeResolver *service.CompositeRouteResolver,
 	cfg *config.Config,
 ) {
+	// 语音数据面使用窄票据认证，不能套用通用 API Key 或管理员身份。
+	if h.OpenAIGateway != nil {
+		r.GET("/v1/speech/sessions/:id/stream", h.OpenAIGateway.SpeechStream)
+		r.POST("/v1/speech/sessions/:id/synthesis", h.OpenAIGateway.SpeechSynthesis)
+	}
 	bodyMemoryBudget := pkghttputil.NewBodyMemoryBudget(cfg.Gateway.RequestBodyMemoryBudgetBytes)
 	bodyLimit := middleware.RequestBodyLimit(cfg.Gateway.MaxBodySize, bodyMemoryBudget)
 	textBodyLimit := middleware.RequestBodyLimit(cfg.Gateway.TextMaxBodySize, bodyMemoryBudget)
@@ -210,6 +215,11 @@ func RegisterGatewayRoutes(
 		// Single-model discovery never selects the Codex client_version manifest.
 		gateway.GET("/models/:model", h.Gateway.Models)
 		gateway.GET("/usage", h.Gateway.Usage)
+		if h.OpenAIGateway != nil {
+			gateway.GET("/speech/catalog", h.OpenAIGateway.SpeechCatalog)
+			gateway.POST("/speech/sessions", h.OpenAIGateway.SpeechCreate)
+			gateway.GET("/speech/sessions/:id/usage", h.OpenAIGateway.SpeechUsage)
+		}
 		gateway.POST("/live", h.OpenAIGateway.Live)
 		gateway.GET("/live/:call_id", h.OpenAIGateway.LiveSideband)
 		// OpenAI Responses API: auto-route based on group platform

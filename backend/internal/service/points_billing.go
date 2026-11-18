@@ -129,6 +129,13 @@ func (p *PointsPayment) done() {
 }
 func (p *PointsPayment) HandlerDone() { p.handlerOnce.Do(p.done) }
 
+// StopRenewal 在结算证据已保存但事务不可用时停止续租，保留预扣供恢复器核查。
+func (p *PointsPayment) StopRenewal() {
+	if p != nil {
+		p.once.Do(func() { close(p.stop) })
+	}
+}
+
 func (s *BillingCacheService) BillingEnabled() bool {
 	return s != nil && (s.cfg == nil || s.cfg.RunMode != config.RunModeSimple)
 }

@@ -47,6 +47,9 @@ func RegisterUserRoutes(
 			user.GET("/api-keys/:id/usage/daily", panelRateLimiter.Heavy(), h.Usage.GetMyAPIKeyDailyUsage)
 			user.GET("/platform-quotas", h.User.GetMyPlatformQuotas)
 			user.GET("/points-history", h.User.PointsHistory)
+			if h.OpenAIGateway != nil {
+				user.GET("/speech-history", h.OpenAIGateway.SpeechUserHistory)
+			}
 			user.GET("/points-summary", h.User.PointsSummary)
 
 			// 通知邮箱管理

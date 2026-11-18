@@ -162,7 +162,7 @@ func (r *userRepository) ReleasePoints(ctx context.Context, id string) error {
 		return err
 	}
 	_, err = exec.ExecContext(ctx, `WITH released AS (
- UPDATE points_reservations SET state='released' WHERE id=$1 AND state='active' RETURNING user_id,amount
+ UPDATE points_reservations SET state='released' WHERE id=$1 AND state='active' AND NOT EXISTS(SELECT 1 FROM speech_meter_segments m WHERE m.reservation_id=points_reservations.id AND (m.state IN ('pending','ready') AND m.quantity>0 OR m.supplier_state IN ('inflight','unknown'))) RETURNING user_id,amount
  ) UPDATE users u SET points_reserved=u.points_reserved-released.amount FROM released WHERE u.id=released.user_id`, id)
 	return err
 }
@@ -176,7 +176,7 @@ func (r *userRepository) RecoverPointsWithEffects(ctx context.Context, afterComm
 	if !ok {
 		return nil
 	}
-	rows, err := db.QueryContext(ctx, `SELECT id,state,command FROM points_reservations WHERE state='pending' OR (state='active' AND expires_at<NOW()) ORDER BY created_at LIMIT 100`)
+	rows, err := db.QueryContext(ctx, `SELECT id,state,command FROM points_reservations WHERE state='pending' OR (state='active' AND expires_at<NOW() AND NOT EXISTS(SELECT 1 FROM speech_meter_segments m WHERE m.reservation_id=points_reservations.id AND m.supplier_state IN ('inflight','unknown'))) ORDER BY created_at LIMIT 100`)
 	if err != nil {
 		return err
 	}
@@ -200,10 +200,14 @@ func (r *userRepository) RecoverPointsWithEffects(ctx context.Context, afterComm
 	}
 	billing := &usageBillingRepository{db: db}
 	var recoveryErrors []error
+	// 先恢复语音用量，防止通用过期回收先释放已发送音频的预扣。
+	if err := billing.RecoverSpeechBilling(ctx); err != nil {
+		recoveryErrors = append(recoveryErrors, err)
+	}
 	for _, e := range pending {
 		if e.state == "active" {
 			// Recheck the lease in SQL: a live handler may have renewed after our read.
-			_, err = db.ExecContext(ctx, `WITH released AS (UPDATE points_reservations SET state='released' WHERE id=$1 AND state='active' AND expires_at<NOW() RETURNING user_id,amount) UPDATE users u SET points_reserved=u.points_reserved-released.amount FROM released WHERE u.id=released.user_id`, e.id)
+			_, err = db.ExecContext(ctx, `WITH released AS (UPDATE points_reservations SET state='released' WHERE id=$1 AND state='active' AND expires_at<NOW() AND NOT EXISTS(SELECT 1 FROM speech_meter_segments m WHERE m.reservation_id=points_reservations.id AND (m.state IN ('pending','ready') AND m.quantity>0 OR m.supplier_state IN ('inflight','unknown'))) RETURNING user_id,amount) UPDATE users u SET points_reserved=u.points_reserved-released.amount FROM released WHERE u.id=released.user_id`, e.id)
 		} else {
 			var cmd service.UsageBillingCommand
 			if err = json.Unmarshal(e.command, &cmd); err == nil {
@@ -342,7 +346,17 @@ func (r *userRepository) ListPointsLedger(ctx context.Context, userID int64, pag
 	return entries, total, rows.Err()
 }
 
+type pointsSettlementSQL interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
 func (r *usageBillingRepository) preparePointsSettlement(ctx context.Context, cmd *service.UsageBillingCommand) error {
+	return preparePointsSettlementOn(ctx, r.db, cmd)
+}
+
+// 同一事务内冻结命令与语音计量，避免释放已消费的预扣。
+func preparePointsSettlementOn(ctx context.Context, db pointsSettlementSQL, cmd *service.UsageBillingCommand) error {
 	if cmd.BalanceCost != 0 || cmd.SubscriptionCost != 0 || cmd.BillingType != service.BillingTypePoints || cmd.PointsCostUSD < 0 || math.IsNaN(cmd.PointsCostUSD) || math.IsInf(cmd.PointsCostUSD, 0) || cmd.PointsPerUSD <= 0 || math.IsNaN(cmd.PointsPerUSD) || math.IsInf(cmd.PointsPerUSD, 0) {
 		return service.ErrUsageBillingRequestConflict
 	}
@@ -350,7 +364,7 @@ func (r *usageBillingRepository) preparePointsSettlement(ctx context.Context, cm
 	if err != nil {
 		return err
 	}
-	res, err := r.db.ExecContext(ctx, `UPDATE points_reservations SET command=$1,state='pending' WHERE id=$2 AND user_id=$3 AND api_key_id=$4 AND group_id=$5 AND points_per_usd=$6 AND (state='active' OR (state='pending' AND command=$1::jsonb))`, string(body), cmd.PointsReservationID, cmd.UserID, cmd.APIKeyID, cmd.PointsGroupID, cmd.PointsPerUSD)
+	res, err := db.ExecContext(ctx, `UPDATE points_reservations SET command=$1,state='pending' WHERE id=$2 AND user_id=$3 AND api_key_id=$4 AND group_id=$5 AND points_per_usd=$6 AND (state='active' OR (state='pending' AND command=$1::jsonb))`, string(body), cmd.PointsReservationID, cmd.UserID, cmd.APIKeyID, cmd.PointsGroupID, cmd.PointsPerUSD)
 	if err != nil {
 		return err
 	}
@@ -360,7 +374,7 @@ func (r *usageBillingRepository) preparePointsSettlement(ctx context.Context, cm
 	}
 	if count == 0 {
 		var state string
-		err = r.db.QueryRowContext(ctx, `SELECT state FROM points_reservations WHERE id=$1 AND user_id=$2 AND api_key_id=$3`, cmd.PointsReservationID, cmd.UserID, cmd.APIKeyID).Scan(&state)
+		err = db.QueryRowContext(ctx, `SELECT state FROM points_reservations WHERE id=$1 AND user_id=$2 AND api_key_id=$3`, cmd.PointsReservationID, cmd.UserID, cmd.APIKeyID).Scan(&state)
 		if err != nil {
 			return err
 		}
@@ -394,6 +408,9 @@ func settleUsagePoints(ctx context.Context, tx *sql.Tx, cmd *service.UsageBillin
 	}
 	_, err = tx.ExecContext(ctx, `UPDATE points_reservations SET state='settled' WHERE id=$1`, cmd.PointsReservationID)
 	if err != nil {
+		return err
+	}
+	if err = appendSpeechUsage(ctx, tx, cmd); err != nil {
 		return err
 	}
 	// Durable invalidation also covers recovery, when no handler is left to clear

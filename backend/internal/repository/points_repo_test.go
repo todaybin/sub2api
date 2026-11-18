@@ -16,6 +16,8 @@ import (
 func TestPointsRecovery_ContinuesAfterMalformedPendingCommand(t *testing.T) {
 	repo, mock := newRedeemAdjustmentRepoMock(t)
 	mock.ExpectQuery("SELECT id,state,command FROM points_reservations").WillReturnRows(sqlmock.NewRows([]string{"id", "state", "command"}).AddRow("bad", "pending", []byte(`{`)).AddRow("expired", "active", nil))
+	mock.ExpectQuery("SELECT m.id,m.session_id").WillReturnRows(sqlmock.NewRows([]string{"id", "session_id", "reservation_id", "quantity", "unit", "api_key_id", "user_id", "group_id", "model", "points_per_usd"}))
+	mock.ExpectQuery("SELECT id,command FROM speech_meter_segments").WillReturnRows(sqlmock.NewRows([]string{"id", "command"}))
 	mock.ExpectExec("WITH released AS").WithArgs("expired").WillReturnResult(sqlmock.NewResult(0, 1))
 	require.Error(t, repo.RecoverPoints(context.Background()))
 	require.NoError(t, mock.ExpectationsWereMet())
