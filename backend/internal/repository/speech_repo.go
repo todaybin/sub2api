@@ -131,13 +131,13 @@ func (r *usageBillingRepository) RecoverSpeechBilling(ctx context.Context) error
 	for expired.Next() {
 		var v recovery
 		if err = expired.Scan(&v.meter.ID, &v.meter.SessionID, &v.meter.ReservationID, &v.meter.Quantity, &v.meter.Unit, &v.key, &v.user, &v.group, &v.model, &v.rate); err != nil {
-			expired.Close()
+			_ = expired.Close()
 			return err
 		}
 		items = append(items, v)
 	}
 	err = expired.Err()
-	expired.Close()
+	_ = expired.Close()
 	if err != nil {
 		return err
 	}
@@ -173,17 +173,17 @@ func (r *usageBillingRepository) RecoverSpeechBilling(ctx context.Context) error
 		var item pending
 		var raw []byte
 		if err = rows.Scan(&item.id, &raw); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return err
 		}
 		if err = json.Unmarshal(raw, &item.cmd); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return err
 		}
 		all = append(all, item)
 	}
 	err = rows.Err()
-	rows.Close()
+	_ = rows.Close()
 	if err != nil {
 		return err
 	}
