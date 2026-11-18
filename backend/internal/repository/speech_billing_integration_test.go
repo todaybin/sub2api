@@ -20,9 +20,12 @@ func TestSpeechUnknownRecoveryReconciliationAndConcurrentDedup(t *testing.T) {
 	wallet := newUserRepositoryWithSQL(client, integrationDB)
 	billing := &usageBillingRepository{db: integrationDB}
 	user := mustCreateUser(t, client, &service.User{Email: uuid.NewString() + "@example.com", PasswordHash: "hash"})
+	fixture := registerSpeechFixtureCleanup(t, user.ID)
 	group := mustCreateGroup(t, client, &service.Group{Name: uuid.NewString(), Platform: service.PlatformAnthropic, SubscriptionType: service.SubscriptionTypeStandard, AllowPointsBilling: true, PointsPerUSD: 100})
+	fixture.groupID = group.ID
 	key := mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, GroupID: &group.ID, Name: "speech", Key: uuid.NewString(), Quota: 100})
 	account := mustCreateAccount(t, client, &service.Account{Name: uuid.NewString(), Type: service.AccountTypeAPIKey})
+	fixture.accountID = account.ID
 	_, e := wallet.AdjustPoints(ctx, user.ID, 100, "add", uuid.NewString(), "speech-test")
 	require.NoError(t, e)
 	price := .01
@@ -77,7 +80,9 @@ func TestSpeechTicketSingleUseExpiredAndOwnership(t *testing.T) {
 	client := testEntClient(t)
 	billing := &usageBillingRepository{db: integrationDB}
 	user := mustCreateUser(t, client, &service.User{Email: uuid.NewString() + "@example.com", PasswordHash: "hash"})
+	fixture := registerSpeechFixtureCleanup(t, user.ID)
 	group := mustCreateGroup(t, client, &service.Group{Name: uuid.NewString(), Platform: service.PlatformAnthropic})
+	fixture.groupID = group.ID
 	key := mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, GroupID: &group.ID, Name: "speech", Key: uuid.NewString()})
 	for _, expired := range []bool{false, true} {
 		expiry := time.Now().Add(time.Minute)
@@ -98,4 +103,48 @@ func TestSpeechTicketSingleUseExpiredAndOwnership(t *testing.T) {
 		_, e = billing.RedeemSpeechSession(ctx, s.TicketHash)
 		require.Error(t, e)
 	}
+}
+
+// 语音结算必须提交真实事务；清理仅限本测试创建的用户及关联资源。
+type speechFixtureResources struct {
+	groupID   int64
+	accountID int64
+}
+
+func registerSpeechFixtureCleanup(t *testing.T, userID int64) *speechFixtureResources {
+	t.Helper()
+	fixture := &speechFixtureResources{}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		tx, err := integrationDB.BeginTx(ctx, nil)
+		require.NoError(t, err, "开始语音测试数据清理，用户 %d", userID)
+		defer func() { _ = tx.Rollback() }()
+		// 按外键依赖顺序清理；用量及幂等记录必须先于 API Key 删除。
+		for _, query := range []string{
+			"DELETE FROM speech_meter_reconciliations WHERE meter_id IN (SELECT m.id FROM speech_meter_segments m JOIN speech_sessions s ON s.id=m.session_id WHERE s.user_id=$1)",
+			"DELETE FROM speech_meter_segments WHERE session_id IN (SELECT id FROM speech_sessions WHERE user_id=$1)",
+			"DELETE FROM speech_sessions WHERE user_id=$1",
+			"DELETE FROM usage_logs WHERE user_id=$1",
+			"DELETE FROM usage_billing_dedup WHERE api_key_id IN (SELECT id FROM api_keys WHERE user_id=$1)",
+			"DELETE FROM usage_billing_dedup_archive WHERE api_key_id IN (SELECT id FROM api_keys WHERE user_id=$1)",
+			"DELETE FROM points_reservations WHERE user_id=$1",
+			"DELETE FROM points_ledger WHERE user_id=$1",
+			"DELETE FROM api_keys WHERE user_id=$1",
+			"DELETE FROM users WHERE id=$1",
+		} {
+			_, err = tx.ExecContext(ctx, query, userID)
+			require.NoError(t, err, "清理语音测试用户 %d，SQL: %s", userID, query)
+		}
+		if fixture.accountID != 0 {
+			_, err = tx.ExecContext(ctx, "DELETE FROM accounts WHERE id=$1", fixture.accountID)
+			require.NoError(t, err, "清理语音测试账号 %d", fixture.accountID)
+		}
+		if fixture.groupID != 0 {
+			_, err = tx.ExecContext(ctx, "DELETE FROM groups WHERE id=$1", fixture.groupID)
+			require.NoError(t, err, "清理语音测试分组 %d", fixture.groupID)
+		}
+		require.NoError(t, tx.Commit(), "提交语音测试数据清理，用户 %d", userID)
+	})
+	return fixture
 }
