@@ -8,7 +8,10 @@ import batchImage from './batchImage'
 import admin from './admin'
 import misc from './misc'
 
+import speech from './speech'
+
 export default {
+  speech,
   adminAccessKeys,
   mcp,
   ...landing,
