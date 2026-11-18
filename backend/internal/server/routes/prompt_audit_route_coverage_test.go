@@ -53,10 +53,12 @@ func TestEveryGatewayPOSTRouteIsClassifiedForPromptAuditCoverage(t *testing.T) {
 		"/x_search":                 {"gateway_web_search.go"},
 	}
 	excluded := map[string]string{
-		"/messages/count_tokens":     "tokenization only; it does not execute a model request",
-		"/images/batches/:id/cancel": "control-plane cancellation with no user prompt",
-		"/stt":                       "speech transcription is not a text-generation prompt",
-		"/custom-voices":             "voice profile management has no model prompt",
+		"/speech/sessions":                  "仅创建绑定账号和价格的票据，输入只有服务标识、语言和请求标识，不接收正文或执行模型",
+		"/v1/speech/sessions/:id/synthesis": "语音合成仅按原文朗读，严格只接收text和voice，不执行指令型文本生成；语音路径只保存账务元数据",
+		"/messages/count_tokens":            "tokenization only; it does not execute a model request",
+		"/images/batches/:id/cancel":        "control-plane cancellation with no user prompt",
+		"/stt":                              "speech transcription is not a text-generation prompt",
+		"/custom-voices":                    "voice profile management has no model prompt",
 	}
 
 	unclassified := make([]string, 0)
