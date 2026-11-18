@@ -38,7 +38,11 @@ func (h *OpenAIGatewayHandler) SpeechAdminReconciliation(c *gin.Context) {
 		}
 		next := ""
 		if len(rows) > 50 {
-			next = rows[49]["id"].(string)
+			next, ok = rows[49]["id"].(string)
+			if !ok || next == "" {
+				speechError(c, 503, "SPEECH_UNAVAILABLE")
+				return
+			}
 			rows = rows[:50]
 		}
 		c.JSON(200, gin.H{"items": rows, "nextCursor": next})

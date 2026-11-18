@@ -66,7 +66,7 @@ func (r *usageBillingRepository) PutSpeechMeter(ctx context.Context, m *service.
 		if err != nil {
 			return err
 		}
-		defer tx.Rollback()
+		defer func() { _ = tx.Rollback() }()
 		if err = preparePointsSettlementOn(ctx, tx, m.Command); err != nil {
 			return err
 		}
@@ -104,7 +104,7 @@ func (r *usageBillingRepository) ListSpeechMeters(ctx context.Context, id string
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	values := []service.SpeechMeterRecord{}
 	for rows.Next() {
 		var m service.SpeechMeterRecord

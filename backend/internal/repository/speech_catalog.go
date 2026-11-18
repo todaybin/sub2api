@@ -35,7 +35,7 @@ func (r *usageBillingRepository) ListUserSpeech(ctx context.Context, user int64,
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []map[string]any{}
 	for rows.Next() {
 		var id, model, kind, version, state string

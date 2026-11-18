@@ -38,14 +38,14 @@ func (a Aliyun) nlsToken(ctx context.Context, c Credentials) (string, error) {
 	p := url.Values{"AccessKeyId": {c.AccessKeyID}, "Action": {"CreateToken"}, "Format": {"JSON"}, "RegionId": {"cn-shanghai"}, "SignatureMethod": {"HMAC-SHA1"}, "SignatureNonce": {uuid.NewString()}, "SignatureVersion": {"1.0"}, "Timestamp": {time.Now().UTC().Format("2006-01-02T15:04:05Z")}, "Version": {"2019-02-28"}}
 	canonical := strings.ReplaceAll(p.Encode(), "+", "%20")
 	mac := hmac.New(sha1.New, []byte(c.AccessKeySecret+"&"))
-	mac.Write([]byte("GET&%2F&" + escape(canonical)))
+	_, _ = mac.Write([]byte("GET&%2F&" + escape(canonical)))
 	p.Set("Signature", base64.StdEncoding.EncodeToString(mac.Sum(nil)))
 	req, _ := http.NewRequestWithContext(ctx, "GET", "https://nls-meta.cn-shanghai.aliyuncs.com/?"+p.Encode(), nil)
 	response, err := a.client().Do(req)
 	if err != nil {
 		return "", fmt.Errorf("ALIYUN_TOKEN_CONNECTION_FAILED")
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	var body struct{ Token struct{ ID string } }
 	if response.StatusCode != 200 || json.NewDecoder(io.LimitReader(response.Body, 64000)).Decode(&body) != nil || body.Token.ID == "" {
 		return "", fmt.Errorf("ALIYUN_TOKEN_FAILED")
@@ -140,7 +140,7 @@ func (a Aliyun) StartASR(ctx context.Context, m Model, c Credentials, language s
 		}
 	}
 	if err != nil {
-		conn.CloseNow()
+		_ = conn.CloseNow()
 		return nil, err
 	}
 	return stream, nil
@@ -193,7 +193,7 @@ func (a Aliyun) Synthesize(ctx context.Context, m Model, c Credentials, text, vo
 		}
 		return 0, fmt.Errorf("ALIYUN_TTS_CONNECTION_FAILED")
 	}
-	defer conn.CloseNow()
+	defer func() { _ = conn.CloseNow() }()
 	conn.SetReadLimit(1024 * 1024)
 	task := providerRequestID(ctx)
 	request := map[string]any{"header": map[string]any{"action": "run-task", "task_id": task, "streaming": "duplex"}, "payload": map[string]any{"task_group": "audio", "task": "tts", "function": "SpeechSynthesizer", "model": m.UpstreamModel, "parameters": map[string]any{"text_type": "PlainText", "voice": voice, "format": "pcm", "sample_rate": 16000}, "input": map[string]any{}}}

@@ -89,7 +89,7 @@ func TestLiveSuppliers(t *testing.T) {
 				t.Errorf("ASR 状态=%s", safeLiveError(err))
 				return
 			}
-			defer stream.Close()
+			defer func() { _ = stream.Close() }()
 			audio = append(audio, make([]byte, 16000)...)
 			for offset := 0; offset < len(audio); offset += 6400 {
 				end := offset + 6400

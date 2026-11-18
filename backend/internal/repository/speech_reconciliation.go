@@ -19,7 +19,7 @@ func (r *usageBillingRepository) ListSpeechReconciliation(ctx context.Context, c
 	if e != nil {
 		return nil, e
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []map[string]any{}
 	for rows.Next() {
 		var id, session, request, unit, provider, model string
@@ -40,7 +40,7 @@ func (r *usageBillingRepository) ReconcileSpeech(ctx context.Context, id string,
 	if e != nil {
 		return e
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	// 锁定预扣后再锁计量行，与原账务事务保持相同锁顺序。
 	var reservation string
 	if e = tx.QueryRowContext(ctx, "SELECT reservation_id FROM speech_meter_segments WHERE id=$1", id).Scan(&reservation); e != nil {
@@ -73,7 +73,7 @@ func (r *usageBillingRepository) ReconcileSpeech(ctx context.Context, id string,
 	if e != sql.ErrNoRows {
 		return e
 	}
-	if state != "pending" || supplier != "unknown" && !(supplier == "inflight" && eligible) {
+	if state != "pending" || supplier != "unknown" && (supplier != "inflight" || !eligible) {
 		return fmt.Errorf("SPEECH_RECONCILIATION_CONFLICT")
 	}
 	var model speech.Model

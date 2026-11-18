@@ -76,7 +76,7 @@ func run(ctx context.Context, args []string, out io.Writer, open databaseOpener)
 	if db == nil {
 		return errors.New("本地授权数据库不可用")
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	result, err := control.NewStore(db).SaveGrant(ctx, c, service.SubscriptionControlActiveAppVerifier)
 	if err != nil {
 		switch {
@@ -132,7 +132,7 @@ func openDatabase(ctx context.Context, configPath string) (*sql.DB, error) {
 	pingCtx, stop := context.WithTimeout(ctx, 2*time.Second)
 	defer stop()
 	if db.PingContext(pingCtx) != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, errors.New("连接目标数据库失败，未输出连接信息")
 	}
 	return db, nil

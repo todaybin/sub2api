@@ -61,7 +61,7 @@ func (s *Store) claimCacheJob(ctx context.Context) (*cacheClaim, bool, error) {
 	if err != nil {
 		return nil, false, fmt.Errorf("开启订阅缓存领取事务失败: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var c cacheClaim
 	err = tx.QueryRowContext(ctx, `SELECT j.app_id,j.command_id::text,j.attempts,c.user_id,c.group_id
   FROM subscription_control_cache_jobs j JOIN subscription_control_commands c

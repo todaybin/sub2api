@@ -37,7 +37,7 @@ func TestLiveAliyunNLS(t *testing.T) {
 	if e != nil {
 		t.Fatal(safeLiveError(e))
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 	for i := 0; i < 4; i++ {
 		if e = stream.Send(ctx, make([]byte, 6400)); e != nil {
 			t.Fatal(safeLiveError(e))

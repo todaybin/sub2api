@@ -129,7 +129,7 @@ func controlQuery(raw string, result bool) (url.Values, int64, int64, error) {
 		return nil, 0, 0, control.ErrSubscriptionControlInput
 	}
 	for key, items := range values {
-		if len(items) != 1 || key != "user_id" && key != "group_id" && !(result && key == "request_digest") {
+		if len(items) != 1 || key != "user_id" && key != "group_id" && (!result || key != "request_digest") {
 			return nil, 0, 0, control.ErrSubscriptionControlInput
 		}
 	}

@@ -80,7 +80,7 @@ func (s *Store) SaveGrant(ctx context.Context, c GrantCommand, verifyApp AppVeri
 	if err != nil {
 		return Grant{}, fmt.Errorf("开启订阅范围授权事务失败: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if _, err = tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,0))", "subscription-control-grant-command:"+c.CommandID); err != nil {
 		return Grant{}, err
 	}

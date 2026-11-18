@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/Wei-Shaw/sub2api/internal/service/speech"
 	"github.com/gin-gonic/gin"
@@ -154,7 +153,7 @@ func (h *OpenAIGatewayHandler) SpeechSynthesis(c *gin.Context) {
 	_ = store.EndSpeechSession(cleanup, session.ID, state)
 	c.Header("X-Speech-State", state)
 	if err != nil && !c.Writer.Written() {
-		speechError(c, 502, fmt.Sprint("SPEECH_SYNTHESIS_FAILED"))
+		speechError(c, 502, "SPEECH_SYNTHESIS_FAILED")
 	}
 }
 

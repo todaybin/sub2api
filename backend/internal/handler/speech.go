@@ -229,7 +229,7 @@ func (h *OpenAIGatewayHandler) SpeechStream(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	defer conn.CloseNow()
+	defer func() { _ = conn.CloseNow() }()
 	conn.SetReadLimit(24000)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Hour)
 	defer cancel()
@@ -347,7 +347,7 @@ func (h *OpenAIGatewayHandler) SpeechStream(c *gin.Context) {
 		_ = emit(gin.H{"type": "error", "message": "云端识别启动失败"})
 		return
 	}
-	defer upstream.Close()
+	defer func() { _ = upstream.Close() }()
 	for {
 		readCtx, done := context.WithTimeout(ctx, 30*time.Second)
 		kind, raw, e := conn.Read(readCtx)

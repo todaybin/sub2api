@@ -67,7 +67,7 @@ func decodeVolcPacket(packet []byte) ([]byte, error) {
 		if e != nil {
 			return nil, e
 		}
-		defer z.Close()
+		defer func() { _ = z.Close() }()
 		data, e := io.ReadAll(io.LimitReader(z, 256001))
 		if e != nil || len(data) > 256000 {
 			return nil, fmt.Errorf("VOLC_ASR_FRAME_TOO_LARGE")
@@ -101,7 +101,7 @@ func (v Volcengine) StartASR(ctx context.Context, m Model, c Credentials, langua
 	stream := &volcASR{conn: conn, done: make(chan error, 1)}
 	body, _ := json.Marshal(map[string]any{"user": map[string]string{"uid": "workmesh"}, "audio": map[string]any{"format": "pcm", "codec": "raw", "rate": 16000, "bits": 16, "channel": 1}, "request": map[string]any{"model_name": "bigmodel", "enable_itn": true, "enable_punc": true, "show_utterances": true}})
 	if err = conn.Write(ctx, ws.MessageBinary, volcPacket(1, 0, 1, body)); err != nil {
-		conn.CloseNow()
+		_ = conn.CloseNow()
 		return nil, err
 	}
 	go func() {
@@ -194,7 +194,7 @@ func (v Volcengine) Synthesize(ctx context.Context, m Model, c Credentials, text
 	if err != nil {
 		return 0, fmt.Errorf("VOLC_TTS_CONNECTION_FAILED")
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != 200 {
 		return 0, fmt.Errorf("VOLC_TTS_FAILED:%d", response.StatusCode)
 	}

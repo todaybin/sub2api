@@ -18,7 +18,7 @@ func TestSpeechReadyMeterAndReservationCommitTogether(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			defer db.Close()
+			defer func() { _ = db.Close() }()
 			repo := &usageBillingRepository{db: db}
 			cmd := &service.UsageBillingCommand{RequestID: "s_1", UserID: 1, APIKeyID: 2, AccountID: 3, Model: "asr", BillingType: service.BillingTypePoints, PointsReservationID: "reservation", PointsGroupID: 4, PointsPerUSD: 100, PointsCostUSD: .02}
 			meter := &service.SpeechMeterRecord{ID: "s_1", SessionID: "s", ReservationID: "reservation", Quantity: 2, Points: 2, Unit: "seconds", State: "ready", Command: cmd}
@@ -47,7 +47,7 @@ func TestSpeechTicketRedeemIsAtomicAndExpiredRejected(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	repo := &usageBillingRepository{db: db}
 	mock.ExpectQuery("UPDATE speech_sessions SET state='active'.*state='created'.*expires_at>NOW").WithArgs("expired").WillReturnError(errors.New("no matching ticket"))
 	if _, e = repo.RedeemSpeechSession(context.Background(), "expired"); e == nil {
@@ -77,7 +77,7 @@ func TestSpeechTicketRetainsSelectedLanguage(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	repo := &usageBillingRepository{db: db}
 	mock.ExpectQuery("UPDATE speech_sessions SET state='active'.*RETURNING.*language").WithArgs("ticket").WillReturnRows(sqlmock.NewRows([]string{"id", "key", "user", "group", "model", "language"}).AddRow("session", 1, 2, 3, []byte("{}"), "en-US"))
 	session, e := repo.RedeemSpeechSession(context.Background(), "ticket")

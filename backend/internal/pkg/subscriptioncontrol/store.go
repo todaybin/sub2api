@@ -46,7 +46,7 @@ func (s *Store) State(ctx context.Context, app string, user, group int64, author
 	if err != nil {
 		return SubscriptionControlState{}, fmt.Errorf("读取订阅控制事务失败: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if err = authorize(ctx, tx, user, group); err != nil {
 		return SubscriptionControlState{}, err
 	}
@@ -88,7 +88,7 @@ func (s *Store) applyOnce(ctx context.Context, app string, c SubscriptionControl
 	if err != nil {
 		return SubscriptionControlReceipt{}, fmt.Errorf("开启订阅命令事务失败: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	// 哈希仅用于互斥，同键数据仍由完整应用标识和UUID主键隔离。
 	if _, err = tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,0))", "subscription-control-command:"+app+":"+c.CommandID); err != nil {
 		return SubscriptionControlReceipt{}, err
@@ -207,7 +207,7 @@ func (s *Store) Result(ctx context.Context, app, id string, user, group int64, d
 	if err != nil {
 		return SubscriptionControlReceipt{}, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if err = authorize(ctx, tx, user, group); err != nil {
 		return SubscriptionControlReceipt{}, err
 	}
