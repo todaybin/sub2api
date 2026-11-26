@@ -56,7 +56,7 @@ func (s *AccountTestService) testCodeBuddyConnection(c *gin.Context, account *Ac
 	req.Header.Set("Authorization", "Bearer "+token)
 	applyCodeBuddyHeaders(req.Header, account)
 	applyCodeBuddyRequestHeaders(req.Header, c, bodyBytes)
-	account.ApplyHeaderOverrides(req.Header)
+	account.ApplyHeaderOverrides(req.Context(), req.Header)
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")

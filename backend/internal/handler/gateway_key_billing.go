@@ -2,7 +2,9 @@ package handler
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -15,6 +17,7 @@ import (
 const keyBillingInfoSchemaVersion = 1
 
 type keyBillingInfoResponse struct {
+	*service.BillingGroupInfo
 	AllowPointsBilling      bool                     `json:"allow_points_billing"`
 	PointsBalance           *float64                 `json:"points_balance,omitempty"`
 	PointsReserved          *float64                 `json:"points_reserved,omitempty"`
@@ -49,7 +52,7 @@ type keyBillingUsageResponse struct {
 }
 
 // KeyBillingInfo returns the token billing multiplier effective for the authenticated API key.
-// GET /v1/sub2api/billing
+// GET /v1/sub2api/billing (include=group also returns the group's display name and description).
 func (h *GatewayHandler) KeyBillingInfo(c *gin.Context) {
 	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
 	if !ok {
@@ -86,6 +89,14 @@ func (h *GatewayHandler) KeyBillingInfo(c *gin.Context) {
 		return
 	}
 
+	if keyBillingIncludes(c, "group") {
+		group, err := h.apiKeyService.GetBillingGroupInfo(c.Request.Context(), *apiKey.GroupID, c.GetHeader("Accept-Language"))
+		if err != nil {
+			slog.WarnContext(c.Request.Context(), "billing group display text unavailable", "group_id", *apiKey.GroupID, "error", err)
+		} else {
+			result.BillingGroupInfo = group
+		}
+	}
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, result)
 }
@@ -147,6 +158,22 @@ func (h *GatewayHandler) populateKeyBillingAccountInfo(c *gin.Context, apiKey *s
 		TotalTokens: stats.TotalTokens,
 	}
 	return nil
+}
+
+// keyBillingIncludes reports whether the caller asked for an optional response section.
+// include is a comma-separated list and may be repeated, so a client can request several
+// sections in one call (include=group,other or include=group&include=other); unknown sections
+// are ignored. An exact-match comparison would stop returning the group as soon as a second
+// section exists.
+func keyBillingIncludes(c *gin.Context, section string) bool {
+	for _, value := range c.QueryArray("include") {
+		for _, item := range strings.Split(value, ",") {
+			if strings.TrimSpace(item) == section {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (h *GatewayHandler) resolveKeyBillingRate(c *gin.Context, apiKey *service.APIKey) (float64, bool) {

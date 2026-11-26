@@ -428,7 +428,7 @@ func (s *UpstreamBillingProbeService) executeUsageQuery(ctx context.Context, acc
 			req.Header.Set(key, value)
 		}
 	}
-	account.ApplyHeaderOverrides(req.Header)
+	account.ApplyHeaderOverrides(req.Context(), req.Header)
 	proxyURL := ""
 	if account.ProxyID != nil {
 		if account.Proxy == nil || account.Proxy.ID != *account.ProxyID {

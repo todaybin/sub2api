@@ -33,7 +33,7 @@ func TestBalanceSchedulingManualOverride(t *testing.T) {
 					if disable {
 						balance = 0
 					}
-					return repo.UpdateUpstreamBillingProbeSnapshot(ctx, expected, &service.UpstreamBillingProbeSnapshot{Status: service.UpstreamBillingProbeStatusOK, Data: map[string]any{"billing_mode": "balance", "balance": balance}, LastAttemptAt: time.Now(), AutoDisableZeroBalance: disable, AutoRestoreBalance: restore}, nil)
+					return repo.UpdateUpstreamBillingProbeSnapshot(ctx, expected, &service.UpstreamBillingProbeSnapshot{Status: service.UpstreamBillingProbeStatusOK, Data: map[string]any{"billing_mode": "balance", "balance": balance}, LastAttemptAt: time.Now(), AutoDisableZeroBalance: disable, AutoRestoreBalance: restore}, nil, service.BillingGroupInfo{})
 				}
 				outboxCount := func() int {
 					rows, err := tx.Client().QueryContext(ctx, "SELECT COUNT(*) FROM scheduler_outbox WHERE account_id = $1", a.ID)
