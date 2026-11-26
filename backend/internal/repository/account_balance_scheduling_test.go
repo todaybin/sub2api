@@ -95,7 +95,7 @@ func TestStaleAccountEditPreservesManualPause(t *testing.T) {
 	mock.ExpectQuery(`(?s)SELECT.*schedulable.*FOR NO KEY UPDATE`).
 		WithArgs(int64(27), service.PlatformOpenAI, service.AccountTypeAPIKey, `{"api_key":"test"}`, nil).
 		WillReturnRows(sqlmock.NewRows([]string{"identity", "ollama_group", "proxy", "enabled", "sync", "snapshot", "session", "auto", "usage", "opencode_group", "opencode_auto", "opencode_usage", "extra", "schedulable", "grok_observed_models", "upstream_model_metadata", "group_sync_enabled"}).
-			AddRow(true, false, true, nil, nil, nil, nil, nil, nil, false, nil, nil, []byte(`{"scheduling_revision":"manual","scheduling_manual_paused_at":"now"}`), false, nil, nil))
+			AddRow(true, false, true, nil, nil, nil, nil, nil, nil, false, nil, nil, []byte(`{"scheduling_revision":"manual","scheduling_manual_paused_at":"now"}`), false, nil, nil, nil))
 	account := &service.Account{ID: 27, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey, Schedulable: true,
 		Credentials: map[string]any{"api_key": "test"}, Extra: map[string]any{service.BalanceAutoRestoreTokenExtraKey: "old"}}
 	extra, err := lockAndMergeAccountProbeExtra(context.Background(), client, account, service.AccountBillingSettingsUpdate{})
