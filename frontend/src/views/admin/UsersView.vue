@@ -433,7 +433,7 @@
           </template>
 
           <template #cell-points_balance="{ row }">
-            <button class="font-medium text-primary-600 underline decoration-dashed" @click="pointsUser = row">{{ (row.points_balance ?? 0).toLocaleString(undefined, { maximumFractionDigits: 8 }) }}</button>
+            <button class="font-medium text-primary-600 underline decoration-dashed" @click="pointsUser = row">{{ (row.points_balance ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</button>
           </template>
           <template #cell-balance="{ value, row }">
             <div class="flex items-center gap-2">

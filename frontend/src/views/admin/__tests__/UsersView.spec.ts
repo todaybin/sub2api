@@ -211,11 +211,12 @@ describe('admin UsersView', () => {
   })
 
   it.each([
-    [12, '12'],
-    [12.5, '12.5'],
-    [0.12345678, '0.12345678'],
-    [-0.00000001, '-0.00000001'],
-  ])('displays points %s without forcing two decimal places', async (points, expected) => {
+    [0, '0.00'],
+    [12, '12.00'],
+    [12.5, '12.50'],
+    [313.262851, '313.26'],
+    [-0.126, '-0.13'],
+  ])('displays points %s with exactly two decimal places', async (points, expected) => {
     listUsers.mockResolvedValue({ items: [createAdminUser({ points_balance: points })], total: 1, page: 1, page_size: 20, pages: 1 })
     const wrapper = mountBulkDeleteView()
     try {
