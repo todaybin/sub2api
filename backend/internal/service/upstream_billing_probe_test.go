@@ -1865,7 +1865,7 @@ func TestUpstreamBillingGroupSyncSharesOneProbeAndPreservesLocalFields(t *testin
 			upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}}
 			repo := &upstreamBillingProbeAccountRepo{accounts: map[int64]*Account{account.ID: account}}
 			svc := newUpstreamBillingProbeTestService(repo, upstream, &upstreamBillingProbeSettingRepo{})
-			snapshot, err := svc.probeScheduledAccount(context.Background(), account.ID, 30)
+			snapshot, err := svc.probeScheduledAccount(context.Background(), account.ID, 30, false)
 			require.NoError(t, err)
 			require.Equal(t, UpstreamBillingProbeStatusOK, snapshot.Status)
 			require.Len(t, upstream.requests, 1)
